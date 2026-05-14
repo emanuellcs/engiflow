@@ -1,0 +1,67 @@
+services:
+  postgres:
+    # PostgreSQL is the local stand-in for the future managed RDS database.
+    image: postgres:18-alpine
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-engiflow}
+      POSTGRES_USER: ${POSTGRES_USER:-engiflow}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-engiflow_dev_password}
+    healthcheck:
+      # The API waits for this health check so local startup is deterministic.
+      test: ["CMD-SHELL", "pg_isready -U \"$${POSTGRES_USER}\" -d \"$${POSTGRES_DB}\""]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    ports:
+      - "5432:5432"
+    volumes:
+      # Persist local database state across container restarts.
+      - postgres-data:/var/lib/postgresql/data
+    networks:
+      - engiflow
+
+  api:
+    # Production-style image for the ASP.NET Core boundary of the Clean Architecture stack.
+    build:
+      context: ./api
+      dockerfile: Dockerfile
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      ASPNETCORE_ENVIRONMENT: Development
+      ASPNETCORE_URLS: http://+:8080
+      ConnectionStrings__DefaultConnection: Host=postgres;Port=5432;Database=${POSTGRES_DB:-engiflow};Username=${POSTGRES_USER:-engiflow};Password=${POSTGRES_PASSWORD:-engiflow_dev_password}
+    ports:
+      - "8080:8080"
+    networks:
+      - engiflow
+
+  web:
+    # Production-style Next.js image using standalone output from next.config.ts.
+    build:
+      context: ./web
+      dockerfile: Dockerfile
+    depends_on:
+      api:
+        condition: service_started
+    environment:
+      HOSTNAME: 0.0.0.0
+      NEXT_PUBLIC_API_BASE_URL: ${NEXT_PUBLIC_API_BASE_URL:-http://localhost:8080}
+      NEXT_TELEMETRY_DISABLED: "1"
+      NODE_ENV: production
+      PORT: "3000"
+    ports:
+      - "3000:3000"
+    networks:
+      - engiflow
+
+networks:
+  engiflow:
+    # A dedicated bridge network keeps service discovery explicit and local to the stack.
+    driver: bridge
+
+volumes:
+  # Named volume keeps PostgreSQL data outside the container lifecycle.
+  postgres-data:

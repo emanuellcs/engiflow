@@ -1,2 +1,11 @@
 <Solution>
+  <Folder Name="/src/">
+    <Project Path="src/EngiFlow.Api/EngiFlow.Api.csproj" />
+    <Project Path="src/EngiFlow.Application/EngiFlow.Application.csproj" />
+    <Project Path="src/EngiFlow.Domain/EngiFlow.Domain.csproj" />
+    <Project Path="src/EngiFlow.Infrastructure/EngiFlow.Infrastructure.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/EngiFlow.Domain.Tests/EngiFlow.Domain.Tests.csproj" />
+  </Folder>
 </Solution>
