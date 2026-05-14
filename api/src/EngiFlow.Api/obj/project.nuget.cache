@@ -1,0 +1,11 @@
+{
+  "version": 2,
+  "dgSpecHash": "G8Q5hUAVrKs=",
+  "success": true,
+  "projectFilePath": "C:\\Users\\emanu\\OneDrive\\Desktop\\engiflow\\api\\src\\EngiFlow.Api\\EngiFlow.Api.csproj",
+  "expectedPackageFiles": [
+    "C:\\Users\\emanu\\.nuget\\packages\\microsoft.aspnetcore.openapi\\10.0.8\\microsoft.aspnetcore.openapi.10.0.8.nupkg.sha512",
+    "C:\\Users\\emanu\\.nuget\\packages\\microsoft.openapi\\2.0.0\\microsoft.openapi.2.0.0.nupkg.sha512"
+  ],
+  "logs": []
+}
