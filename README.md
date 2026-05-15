@@ -152,6 +152,7 @@ This starts:
 | --- | --- | --- |
 | `web` | `http://localhost:3000` | Next.js frontend |
 | `api` | `http://localhost:8080` | ASP.NET Core API |
+| `api` Swagger UI | `http://localhost:8080/swagger` | Interactive API documentation in Development |
 | `postgres` | `localhost:5432` | Local PostgreSQL database |
 
 PostgreSQL uses the named Docker volume `postgres-data`, so local database state survives container restarts and rebuilds.
@@ -175,13 +176,99 @@ Until authentication is added, Infrastructure uses a mock tenant provider. Confi
 
 If either key is missing, deterministic development identifiers are used. Commands validate that the configured current user exists and is active before mutating ECO state. This keeps local migrations and smoke tests predictable while preserving the future JWT-backed tenant-provider boundary.
 
+### API Documentation and ECO Workflow
+
+The API exposes Swagger UI in the `Development` environment. With Docker Compose, open:
+
+```text
+http://localhost:8080/swagger
+```
+
+When running the API directly, use the launch profile URL:
+
+```bash
+dotnet run --project api/src/EngiFlow.Api/EngiFlow.Api.csproj
+```
+
+Then open:
+
+```text
+http://localhost:5128/swagger
+```
+
+The OpenAPI document is available at `/swagger/v1/swagger.json`. Controller XML comments are included in the generated endpoint summaries, remarks, parameters, and response descriptions. Public ECO enum values are serialized as strings, such as `Medium`, `UnderReview`, and `Approved`.
+
+The current ECO REST surface is:
+
+| Method | Route | Purpose |
+| --- | --- | --- |
+| `POST` | `/api/ecos` | Create a draft ECO |
+| `GET` | `/api/ecos/{id}` | Retrieve one ECO with audit history |
+| `GET` | `/api/ecos?pageNumber=1&pageSize=20` | List paged ECO summaries |
+| `PUT` | `/api/ecos/{id}/submit` | Submit a draft ECO for review |
+| `PUT` | `/api/ecos/{id}/approve` | Approve an ECO under review |
+| `PUT` | `/api/ecos/{id}/reject` | Reject an ECO under review |
+
+Example flow:
+
+```bash
+curl -X POST http://localhost:8080/api/ecos \
+  -H "Content-Type: application/json" \
+  -d '{
+    "title": "Use aluminum bracket",
+    "description": "Update load-bearing bracket material from steel to aluminum.",
+    "priority": "Medium"
+  }'
+
+curl "http://localhost:8080/api/ecos?pageNumber=1&pageSize=20"
+
+curl http://localhost:8080/api/ecos/<eco-id>
+
+curl -X PUT http://localhost:8080/api/ecos/<eco-id>/submit
+
+curl -X PUT http://localhost:8080/api/ecos/<eco-id>/approve
+
+curl -X PUT http://localhost:8080/api/ecos/<eco-id>/reject \
+  -H "Content-Type: application/json" \
+  -d '{ "reason": "Specification is incomplete." }'
+```
+
+Until authentication and onboarding are implemented, ECO write commands use the configured development tenant and user. The configured current user must already exist and be active in the database, otherwise write commands return `404 Not Found`.
+
+### API Error Handling
+
+The API uses a global ASP.NET Core exception handler that returns RFC 7807 `ProblemDetails` responses and does not expose stack traces to clients.
+
+| Exception or failure | Status | Response shape |
+| --- | --- | --- |
+| Application `ValidationException` | `400 Bad Request` | `ValidationProblemDetails` with `errors` grouped by field |
+| `EntityNotFoundException` | `404 Not Found` | `ProblemDetails` with the missing resource detail |
+| Domain `DomainException` | `409 Conflict` | `ProblemDetails` with the violated business rule |
+| Unhandled exception | `500 Internal Server Error` | Generic `ProblemDetails`; full details are logged server-side |
+
+Validation responses are designed for frontend form rendering:
+
+```json
+{
+  "type": "https://tools.ietf.org/html/rfc9110#section-15.5.1",
+  "title": "Validation failed.",
+  "status": 400,
+  "detail": "One or more request values failed validation.",
+  "instance": "/api/ecos",
+  "errors": {
+    "Title": ["Title is required."]
+  },
+  "traceId": "0H..."
+}
+```
+
 ### Database Migrations
 
 Restore the repo-local EF tool and list migrations:
 
 ```bash
-DOTNET_CLI_HOME=/tmp dotnet tool restore
-DOTNET_CLI_HOME=/tmp dotnet tool run dotnet-ef -- migrations list \
+dotnet tool restore
+dotnet tool run dotnet-ef -- migrations list \
   --project api/src/EngiFlow.Infrastructure/EngiFlow.Infrastructure.csproj \
   --startup-project api/src/EngiFlow.Api/EngiFlow.Api.csproj \
   --context EngiFlowDbContext
@@ -190,7 +277,7 @@ DOTNET_CLI_HOME=/tmp dotnet tool run dotnet-ef -- migrations list \
 Generate future migrations from the repository root:
 
 ```bash
-DOTNET_CLI_HOME=/tmp dotnet tool run dotnet-ef -- migrations add MigrationName \
+dotnet tool run dotnet-ef -- migrations add MigrationName \
   --project api/src/EngiFlow.Infrastructure/EngiFlow.Infrastructure.csproj \
   --startup-project api/src/EngiFlow.Api/EngiFlow.Api.csproj \
   --context EngiFlowDbContext \
@@ -263,7 +350,7 @@ dotnet test api/EngiFlow.slnx /m:1
 Build the API solution:
 
 ```bash
-DOTNET_CLI_HOME=/tmp dotnet build api/EngiFlow.slnx --no-restore /m:1
+dotnet build api/EngiFlow.slnx --no-restore /m:1
 ```
 
 ## Repository Layout

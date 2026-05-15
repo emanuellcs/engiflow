@@ -1,13 +1,49 @@
+using System.Reflection;
+using System.Text.Json.Serialization;
+using EngiFlow.Api.ExceptionHandling;
 using EngiFlow.Application;
 using EngiFlow.Application.Abstractions.Tenancy;
+using EngiFlow.Domain.Ecos;
 using EngiFlow.Infrastructure;
 using EngiFlow.Infrastructure.Tenancy;
+using Microsoft.OpenApi;
 
 var builder = WebApplication.CreateBuilder(args);
 
 // Add services to the container.
-// Learn more about configuring OpenAPI at https://aka.ms/aspnet/openapi
-builder.Services.AddOpenApi();
+builder.Services
+    .AddControllers()
+    .AddJsonOptions(options =>
+    {
+        options.JsonSerializerOptions.Converters.Add(new JsonStringEnumConverter<EcoPriority>(allowIntegerValues: false));
+        options.JsonSerializerOptions.Converters.Add(new JsonStringEnumConverter<EcoStatus>(allowIntegerValues: false));
+        options.JsonSerializerOptions.Converters.Add(new JsonStringEnumConverter<EcoEventType>(allowIntegerValues: false));
+    });
+builder.Services.AddProblemDetails(options =>
+{
+    options.CustomizeProblemDetails = context =>
+    {
+        context.ProblemDetails.Extensions["traceId"] = context.HttpContext.TraceIdentifier;
+    };
+});
+builder.Services.AddExceptionHandler<GlobalExceptionHandler>();
+builder.Services.AddEndpointsApiExplorer();
+builder.Services.AddSwaggerGen(options =>
+{
+    options.SwaggerDoc("v1", new OpenApiInfo
+    {
+        Title = "EngiFlow API",
+        Version = "v1",
+        Description = "REST API for managing tenant-scoped Engineering Change Orders."
+    });
+
+    var xmlFileName = $"{Assembly.GetExecutingAssembly().GetName().Name}.xml";
+    var xmlPath = Path.Combine(AppContext.BaseDirectory, xmlFileName);
+    if (File.Exists(xmlPath))
+    {
+        options.IncludeXmlComments(xmlPath);
+    }
+});
 
 var connectionString = builder.Configuration.GetConnectionString("DefaultConnection")
     ?? throw new InvalidOperationException("Connection string 'DefaultConnection' is required.");
@@ -23,35 +59,20 @@ builder.Services.AddInfrastructure(connectionString);
 var app = builder.Build();
 
 // Configure the HTTP request pipeline.
+app.UseExceptionHandler();
+
 if (app.Environment.IsDevelopment())
 {
-    app.MapOpenApi();
+    app.UseSwagger();
+    app.UseSwaggerUI(options =>
+    {
+        options.SwaggerEndpoint("/swagger/v1/swagger.json", "EngiFlow API v1");
+        options.DocumentTitle = "EngiFlow API";
+    });
 }
 
 app.UseHttpsRedirection();
 
-var summaries = new[]
-{
-    "Freezing", "Bracing", "Chilly", "Cool", "Mild", "Warm", "Balmy", "Hot", "Sweltering", "Scorching"
-};
-
-app.MapGet("/weatherforecast", () =>
-{
-    var forecast =  Enumerable.Range(1, 5).Select(index =>
-        new WeatherForecast
-        (
-            DateOnly.FromDateTime(DateTime.Now.AddDays(index)),
-            Random.Shared.Next(-20, 55),
-            summaries[Random.Shared.Next(summaries.Length)]
-        ))
-        .ToArray();
-    return forecast;
-})
-.WithName("GetWeatherForecast");
+app.MapControllers();
 
 app.Run();
-
-record WeatherForecast(DateOnly Date, int TemperatureC, string? Summary)
-{
-    public int TemperatureF => 32 + (int)(TemperatureC / 0.5556);
-}

@@ -6,6 +6,7 @@
     <Project Path="src/EngiFlow.Infrastructure/EngiFlow.Infrastructure.csproj" />
   </Folder>
   <Folder Name="/tests/">
+    <Project Path="tests/EngiFlow.Api.Tests/EngiFlow.Api.Tests.csproj" />
     <Project Path="tests/EngiFlow.Application.Tests/EngiFlow.Application.Tests.csproj" />
     <Project Path="tests/EngiFlow.Domain.Tests/EngiFlow.Domain.Tests.csproj" />
     <Project Path="tests/EngiFlow.Infrastructure.Tests/EngiFlow.Infrastructure.Tests.csproj" />
