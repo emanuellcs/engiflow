@@ -55,6 +55,22 @@ public sealed class GlobalExceptionHandler : IExceptionHandler
     {
         return exception switch
         {
+            AuthenticationFailedException authenticationFailedException => new ProblemDetails
+            {
+                Status = StatusCodes.Status401Unauthorized,
+                Title = "Authentication failed.",
+                Detail = authenticationFailedException.Message,
+                Type = "https://tools.ietf.org/html/rfc9110#section-15.5.2",
+                Instance = httpContext.Request.Path
+            },
+            UnauthorizedAccessException unauthorizedAccessException => new ProblemDetails
+            {
+                Status = StatusCodes.Status401Unauthorized,
+                Title = "Unauthorized.",
+                Detail = unauthorizedAccessException.Message,
+                Type = "https://tools.ietf.org/html/rfc9110#section-15.5.2",
+                Instance = httpContext.Request.Path
+            },
             AppValidationException validationException => new ValidationProblemDetails(
                 validationException.Errors.ToDictionary(
                     error => error.Key,

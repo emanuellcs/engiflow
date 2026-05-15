@@ -26,4 +26,14 @@ internal sealed class UserRepository : IUserRepository
     {
         return _dbContext.Users.SingleOrDefaultAsync(user => user.Id == id, cancellationToken);
     }
+
+    /// <inheritdoc />
+    public Task<User?> GetByEmailForAuthenticationAsync(
+        string normalizedEmail,
+        CancellationToken cancellationToken = default)
+    {
+        return _dbContext.Users
+            .IgnoreQueryFilters()
+            .SingleOrDefaultAsync(user => user.Email == normalizedEmail, cancellationToken);
+    }
 }

@@ -5,6 +5,7 @@ using EngiFlow.Application.Ecos.Commands;
 using EngiFlow.Application.Ecos.Dtos;
 using EngiFlow.Application.Ecos.Queries;
 using EngiFlow.Domain.Ecos;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace EngiFlow.Api.Tests;
@@ -129,6 +130,20 @@ public sealed class EcosControllerTests
         Assert.Equal("Specification is incomplete.", command.Reason);
     }
 
+    [Fact]
+    public void Controller_IsSecuredAndUsesEcoRolePolicies()
+    {
+        var controllerAuthorize = typeof(EcosController)
+            .GetCustomAttributes(typeof(AuthorizeAttribute), inherit: true)
+            .Cast<AuthorizeAttribute>();
+        Assert.Contains(controllerAuthorize, attribute => attribute.Policy is null);
+
+        Assert.Equal("EcoAuthoring", GetAuthorizePolicy(nameof(EcosController.CreateAsync)));
+        Assert.Equal("EcoAuthoring", GetAuthorizePolicy(nameof(EcosController.SubmitAsync)));
+        Assert.Equal("EcoApproval", GetAuthorizePolicy(nameof(EcosController.ApproveAsync)));
+        Assert.Equal("EcoApproval", GetAuthorizePolicy(nameof(EcosController.RejectAsync)));
+    }
+
     private static EcoDetailsDto CreateEcoDetails(Guid? id = null, EcoStatus status = EcoStatus.Draft)
     {
         var timestamp = DateTimeOffset.Parse("2026-05-15T00:00:00Z");
@@ -157,6 +172,16 @@ public sealed class EcosControllerTests
             Guid.NewGuid(),
             timestamp,
             timestamp);
+    }
+
+    private static string? GetAuthorizePolicy(string methodName)
+    {
+        return typeof(EcosController)
+            .GetMethod(methodName)!
+            .GetCustomAttributes(typeof(AuthorizeAttribute), inherit: true)
+            .Cast<AuthorizeAttribute>()
+            .Single()
+            .Policy;
     }
 
     private sealed class FakeApplicationMediator : IApplicationMediator

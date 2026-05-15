@@ -4,12 +4,12 @@ using EngiFlow.Domain.ValueObjects;
 namespace EngiFlow.Infrastructure.Tenancy;
 
 /// <summary>
-/// Provides a fixed tenant identifier for local development and design-time tooling.
+/// Provides fixed tenant and actor identifiers for design-time tooling and startup initialization.
 /// </summary>
 /// <remarks>
-/// This mock provider exists until authentication supplies tenant identity from a
-/// verified JWT. A single, documented fallback keeps migrations and local startup
-/// deterministic while preserving the same infrastructure contract used in production.
+/// Request handling uses the API-layer HTTP tenant provider. This provider remains useful
+/// where no authenticated HTTP context exists, such as EF Core design-time services,
+/// tests, and development database seeding.
 /// </remarks>
 public sealed class StaticTenantProvider : ITenantProvider
 {

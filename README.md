@@ -6,12 +6,12 @@
 ![ASP.NET Core](https://img.shields.io/badge/ASP.NET_Core-Web_API-512BD4)
 ![PostgreSQL](https://img.shields.io/badge/PostgreSQL-18-4169E1?logo=postgresql&logoColor=white)
 ![Docker](https://img.shields.io/badge/Docker-Compose-2496ED?logo=docker&logoColor=white)
-![xUnit](https://img.shields.io/badge/xUnit-Application%2FDomain%2FInfrastructure-5A2D82)
+![xUnit](https://img.shields.io/badge/xUnit-API%2FApplication%2FDomain%2FInfrastructure-5A2D82)
 ![Clean Architecture](https://img.shields.io/badge/Architecture-Clean_Architecture%2FDDD-0B7285)
 
 EngiFlow is a multi-tenant B2B SaaS platform for engineering teams that need a controlled, auditable process for Engineering Change Orders (ECOs). An ECO represents a formal request to change an engineering artifact, such as a material selection, CAD specification, manufacturing tolerance, or implementation procedure.
 
-The platform is designed around strict tenant isolation, role-based access control, a domain-owned approval state machine, and an immutable audit trail. The current repository contains the foundational local orchestration, domain model, application use cases, and EF Core PostgreSQL persistence layer.
+The platform is designed around strict tenant isolation, JWT-backed role-based access control, a domain-owned approval state machine, and an immutable audit trail. The current repository contains the foundational local orchestration, domain model, application use cases, EF Core PostgreSQL persistence layer, and secured ASP.NET Core API surface.
 
 ## Project Overview
 
@@ -24,7 +24,7 @@ Engineering changes frequently affect cost, quality, compliance, safety, and pro
 - Rejected and implemented ECOs are terminal.
 - Every material business action produces an audit event.
 
-Multi-tenancy is a first-class architectural constraint. Company identity is modeled as the tenant boundary, and tenant-scoped entities carry a `CompanyId` so infrastructure can later enforce global query filters and data isolation.
+Multi-tenancy is a first-class architectural constraint. Company identity is modeled as the tenant boundary, and tenant-scoped entities carry a `CompanyId` so infrastructure can enforce global query filters and data isolation from the tenant claim in the authenticated JWT.
 
 ## Architecture
 
@@ -67,8 +67,8 @@ The API is split into four projects:
 
 - `EngiFlow.Domain`: entities, value objects, enums, domain exceptions, and domain contracts. This layer has no external dependencies.
 - `EngiFlow.Application`: CQRS use cases, DTOs, validation, application exceptions, tenant/user context contracts, persistence contracts, and handler orchestration.
-- `EngiFlow.Infrastructure`: EF Core persistence, tenant query filters, audit interceptors, migrations, storage adapters, and integration implementations.
-- `EngiFlow.Api`: ASP.NET Core composition root, HTTP endpoints, and dependency injection.
+- `EngiFlow.Infrastructure`: EF Core persistence, tenant query filters, audit interceptors, migrations, password hashing, storage adapters, and integration implementations.
+- `EngiFlow.Api`: ASP.NET Core composition root, JWT authentication, RBAC policies, HTTP tenant resolution, controllers, Swagger, and dependency injection.
 
 The current domain foundation is intentionally rich. The `EngineeringChangeOrder` aggregate owns its state transitions and creates `EcoEvent` audit records during business operations so callers cannot bypass the approval workflow or forget audit history. Infrastructure persists those pending audit events through a SaveChanges interceptor so application code does not need a second manual audit insert.
 
@@ -76,6 +76,7 @@ The Application layer exposes EngiFlow-owned CQRS primitives instead of dependin
 
 Implemented ECO use cases:
 
+- `LoginQuery`: validates email/password credentials and returns a JWT bearer token.
 - `CreateEcoCommand`: creates a draft ECO for the current tenant and current user.
 - `SubmitEcoCommand`: transitions a draft ECO to under review.
 - `ApproveEcoCommand`: transitions an ECO under review to approved.
@@ -120,12 +121,12 @@ The web application is a Next.js App Router project using TypeScript and Materia
 | Area | Technology |
 | --- | --- |
 | Frontend | Next.js 16, React 19, TypeScript, Material UI |
-| Backend | ASP.NET Core Web API, .NET 10, C# |
+| Backend | ASP.NET Core Web API, JWT bearer authentication, .NET 10, C# |
 | Domain | Clean Architecture, Domain-Driven Design, rich aggregates |
 | Application | Custom CQRS mediator, FluentValidation, DTO-based use cases |
 | Persistence | EF Core 10, Npgsql, PostgreSQL 18 |
 | Orchestration | Docker Compose with a dedicated bridge network |
-| Testing | xUnit for domain tests |
+| Testing | xUnit for API, application, domain, and infrastructure tests |
 | Future Infrastructure | AWS App Runner, Amazon RDS for PostgreSQL, Amazon S3, Terraform |
 
 ## Getting Started
@@ -159,22 +160,52 @@ PostgreSQL uses the named Docker volume `postgres-data`, so local database state
 
 The API reads `ConnectionStrings:DefaultConnection`. Docker Compose supplies the container connection string, while `api/src/EngiFlow.Api/appsettings.Development.json` points local `dotnet run` usage at `localhost:5432`.
 
-### Development Tenant
+### Security and Default Login
 
-Until authentication is added, Infrastructure uses a mock tenant provider. Configure the current tenant with:
+In `Development`, the API applies EF Core migrations at startup and seeds a default company plus administrator when the database has no companies. The seeded credentials are for local development only:
+
+| Field | Value |
+| --- | --- |
+| Company | `EngiFlow Demo Company` |
+| Email | `admin@engiflow.local` |
+| Password | `EngiFlow_Admin_123!` |
+| Role | `Administrator` |
+
+Authenticate with:
+
+```bash
+curl -X POST http://localhost:8080/api/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{
+    "email": "admin@engiflow.local",
+    "password": "EngiFlow_Admin_123!"
+  }'
+```
+
+The response contains `accessToken`, `tokenType`, and `expiresAtUtc`. Send the token to secured endpoints as:
+
+```text
+Authorization: Bearer <accessToken>
+```
+
+JWT settings are read from `EngiFlow:Authentication:Jwt`:
 
 ```json
 {
   "EngiFlow": {
-    "Tenancy": {
-      "CurrentCompanyId": "11111111-1111-1111-1111-111111111111",
-      "CurrentUserId": "22222222-2222-2222-2222-222222222222"
+    "Authentication": {
+      "Jwt": {
+        "Issuer": "EngiFlow.Api",
+        "Audience": "EngiFlow.Clients",
+        "SigningKey": "replace-with-at-least-32-characters",
+        "AccessTokenMinutes": 60
+      }
     }
   }
 }
 ```
 
-If either key is missing, deterministic development identifiers are used. Commands validate that the configured current user exists and is active before mutating ECO state. This keeps local migrations and smoke tests predictable while preserving the future JWT-backed tenant-provider boundary.
+`appsettings.Development.json` includes a development signing key. Production deployments must override `SigningKey`, `Issuer`, and `Audience` through environment-specific configuration or secret management.
 
 ### API Documentation and ECO Workflow
 
@@ -198,10 +229,17 @@ http://localhost:5128/swagger
 
 The OpenAPI document is available at `/swagger/v1/swagger.json`. Controller XML comments are included in the generated endpoint summaries, remarks, parameters, and response descriptions. Public ECO enum values are serialized as strings, such as `Medium`, `UnderReview`, and `Approved`.
 
-The current ECO REST surface is:
+Swagger UI supports JWT bearer authentication. Call `POST /api/auth/login`, copy the `accessToken`, click `Authorize`, and enter:
+
+```text
+Bearer <accessToken>
+```
+
+The current secured REST surface is:
 
 | Method | Route | Purpose |
 | --- | --- | --- |
+| `POST` | `/api/auth/login` | Authenticate and issue a JWT bearer token |
 | `POST` | `/api/ecos` | Create a draft ECO |
 | `GET` | `/api/ecos/{id}` | Retrieve one ECO with audit history |
 | `GET` | `/api/ecos?pageNumber=1&pageSize=20` | List paged ECO summaries |
@@ -212,7 +250,17 @@ The current ECO REST surface is:
 Example flow:
 
 ```bash
+curl -X POST http://localhost:8080/api/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{
+    "email": "admin@engiflow.local",
+    "password": "EngiFlow_Admin_123!"
+  }'
+
+TOKEN="<accessToken from the login response>"
+
 curl -X POST http://localhost:8080/api/ecos \
+  -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
     "title": "Use aluminum bracket",
@@ -220,20 +268,25 @@ curl -X POST http://localhost:8080/api/ecos \
     "priority": "Medium"
   }'
 
-curl "http://localhost:8080/api/ecos?pageNumber=1&pageSize=20"
+curl "http://localhost:8080/api/ecos?pageNumber=1&pageSize=20" \
+  -H "Authorization: Bearer $TOKEN"
 
-curl http://localhost:8080/api/ecos/<eco-id>
+curl http://localhost:8080/api/ecos/<eco-id> \
+  -H "Authorization: Bearer $TOKEN"
 
-curl -X PUT http://localhost:8080/api/ecos/<eco-id>/submit
+curl -X PUT http://localhost:8080/api/ecos/<eco-id>/submit \
+  -H "Authorization: Bearer $TOKEN"
 
-curl -X PUT http://localhost:8080/api/ecos/<eco-id>/approve
+curl -X PUT http://localhost:8080/api/ecos/<eco-id>/approve \
+  -H "Authorization: Bearer $TOKEN"
 
 curl -X PUT http://localhost:8080/api/ecos/<eco-id>/reject \
+  -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{ "reason": "Specification is incomplete." }'
 ```
 
-Until authentication and onboarding are implemented, ECO write commands use the configured development tenant and user. The configured current user must already exist and be active in the database, otherwise write commands return `404 Not Found`.
+ECO routes require authentication. Create and submit require `Requester` or `Administrator`; approve and reject require `Approver` or `Administrator`; reads require any authenticated role.
 
 ### API Error Handling
 
@@ -241,6 +294,7 @@ The API uses a global ASP.NET Core exception handler that returns RFC 7807 `Prob
 
 | Exception or failure | Status | Response shape |
 | --- | --- | --- |
+| Failed login or missing authenticated tenant context | `401 Unauthorized` | `ProblemDetails` with a generic authentication detail |
 | Application `ValidationException` | `400 Bad Request` | `ValidationProblemDetails` with `errors` grouped by field |
 | `EntityNotFoundException` | `404 Not Found` | `ProblemDetails` with the missing resource detail |
 | Domain `DomainException` | `409 Conflict` | `ProblemDetails` with the violated business rule |
@@ -334,10 +388,12 @@ The current tests cover:
 - Rejected and implemented terminal states.
 - Audit event creation for ECO creation, edits, and transitions.
 - Application CQRS validation behavior.
+- Login validation, credential verification, JWT claim issuance, and HTTP tenant claim resolution.
 - ECO command handlers for create, submit, approve, and reject.
 - ECO query handlers for detail retrieval and paginated lists.
 - Infrastructure tenant query filters.
 - Tenant-scoped write validation.
+- Password hash persistence metadata and authentication lookup behavior.
 - ECO audit-event persistence interception.
 - Strongly typed identifier and enum conversion metadata.
 
@@ -379,7 +435,7 @@ dotnet build api/EngiFlow.slnx --no-restore /m:1
 
 ## Current Scope
 
-This foundation includes local orchestration, the core domain model, Application-layer CQRS use cases, validation, EF Core persistence, migrations, and application/domain/infrastructure tests. It intentionally does not yet include authentication, authorization policies, API controllers for ECOs, frontend workflows, file storage, or cloud deployment automation.
+This foundation includes local orchestration, the core domain model, Application-layer CQRS use cases, validation, EF Core persistence, migrations, JWT authentication, role-based authorization policies, secured ECO/API controllers, Swagger bearer support, and application/domain/infrastructure/API tests. It intentionally does not yet include frontend workflows, file storage, production onboarding, refresh tokens, or cloud deployment automation.
 
 Those concerns should build on the current boundaries rather than bypass them:
 
@@ -387,4 +443,4 @@ Those concerns should build on the current boundaries rather than bypass them:
 - API endpoints should dispatch Application commands and queries through `IApplicationMediator`.
 - Application command handlers should call aggregate methods instead of mutating status directly.
 - Audit history should remain append-only.
-- Tenant identity should be resolved centrally and applied consistently across queries and commands.
+- Tenant identity should be resolved centrally from authenticated JWT claims and applied consistently across queries and commands.
