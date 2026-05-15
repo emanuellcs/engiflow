@@ -1,3 +1,5 @@
+using EngiFlow.Application;
+using EngiFlow.Application.Abstractions.Tenancy;
 using EngiFlow.Infrastructure;
 using EngiFlow.Infrastructure.Tenancy;
 
@@ -11,8 +13,11 @@ var connectionString = builder.Configuration.GetConnectionString("DefaultConnect
     ?? throw new InvalidOperationException("Connection string 'DefaultConnection' is required.");
 var currentCompanyId = StaticTenantProvider.FromConfigurationValue(
     builder.Configuration["EngiFlow:Tenancy:CurrentCompanyId"]);
+var currentUserId = StaticTenantProvider.UserIdFromConfigurationValue(
+    builder.Configuration["EngiFlow:Tenancy:CurrentUserId"]);
 
-builder.Services.AddScoped<ITenantProvider>(_ => new StaticTenantProvider(currentCompanyId));
+builder.Services.AddScoped<ITenantProvider>(_ => new StaticTenantProvider(currentCompanyId, currentUserId));
+builder.Services.AddApplication();
 builder.Services.AddInfrastructure(connectionString);
 
 var app = builder.Build();

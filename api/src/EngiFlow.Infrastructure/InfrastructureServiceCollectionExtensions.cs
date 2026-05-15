@@ -1,5 +1,7 @@
+using EngiFlow.Application.Abstractions.Persistence;
 using EngiFlow.Infrastructure.Persistence;
 using EngiFlow.Infrastructure.Persistence.Interceptors;
+using EngiFlow.Infrastructure.Persistence.Repositories;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -31,6 +33,9 @@ public static class InfrastructureServiceCollectionExtensions
         }
 
         services.AddScoped<EcoAuditSaveChangesInterceptor>();
+        services.AddScoped<IEngineeringChangeOrderRepository, EngineeringChangeOrderRepository>();
+        services.AddScoped<IUserRepository, UserRepository>();
+        services.AddScoped<IUnitOfWork, EfUnitOfWork>();
 
         services.AddDbContext<EngiFlowDbContext>((serviceProvider, options) =>
         {
