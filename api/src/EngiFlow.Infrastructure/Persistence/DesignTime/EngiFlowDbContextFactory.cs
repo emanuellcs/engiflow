@@ -26,6 +26,8 @@ public sealed class EngiFlowDbContextFactory : IDesignTimeDbContextFactory<EngiF
 
         var tenantId = StaticTenantProvider.FromConfigurationValue(
             Environment.GetEnvironmentVariable("EngiFlow__Tenancy__CurrentCompanyId"));
+        var userId = StaticTenantProvider.UserIdFromConfigurationValue(
+            Environment.GetEnvironmentVariable("EngiFlow__Tenancy__CurrentUserId"));
 
         var options = new DbContextOptionsBuilder<EngiFlowDbContext>()
             .UseNpgsql(
@@ -33,6 +35,6 @@ public sealed class EngiFlowDbContextFactory : IDesignTimeDbContextFactory<EngiF
                 npgsql => npgsql.MigrationsAssembly(typeof(EngiFlowDbContext).Assembly.FullName))
             .Options;
 
-        return new EngiFlowDbContext(options, new StaticTenantProvider(tenantId));
+        return new EngiFlowDbContext(options, new StaticTenantProvider(tenantId, userId));
     }
 }

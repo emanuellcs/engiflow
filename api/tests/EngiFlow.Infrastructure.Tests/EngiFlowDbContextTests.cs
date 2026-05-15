@@ -137,7 +137,7 @@ public sealed class EngiFlowDbContextTests
             .AddInterceptors(new EcoAuditSaveChangesInterceptor())
             .Options;
 
-        return new EngiFlowDbContext(options, new StaticTenantProvider(companyId));
+        return new EngiFlowDbContext(options, new StaticTenantProvider(companyId, UserId.New()));
     }
 
     private static Type? GetProviderClrType(IProperty property)

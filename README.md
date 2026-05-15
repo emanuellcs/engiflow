@@ -6,12 +6,12 @@
 ![ASP.NET Core](https://img.shields.io/badge/ASP.NET_Core-Web_API-512BD4)
 ![PostgreSQL](https://img.shields.io/badge/PostgreSQL-18-4169E1?logo=postgresql&logoColor=white)
 ![Docker](https://img.shields.io/badge/Docker-Compose-2496ED?logo=docker&logoColor=white)
-![xUnit](https://img.shields.io/badge/xUnit-Domain_Tests-5A2D82)
+![xUnit](https://img.shields.io/badge/xUnit-Application%2FDomain%2FInfrastructure-5A2D82)
 ![Clean Architecture](https://img.shields.io/badge/Architecture-Clean_Architecture%2FDDD-0B7285)
 
 EngiFlow is a multi-tenant B2B SaaS platform for engineering teams that need a controlled, auditable process for Engineering Change Orders (ECOs). An ECO represents a formal request to change an engineering artifact, such as a material selection, CAD specification, manufacturing tolerance, or implementation procedure.
 
-The platform is designed around strict tenant isolation, role-based access control, a domain-owned approval state machine, and an immutable audit trail. The current repository contains the foundational local orchestration, domain model, and EF Core PostgreSQL persistence layer.
+The platform is designed around strict tenant isolation, role-based access control, a domain-owned approval state machine, and an immutable audit trail. The current repository contains the foundational local orchestration, domain model, application use cases, and EF Core PostgreSQL persistence layer.
 
 ## Project Overview
 
@@ -66,11 +66,22 @@ flowchart LR
 The API is split into four projects:
 
 - `EngiFlow.Domain`: entities, value objects, enums, domain exceptions, and domain contracts. This layer has no external dependencies.
-- `EngiFlow.Application`: future use cases, DTOs, validation, and handlers.
+- `EngiFlow.Application`: CQRS use cases, DTOs, validation, application exceptions, tenant/user context contracts, persistence contracts, and handler orchestration.
 - `EngiFlow.Infrastructure`: EF Core persistence, tenant query filters, audit interceptors, migrations, storage adapters, and integration implementations.
 - `EngiFlow.Api`: ASP.NET Core composition root, HTTP endpoints, and dependency injection.
 
 The current domain foundation is intentionally rich. The `EngineeringChangeOrder` aggregate owns its state transitions and creates `EcoEvent` audit records during business operations so callers cannot bypass the approval workflow or forget audit history. Infrastructure persists those pending audit events through a SaveChanges interceptor so application code does not need a second manual audit insert.
+
+The Application layer exposes EngiFlow-owned CQRS primitives instead of depending on an external mediator package. Commands and queries implement `ICommand<TResponse>` or `IQuery<TResponse>`, handlers implement the matching handler contracts, and `IApplicationMediator` dispatches requests through ordered pipeline behaviors. `ValidationBehavior<TRequest, TResponse>` runs FluentValidation validators before handlers execute and throws the custom application `ValidationException` with errors grouped by request property.
+
+Implemented ECO use cases:
+
+- `CreateEcoCommand`: creates a draft ECO for the current tenant and current user.
+- `SubmitEcoCommand`: transitions a draft ECO to under review.
+- `ApproveEcoCommand`: transitions an ECO under review to approved.
+- `RejectEcoCommand`: transitions an ECO under review to rejected with a required reason.
+- `GetEcoByIdQuery`: retrieves one ECO with sorted audit history.
+- `ListEcosQuery`: retrieves a tenant-scoped paginated list of ECO summaries.
 
 ```mermaid
 stateDiagram-v2
@@ -111,6 +122,7 @@ The web application is a Next.js App Router project using TypeScript and Materia
 | Frontend | Next.js 16, React 19, TypeScript, Material UI |
 | Backend | ASP.NET Core Web API, .NET 10, C# |
 | Domain | Clean Architecture, Domain-Driven Design, rich aggregates |
+| Application | Custom CQRS mediator, FluentValidation, DTO-based use cases |
 | Persistence | EF Core 10, Npgsql, PostgreSQL 18 |
 | Orchestration | Docker Compose with a dedicated bridge network |
 | Testing | xUnit for domain tests |
@@ -154,13 +166,14 @@ Until authentication is added, Infrastructure uses a mock tenant provider. Confi
 {
   "EngiFlow": {
     "Tenancy": {
-      "CurrentCompanyId": "11111111-1111-1111-1111-111111111111"
+      "CurrentCompanyId": "11111111-1111-1111-1111-111111111111",
+      "CurrentUserId": "22222222-2222-2222-2222-222222222222"
     }
   }
 }
 ```
 
-If the key is missing, the same deterministic development tenant id is used. This keeps local migrations and smoke tests predictable while preserving the future JWT-backed tenant-provider boundary.
+If either key is missing, deterministic development identifiers are used. Commands validate that the configured current user exists and is active before mutating ECO state. This keeps local migrations and smoke tests predictable while preserving the future JWT-backed tenant-provider boundary.
 
 ### Database Migrations
 
@@ -233,10 +246,19 @@ The current tests cover:
 - Invalid transitions such as approving directly from draft.
 - Rejected and implemented terminal states.
 - Audit event creation for ECO creation, edits, and transitions.
+- Application CQRS validation behavior.
+- ECO command handlers for create, submit, approve, and reject.
+- ECO query handlers for detail retrieval and paginated lists.
 - Infrastructure tenant query filters.
 - Tenant-scoped write validation.
 - ECO audit-event persistence interception.
 - Strongly typed identifier and enum conversion metadata.
+
+Run the full API solution test suite:
+
+```bash
+dotnet test api/EngiFlow.slnx /m:1
+```
 
 Build the API solution:
 
@@ -257,6 +279,7 @@ DOTNET_CLI_HOME=/tmp dotnet build api/EngiFlow.slnx --no-restore /m:1
 |   |   +-- EngiFlow.Domain/
 |   |   +-- EngiFlow.Infrastructure/
 |   +-- tests/
+|       +-- EngiFlow.Application.Tests/
 |       +-- EngiFlow.Domain.Tests/
 |       +-- EngiFlow.Infrastructure.Tests/
 +-- web/
@@ -269,11 +292,12 @@ DOTNET_CLI_HOME=/tmp dotnet build api/EngiFlow.slnx --no-restore /m:1
 
 ## Current Scope
 
-This foundation includes local orchestration, the core domain model, EF Core persistence, migrations, and domain/infrastructure tests. It intentionally does not yet include authentication, authorization policies, API controllers for ECOs, frontend workflows, file storage, or cloud deployment automation.
+This foundation includes local orchestration, the core domain model, Application-layer CQRS use cases, validation, EF Core persistence, migrations, and application/domain/infrastructure tests. It intentionally does not yet include authentication, authorization policies, API controllers for ECOs, frontend workflows, file storage, or cloud deployment automation.
 
 Those concerns should build on the current boundaries rather than bypass them:
 
 - Persistence enforces `ITenantScoped` filters and strongly typed identifier conversions.
-- API use cases should call aggregate methods instead of mutating status directly.
+- API endpoints should dispatch Application commands and queries through `IApplicationMediator`.
+- Application command handlers should call aggregate methods instead of mutating status directly.
 - Audit history should remain append-only.
 - Tenant identity should be resolved centrally and applied consistently across queries and commands.

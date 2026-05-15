@@ -1,11 +1,11 @@
 using System.Linq.Expressions;
+using EngiFlow.Application.Abstractions.Tenancy;
 using EngiFlow.Domain.Abstractions;
 using EngiFlow.Domain.Companies;
 using EngiFlow.Domain.Ecos;
 using EngiFlow.Domain.Users;
 using EngiFlow.Domain.ValueObjects;
 using EngiFlow.Infrastructure.Persistence.Configurations;
-using EngiFlow.Infrastructure.Tenancy;
 using Microsoft.EntityFrameworkCore;
 
 namespace EngiFlow.Infrastructure.Persistence;
