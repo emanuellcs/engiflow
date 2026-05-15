@@ -1,8 +1,19 @@
+using EngiFlow.Infrastructure;
+using EngiFlow.Infrastructure.Tenancy;
+
 var builder = WebApplication.CreateBuilder(args);
 
 // Add services to the container.
 // Learn more about configuring OpenAPI at https://aka.ms/aspnet/openapi
 builder.Services.AddOpenApi();
+
+var connectionString = builder.Configuration.GetConnectionString("DefaultConnection")
+    ?? throw new InvalidOperationException("Connection string 'DefaultConnection' is required.");
+var currentCompanyId = StaticTenantProvider.FromConfigurationValue(
+    builder.Configuration["EngiFlow:Tenancy:CurrentCompanyId"]);
+
+builder.Services.AddScoped<ITenantProvider>(_ => new StaticTenantProvider(currentCompanyId));
+builder.Services.AddInfrastructure(connectionString);
 
 var app = builder.Build();
 

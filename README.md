@@ -11,7 +11,7 @@
 
 EngiFlow is a multi-tenant B2B SaaS platform for engineering teams that need a controlled, auditable process for Engineering Change Orders (ECOs). An ECO represents a formal request to change an engineering artifact, such as a material selection, CAD specification, manufacturing tolerance, or implementation procedure.
 
-The platform is designed around strict tenant isolation, role-based access control, a domain-owned approval state machine, and an immutable audit trail. The current repository contains the foundational local orchestration and domain model.
+The platform is designed around strict tenant isolation, role-based access control, a domain-owned approval state machine, and an immutable audit trail. The current repository contains the foundational local orchestration, domain model, and EF Core PostgreSQL persistence layer.
 
 ## Project Overview
 
@@ -67,10 +67,10 @@ The API is split into four projects:
 
 - `EngiFlow.Domain`: entities, value objects, enums, domain exceptions, and domain contracts. This layer has no external dependencies.
 - `EngiFlow.Application`: future use cases, DTOs, validation, and handlers.
-- `EngiFlow.Infrastructure`: future EF Core persistence, query filters, migrations, storage adapters, and integration implementations.
+- `EngiFlow.Infrastructure`: EF Core persistence, tenant query filters, audit interceptors, migrations, storage adapters, and integration implementations.
 - `EngiFlow.Api`: ASP.NET Core composition root, HTTP endpoints, and dependency injection.
 
-The current domain foundation is intentionally rich. The `EngineeringChangeOrder` aggregate owns its state transitions and creates `EcoEvent` audit records during business operations so callers cannot bypass the approval workflow or forget audit history.
+The current domain foundation is intentionally rich. The `EngineeringChangeOrder` aggregate owns its state transitions and creates `EcoEvent` audit records during business operations so callers cannot bypass the approval workflow or forget audit history. Infrastructure persists those pending audit events through a SaveChanges interceptor so application code does not need a second manual audit insert.
 
 ```mermaid
 stateDiagram-v2
@@ -111,7 +111,7 @@ The web application is a Next.js App Router project using TypeScript and Materia
 | Frontend | Next.js 16, React 19, TypeScript, Material UI |
 | Backend | ASP.NET Core Web API, .NET 10, C# |
 | Domain | Clean Architecture, Domain-Driven Design, rich aggregates |
-| Database | PostgreSQL 18 for local development |
+| Persistence | EF Core 10, Npgsql, PostgreSQL 18 |
 | Orchestration | Docker Compose with a dedicated bridge network |
 | Testing | xUnit for domain tests |
 | Future Infrastructure | AWS App Runner, Amazon RDS for PostgreSQL, Amazon S3, Terraform |
@@ -143,6 +143,46 @@ This starts:
 | `postgres` | `localhost:5432` | Local PostgreSQL database |
 
 PostgreSQL uses the named Docker volume `postgres-data`, so local database state survives container restarts and rebuilds.
+
+The API reads `ConnectionStrings:DefaultConnection`. Docker Compose supplies the container connection string, while `api/src/EngiFlow.Api/appsettings.Development.json` points local `dotnet run` usage at `localhost:5432`.
+
+### Development Tenant
+
+Until authentication is added, Infrastructure uses a mock tenant provider. Configure the current tenant with:
+
+```json
+{
+  "EngiFlow": {
+    "Tenancy": {
+      "CurrentCompanyId": "11111111-1111-1111-1111-111111111111"
+    }
+  }
+}
+```
+
+If the key is missing, the same deterministic development tenant id is used. This keeps local migrations and smoke tests predictable while preserving the future JWT-backed tenant-provider boundary.
+
+### Database Migrations
+
+Restore the repo-local EF tool and list migrations:
+
+```bash
+DOTNET_CLI_HOME=/tmp dotnet tool restore
+DOTNET_CLI_HOME=/tmp dotnet tool run dotnet-ef -- migrations list \
+  --project api/src/EngiFlow.Infrastructure/EngiFlow.Infrastructure.csproj \
+  --startup-project api/src/EngiFlow.Api/EngiFlow.Api.csproj \
+  --context EngiFlowDbContext
+```
+
+Generate future migrations from the repository root:
+
+```bash
+DOTNET_CLI_HOME=/tmp dotnet tool run dotnet-ef -- migrations add MigrationName \
+  --project api/src/EngiFlow.Infrastructure/EngiFlow.Infrastructure.csproj \
+  --startup-project api/src/EngiFlow.Api/EngiFlow.Api.csproj \
+  --context EngiFlowDbContext \
+  --output-dir Persistence/Migrations
+```
 
 ### Verify the Containers
 
@@ -193,11 +233,15 @@ The current tests cover:
 - Invalid transitions such as approving directly from draft.
 - Rejected and implemented terminal states.
 - Audit event creation for ECO creation, edits, and transitions.
+- Infrastructure tenant query filters.
+- Tenant-scoped write validation.
+- ECO audit-event persistence interception.
+- Strongly typed identifier and enum conversion metadata.
 
-Build the API project:
+Build the API solution:
 
 ```bash
-dotnet build api/src/EngiFlow.Api/EngiFlow.Api.csproj
+DOTNET_CLI_HOME=/tmp dotnet build api/EngiFlow.slnx --no-restore /m:1
 ```
 
 ## Repository Layout
@@ -214,6 +258,7 @@ dotnet build api/src/EngiFlow.Api/EngiFlow.Api.csproj
 |   |   +-- EngiFlow.Infrastructure/
 |   +-- tests/
 |       +-- EngiFlow.Domain.Tests/
+|       +-- EngiFlow.Infrastructure.Tests/
 +-- web/
 |   +-- Dockerfile
 |   +-- app/
@@ -224,11 +269,11 @@ dotnet build api/src/EngiFlow.Api/EngiFlow.Api.csproj
 
 ## Current Scope
 
-This foundation includes local orchestration, the core domain model, and domain tests. It intentionally does not yet include EF Core mappings, migrations, authentication, authorization policies, API controllers for ECOs, frontend workflows, file storage, or cloud deployment automation.
+This foundation includes local orchestration, the core domain model, EF Core persistence, migrations, and domain/infrastructure tests. It intentionally does not yet include authentication, authorization policies, API controllers for ECOs, frontend workflows, file storage, or cloud deployment automation.
 
 Those concerns should build on the current boundaries rather than bypass them:
 
-- Persistence should respect `ITenantScoped` and the strongly typed identifiers.
+- Persistence enforces `ITenantScoped` filters and strongly typed identifier conversions.
 - API use cases should call aggregate methods instead of mutating status directly.
 - Audit history should remain append-only.
 - Tenant identity should be resolved centrally and applied consistently across queries and commands.
