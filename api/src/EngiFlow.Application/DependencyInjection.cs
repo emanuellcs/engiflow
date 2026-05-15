@@ -1,4 +1,6 @@
 using EngiFlow.Application.Abstractions.Cqrs;
+using EngiFlow.Application.Auth.Dtos;
+using EngiFlow.Application.Auth.Queries;
 using EngiFlow.Application.Behaviors;
 using EngiFlow.Application.Ecos.Commands;
 using EngiFlow.Application.Ecos.Dtos;
@@ -34,6 +36,7 @@ public static class DependencyInjection
         services.AddTransient<ICommandHandler<SubmitEcoCommand, EcoDetailsDto>, SubmitEcoCommandHandler>();
         services.AddTransient<ICommandHandler<ApproveEcoCommand, EcoDetailsDto>, ApproveEcoCommandHandler>();
         services.AddTransient<ICommandHandler<RejectEcoCommand, EcoDetailsDto>, RejectEcoCommandHandler>();
+        services.AddTransient<IQueryHandler<LoginQuery, LoginResultDto>, LoginQueryHandler>();
         services.AddTransient<IQueryHandler<GetEcoByIdQuery, EcoDetailsDto>, GetEcoByIdQueryHandler>();
         services.AddTransient<IQueryHandler<ListEcosQuery, PagedResult<EcoSummaryDto>>, ListEcosQueryHandler>();
 

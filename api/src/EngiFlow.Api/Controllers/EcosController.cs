@@ -1,8 +1,10 @@
+using EngiFlow.Api.Auth;
 using EngiFlow.Api.Models;
 using EngiFlow.Application.Abstractions.Cqrs;
 using EngiFlow.Application.Ecos.Commands;
 using EngiFlow.Application.Ecos.Dtos;
 using EngiFlow.Application.Ecos.Queries;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace EngiFlow.Api.Controllers;
@@ -15,6 +17,7 @@ namespace EngiFlow.Api.Controllers;
 /// application-layer commands or queries and delegate all business rules to the CQRS handlers.
 /// </remarks>
 [ApiController]
+[Authorize]
 [Route("api/ecos")]
 [Produces("application/json")]
 public sealed class EcosController : ControllerBase
@@ -34,9 +37,8 @@ public sealed class EcosController : ControllerBase
     /// Creates a new draft engineering change order.
     /// </summary>
     /// <remarks>
-    /// The ECO is created in <c>Draft</c> status for the configured current tenant and actor.
-    /// The current user must exist and be active until authentication-backed tenant context
-    /// is introduced in a later step.
+    /// The ECO is created in <c>Draft</c> status for the authenticated user's tenant and actor.
+    /// The current user must exist and be active inside the tenant supplied by the bearer token.
     /// </remarks>
     /// <param name="request">The ECO draft data supplied by the client.</param>
     /// <param name="cancellationToken">A token that can cancel the request.</param>
@@ -47,6 +49,7 @@ public sealed class EcosController : ControllerBase
     /// <response code="409">A domain business rule rejected the request.</response>
     /// <response code="500">An unexpected server error occurred.</response>
     [HttpPost]
+    [Authorize(Policy = EngiFlowAuthorizationPolicies.EcoAuthoring)]
     [ProducesResponseType(typeof(EcoDetailsDto), StatusCodes.Status201Created)]
     [ProducesResponseType(typeof(ValidationProblemDetails), StatusCodes.Status400BadRequest)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
@@ -142,6 +145,7 @@ public sealed class EcosController : ControllerBase
     /// <response code="409">The ECO cannot transition from its current status to under review.</response>
     /// <response code="500">An unexpected server error occurred.</response>
     [HttpPut("{id:guid}/submit")]
+    [Authorize(Policy = EngiFlowAuthorizationPolicies.EcoAuthoring)]
     [ProducesResponseType(typeof(EcoDetailsDto), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ValidationProblemDetails), StatusCodes.Status400BadRequest)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
@@ -175,6 +179,7 @@ public sealed class EcosController : ControllerBase
     /// <response code="409">The ECO cannot transition from its current status to approved.</response>
     /// <response code="500">An unexpected server error occurred.</response>
     [HttpPut("{id:guid}/approve")]
+    [Authorize(Policy = EngiFlowAuthorizationPolicies.EcoApproval)]
     [ProducesResponseType(typeof(EcoDetailsDto), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ValidationProblemDetails), StatusCodes.Status400BadRequest)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
@@ -209,6 +214,7 @@ public sealed class EcosController : ControllerBase
     /// <response code="409">The ECO cannot transition from its current status to rejected.</response>
     /// <response code="500">An unexpected server error occurred.</response>
     [HttpPut("{id:guid}/reject")]
+    [Authorize(Policy = EngiFlowAuthorizationPolicies.EcoApproval)]
     [ProducesResponseType(typeof(EcoDetailsDto), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ValidationProblemDetails), StatusCodes.Status400BadRequest)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]

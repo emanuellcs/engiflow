@@ -53,6 +53,26 @@ public sealed class GlobalExceptionHandlerTests
     }
 
     [Fact]
+    public async Task TryHandleAsync_WhenAuthenticationFailedException_WritesUnauthorizedProblemDetails()
+    {
+        var problemDetailsService = new CapturingProblemDetailsService();
+        var handler = CreateHandler(problemDetailsService);
+        var httpContext = CreateHttpContext();
+
+        var handled = await handler.TryHandleAsync(
+            httpContext,
+            new AuthenticationFailedException(),
+            CancellationToken.None);
+
+        Assert.True(handled);
+        Assert.Equal(StatusCodes.Status401Unauthorized, httpContext.Response.StatusCode);
+        var details = Assert.IsType<ProblemDetails>(problemDetailsService.Context?.ProblemDetails);
+        Assert.Equal(StatusCodes.Status401Unauthorized, details.Status);
+        Assert.Equal("Authentication failed.", details.Title);
+        Assert.Equal("Invalid email or password.", details.Detail);
+    }
+
+    [Fact]
     public async Task TryHandleAsync_WhenDomainException_WritesConflictProblemDetails()
     {
         var problemDetailsService = new CapturingProblemDetailsService();

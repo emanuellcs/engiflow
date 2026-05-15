@@ -1,5 +1,8 @@
 using EngiFlow.Application.Abstractions.Persistence;
+using EngiFlow.Application.Abstractions.Security;
 using EngiFlow.Application.Abstractions.Tenancy;
+using EngiFlow.Application.Auth.Dtos;
+using EngiFlow.Application.Auth.Queries;
 using EngiFlow.Application.Behaviors;
 using EngiFlow.Application.Ecos.Commands;
 using EngiFlow.Application.Ecos.Dtos;
@@ -67,6 +70,97 @@ public sealed class EcoApplicationTests
         Assert.Equal(EcoStatus.Draft, dto.Status);
         Assert.Equal(EcoEventType.Created, Assert.Single(dto.Events).EventType);
         Assert.Equal(1, unitOfWork.SaveCount);
+    }
+
+    [Fact]
+    public async Task LoginQueryHandler_WhenCredentialsAreValid_ReturnsBearerToken()
+    {
+        var passwordHashService = new FakePasswordHashService();
+        var user = User.Create(
+            CompanyId.New(),
+            "admin@engiflow.local",
+            "Administrator",
+            UserRole.Administrator);
+        user.SetPasswordHash(passwordHashService.HashPassword(user, "EngiFlow_Admin_123!"));
+        var jwtTokenService = new FakeJwtTokenService();
+        var handler = new LoginQueryHandler(
+            new FakeUserRepository(user),
+            passwordHashService,
+            jwtTokenService);
+
+        var result = await handler.HandleAsync(new LoginQuery(
+            " ADMIN@ENGIFLOW.LOCAL ",
+            "EngiFlow_Admin_123!"));
+
+        Assert.Equal("Bearer", result.TokenType);
+        Assert.Equal($"token:{user.Id.Value}", result.AccessToken);
+        Assert.Equal(jwtTokenService.ExpiresAtUtc, result.ExpiresAtUtc);
+    }
+
+    [Fact]
+    public async Task LoginQueryHandler_WhenPasswordIsInvalid_ThrowsAuthenticationFailedException()
+    {
+        var passwordHashService = new FakePasswordHashService();
+        var user = User.Create(
+            CompanyId.New(),
+            "admin@engiflow.local",
+            "Administrator",
+            UserRole.Administrator);
+        user.SetPasswordHash(passwordHashService.HashPassword(user, "correct-password"));
+        var handler = new LoginQueryHandler(
+            new FakeUserRepository(user),
+            passwordHashService,
+            new FakeJwtTokenService());
+
+        await Assert.ThrowsAsync<AuthenticationFailedException>(() =>
+            handler.HandleAsync(new LoginQuery("admin@engiflow.local", "wrong-password")));
+    }
+
+    [Fact]
+    public async Task LoginQueryHandler_WhenUserIsInactive_ThrowsAuthenticationFailedException()
+    {
+        var passwordHashService = new FakePasswordHashService();
+        var user = User.Create(
+            CompanyId.New(),
+            "admin@engiflow.local",
+            "Administrator",
+            UserRole.Administrator);
+        user.SetPasswordHash(passwordHashService.HashPassword(user, "EngiFlow_Admin_123!"));
+        user.Deactivate();
+        var handler = new LoginQueryHandler(
+            new FakeUserRepository(user),
+            passwordHashService,
+            new FakeJwtTokenService());
+
+        await Assert.ThrowsAsync<AuthenticationFailedException>(() =>
+            handler.HandleAsync(new LoginQuery("admin@engiflow.local", "EngiFlow_Admin_123!")));
+    }
+
+    [Fact]
+    public async Task LoginQueryHandler_WhenUserIsUnknown_ThrowsAuthenticationFailedException()
+    {
+        var handler = new LoginQueryHandler(
+            new FakeUserRepository(),
+            new FakePasswordHashService(),
+            new FakeJwtTokenService());
+
+        await Assert.ThrowsAsync<AuthenticationFailedException>(() =>
+            handler.HandleAsync(new LoginQuery("missing@engiflow.local", "EngiFlow_Admin_123!")));
+    }
+
+    [Fact]
+    public async Task LoginQueryValidator_WhenCredentialsAreMissing_ThrowsValidationException()
+    {
+        var behavior = new ValidationBehavior<LoginQuery, LoginResultDto>(
+            new IValidator<LoginQuery>[] { new LoginQueryValidator() });
+
+        var exception = await Assert.ThrowsAsync<AppValidationException>(() =>
+            behavior.HandleAsync(
+                new LoginQuery(string.Empty, string.Empty),
+                () => Task.FromResult(default(LoginResultDto)!)));
+
+        Assert.Contains(nameof(LoginQuery.Email), exception.Errors.Keys);
+        Assert.Contains(nameof(LoginQuery.Password), exception.Errors.Keys);
     }
 
     [Fact]
@@ -306,6 +400,36 @@ public sealed class EcoApplicationTests
         public Task<User?> GetByIdAsync(UserId id, CancellationToken cancellationToken = default)
         {
             return Task.FromResult(_users.SingleOrDefault(user => user.Id == id));
+        }
+
+        public Task<User?> GetByEmailForAuthenticationAsync(
+            string normalizedEmail,
+            CancellationToken cancellationToken = default)
+        {
+            return Task.FromResult(_users.SingleOrDefault(user => user.Email == normalizedEmail));
+        }
+    }
+
+    private sealed class FakePasswordHashService : IPasswordHashService
+    {
+        public string HashPassword(User user, string password)
+        {
+            return $"hash:{user.Id.Value}:{password}";
+        }
+
+        public bool VerifyPassword(User user, string password)
+        {
+            return user.PasswordHash == HashPassword(user, password);
+        }
+    }
+
+    private sealed class FakeJwtTokenService : IJwtTokenService
+    {
+        public DateTimeOffset ExpiresAtUtc { get; } = DateTimeOffset.Parse("2026-05-15T01:00:00Z");
+
+        public AccessTokenResult CreateAccessToken(User user)
+        {
+            return new AccessTokenResult($"token:{user.Id.Value}", ExpiresAtUtc);
         }
     }
 

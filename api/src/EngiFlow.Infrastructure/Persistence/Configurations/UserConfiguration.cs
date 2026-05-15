@@ -55,6 +55,11 @@ internal sealed class UserConfiguration : IEntityTypeConfiguration<User>
             .HasMaxLength(32)
             .IsRequired();
 
+        builder.Property(user => user.PasswordHash)
+            .HasColumnName("password_hash")
+            .HasMaxLength(512)
+            .IsRequired();
+
         builder.Property(user => user.IsActive)
             .HasColumnName("is_active")
             .IsRequired();
@@ -71,6 +76,10 @@ internal sealed class UserConfiguration : IEntityTypeConfiguration<User>
         builder.HasIndex(user => new { user.CompanyId, user.Email })
             .IsUnique()
             .HasDatabaseName("ux_users_company_id_email");
+
+        builder.HasIndex(user => user.Email)
+            .IsUnique()
+            .HasDatabaseName("ux_users_email");
 
         builder.HasIndex(user => new { user.CompanyId, user.Role })
             .HasDatabaseName("ix_users_company_id_role");

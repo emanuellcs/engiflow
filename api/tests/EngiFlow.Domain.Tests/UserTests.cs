@@ -44,4 +44,18 @@ public sealed class UserTests
 
         Assert.Throws<DomainException>(() => user.ChangeRole(UserRole.Approver));
     }
+
+    [Fact]
+    public void SetPasswordHash_WhenHashIsValid_StoresHash()
+    {
+        var user = User.Create(
+            CompanyId.New(),
+            "admin@engiflow.example",
+            "Administrator",
+            UserRole.Administrator);
+
+        user.SetPasswordHash("hashed-password");
+
+        Assert.Equal("hashed-password", user.PasswordHash);
+    }
 }

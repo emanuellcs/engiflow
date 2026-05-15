@@ -63,6 +63,49 @@ public sealed class EngiFlowDbContextTests
     }
 
     [Fact]
+    public async Task AuthenticationLookup_CanIgnoreTenantQueryFilter()
+    {
+        var databaseName = Guid.NewGuid().ToString();
+        var companyA = CompanyId.New();
+        var companyB = CompanyId.New();
+
+        await using (var context = CreateContext(databaseName, companyB))
+        {
+            var user = User.Create(companyB, "admin@engiflow.local", "Administrator", UserRole.Administrator);
+            user.SetPasswordHash("hashed-password");
+            context.Users.Add(user);
+            await context.SaveChangesAsync();
+        }
+
+        await using (var context = CreateContext(databaseName, companyA))
+        {
+            Assert.Empty(await context.Users.ToListAsync());
+
+            var authenticatedUser = await context.Users
+                .IgnoreQueryFilters()
+                .SingleOrDefaultAsync(user => user.Email == "admin@engiflow.local");
+
+            Assert.NotNull(authenticatedUser);
+            Assert.Equal(companyB, authenticatedUser.CompanyId);
+        }
+    }
+
+    [Fact]
+    public void UserModel_StoresPasswordHashAndUsesGlobalEmailIndex()
+    {
+        using var context = CreateContext(Guid.NewGuid().ToString(), CompanyId.New());
+        var userEntity = context.Model.FindEntityType(typeof(User))!;
+        var passwordHash = userEntity.FindProperty(nameof(User.PasswordHash))!;
+
+        Assert.Equal(typeof(string), passwordHash.ClrType);
+        Assert.False(passwordHash.IsNullable);
+        Assert.Equal(512, passwordHash.GetMaxLength());
+        Assert.Contains(
+            userEntity.GetIndexes(),
+            index => index.GetDatabaseName() == "ux_users_email" && index.IsUnique);
+    }
+
+    [Fact]
     public async Task SaveChanges_PersistsPendingEcoEventsOnceAndClearsPendingBuffer()
     {
         var companyId = CompanyId.New();

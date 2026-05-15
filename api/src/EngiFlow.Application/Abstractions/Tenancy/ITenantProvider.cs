@@ -6,9 +6,8 @@ namespace EngiFlow.Application.Abstractions.Tenancy;
 /// Supplies the tenant and actor identifiers that scope application use cases.
 /// </summary>
 /// <remarks>
-/// Authentication is not part of Step 4, but commands still need a central source of
-/// tenant and user identity so handlers do not accept spoofable actor identifiers from
-/// external request DTOs.
+/// Request-time implementations should derive these identifiers from trusted authentication
+/// context so handlers do not accept spoofable actor identifiers from external request DTOs.
 /// </remarks>
 public interface ITenantProvider
 {
