@@ -7,5 +7,6 @@
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/EngiFlow.Domain.Tests/EngiFlow.Domain.Tests.csproj" />
+    <Project Path="tests/EngiFlow.Infrastructure.Tests/EngiFlow.Infrastructure.Tests.csproj" />
   </Folder>
 </Solution>

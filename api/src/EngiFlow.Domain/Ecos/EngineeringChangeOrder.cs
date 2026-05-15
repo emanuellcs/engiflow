@@ -17,6 +17,7 @@ namespace EngiFlow.Domain.Ecos;
 public sealed class EngineeringChangeOrder : ITenantScoped
 {
     private readonly List<EcoEvent> _events = [];
+    private readonly List<EcoEvent> _pendingEvents = [];
 
     /// <summary>
     /// Initializes a new empty instance of the <see cref="EngineeringChangeOrder"/> class for EF Core materialization.
@@ -108,6 +109,29 @@ public sealed class EngineeringChangeOrder : ITenantScoped
     /// remove or rewrite the approval history.
     /// </remarks>
     public IReadOnlyCollection<EcoEvent> Events => _events.AsReadOnly();
+
+    /// <summary>
+    /// Gets the audit events produced by unsaved domain operations.
+    /// </summary>
+    /// <remarks>
+    /// The aggregate keeps a separate pending-event buffer so infrastructure can persist
+    /// newly produced audit records exactly once without confusing them with previously
+    /// persisted timeline entries loaded from the database.
+    /// </remarks>
+    public IReadOnlyCollection<EcoEvent> PendingEvents => _pendingEvents.AsReadOnly();
+
+    /// <summary>
+    /// Clears the pending audit-event buffer after persistence has completed successfully.
+    /// </summary>
+    /// <remarks>
+    /// Infrastructure calls this only after the surrounding unit of work is saved. Keeping
+    /// this operation explicit prevents failed database writes from accidentally dropping
+    /// audit events that still need to be retried.
+    /// </remarks>
+    public void ClearPendingEvents()
+    {
+        _pendingEvents.Clear();
+    }
 
     /// <summary>
     /// Creates a draft ECO and records the initial audit event.
@@ -356,7 +380,7 @@ public sealed class EngineeringChangeOrder : ITenantScoped
         string description,
         DateTimeOffset occurredAt)
     {
-        _events.Add(EcoEvent.Create(
+        var ecoEvent = EcoEvent.Create(
             CompanyId,
             Id,
             actorUserId,
@@ -364,7 +388,10 @@ public sealed class EngineeringChangeOrder : ITenantScoped
             description,
             oldStatus,
             newStatus,
-            occurredAt));
+            occurredAt);
+
+        _events.Add(ecoEvent);
+        _pendingEvents.Add(ecoEvent);
     }
 
     /// <summary>
