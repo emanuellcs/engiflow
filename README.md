@@ -116,6 +116,14 @@ stateDiagram-v2
 
 The web application is a Next.js App Router project using TypeScript and Material UI. The Docker image uses Next.js standalone output so the runtime image contains only the traced production server, static assets, and public files needed to serve the app.
 
+The current frontend foundation includes:
+
+- Material UI App Router SSR wiring through `AppRouterCacheProvider` from `@mui/material-nextjs/v16-appRouter`.
+- A baseline Material Design 2 theme with a restrained B2B SaaS palette and Roboto typography stack.
+- A persistent MUI application shell with an EngiFlow app bar, authenticated user role display, logout action, and route content container.
+- A typed native `fetch` API client that reads `NEXT_PUBLIC_API_URL`, falls back to `NEXT_PUBLIC_API_BASE_URL`, and then falls back to `http://localhost:8080`.
+- A React authentication context that decodes backend JWT claims (`sub`, `tenant`, `role`, optional `exp`), stores the bearer token in local storage, mirrors it to a non-HttpOnly cookie, and clears auth state on `401 Unauthorized`.
+
 ## Tech Stack
 
 | Area | Technology |
@@ -157,6 +165,22 @@ This starts:
 | `postgres` | `localhost:5432` | Local PostgreSQL database |
 
 PostgreSQL uses the named Docker volume `postgres-data`, so local database state survives container restarts and rebuilds.
+
+### Frontend Configuration
+
+The web app calls the API through the typed client in `web/lib/api/client.ts`. Configure the browser-visible API URL with:
+
+```bash
+NEXT_PUBLIC_API_URL=http://localhost:8080
+```
+
+For compatibility with the existing Docker Compose configuration, `NEXT_PUBLIC_API_BASE_URL` is still accepted as a fallback. Authenticated requests automatically include:
+
+```text
+Authorization: Bearer <accessToken>
+```
+
+When the API returns `401 Unauthorized`, the frontend clears the stored token, emits an auth-state event, and redirects browser clients to `/login`. The `/login` route is currently a placeholder; a complete login form is intentionally outside the Step 7 foundation scope.
 
 The API reads `ConnectionStrings:DefaultConnection`. Docker Compose supplies the container connection string, while `api/src/EngiFlow.Api/appsettings.Development.json` points local `dotnet run` usage at `localhost:5432`.
 
@@ -409,6 +433,16 @@ Build the API solution:
 dotnet build api/EngiFlow.slnx --no-restore /m:1
 ```
 
+Verify the web app:
+
+```bash
+cd web
+npm run lint
+npm run build
+```
+
+The web build uses Next.js standalone output for the Docker runtime image. In restricted sandboxes, `next build` may need permission to run Turbopack's helper process.
+
 ## Repository Layout
 
 ```text
@@ -428,6 +462,8 @@ dotnet build api/EngiFlow.slnx --no-restore /m:1
 +-- web/
 |   +-- Dockerfile
 |   +-- app/
+|   +-- components/
+|   +-- lib/
 |   +-- next.config.ts
 |   +-- package.json
 +-- docker-compose.yml
@@ -435,7 +471,7 @@ dotnet build api/EngiFlow.slnx --no-restore /m:1
 
 ## Current Scope
 
-This foundation includes local orchestration, the core domain model, Application-layer CQRS use cases, validation, EF Core persistence, migrations, JWT authentication, role-based authorization policies, secured ECO/API controllers, Swagger bearer support, and application/domain/infrastructure/API tests. It intentionally does not yet include frontend workflows, file storage, production onboarding, refresh tokens, or cloud deployment automation.
+This foundation includes local orchestration, the core domain model, Application-layer CQRS use cases, validation, EF Core persistence, migrations, JWT authentication, role-based authorization policies, secured ECO/API controllers, Swagger bearer support, frontend MUI SSR/auth/API plumbing, and application/domain/infrastructure/API tests. It intentionally does not yet include frontend ECO workflows, file storage, production onboarding, refresh tokens, or cloud deployment automation.
 
 Those concerns should build on the current boundaries rather than bypass them:
 
