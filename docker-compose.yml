@@ -17,7 +17,7 @@ services:
       - "5432:5432"
     volumes:
       # Persist local database state across container restarts.
-      - postgres-data:/var/lib/postgresql/data
+      - postgres-data:/var/lib/postgresql
     networks:
       - engiflow
 
@@ -47,8 +47,9 @@ services:
       api:
         condition: service_started
     environment:
+      API_INTERNAL_BASE_URL: ${API_INTERNAL_BASE_URL:-http://api:8080}
       HOSTNAME: 0.0.0.0
-      NEXT_PUBLIC_API_BASE_URL: ${NEXT_PUBLIC_API_BASE_URL:-http://localhost:8080}
+      NEXT_PUBLIC_API_BASE_URL: ${NEXT_PUBLIC_API_BASE_URL:-}
       NEXT_TELEMETRY_DISABLED: "1"
       NODE_ENV: production
       PORT: "3000"

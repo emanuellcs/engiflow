@@ -23,6 +23,12 @@ RUN dotnet publish "src/EngiFlow.Api/EngiFlow.Api.csproj" \
 FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS runtime
 WORKDIR /app
 
+# Npgsql probes GSSAPI support when opening PostgreSQL connections. The runtime
+# image needs the native library available even though local auth uses passwords.
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends libgssapi-krb5-2 \
+    && rm -rf /var/lib/apt/lists/*
+
 # App Runner and Compose both route HTTP traffic through the container port.
 ENV ASPNETCORE_URLS=http://+:8080 \
     DOTNET_EnableDiagnostics=0
