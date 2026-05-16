@@ -119,8 +119,9 @@ The web application is a Next.js App Router project using TypeScript and Materia
 The current frontend foundation includes:
 
 - Material UI App Router SSR wiring through `AppRouterCacheProvider` from `@mui/material-nextjs/v16-appRouter`.
-- A baseline Material Design 2 theme with a restrained B2B SaaS palette and Roboto typography stack.
+- A baseline Material Design 2 theme with a restrained B2B SaaS palette and Roboto loaded globally through `@fontsource/roboto`.
 - A persistent MUI application shell with an EngiFlow app bar, authenticated user role display, logout action, and route content container.
+- A responsive Material UI login page at `/login` that posts credentials through the shared API client, stores the returned JWT through `AuthContext`, and redirects authenticated users to the workspace root.
 - A typed native `fetch` API client that reads `NEXT_PUBLIC_API_URL`, falls back to `NEXT_PUBLIC_API_BASE_URL`, and then falls back to `http://localhost:8080`.
 - A React authentication context that decodes backend JWT claims (`sub`, `tenant`, `role`, optional `exp`), stores the bearer token in local storage, mirrors it to a non-HttpOnly cookie, and clears auth state on `401 Unauthorized`.
 
@@ -180,7 +181,7 @@ For compatibility with the existing Docker Compose configuration, `NEXT_PUBLIC_A
 Authorization: Bearer <accessToken>
 ```
 
-When the API returns `401 Unauthorized`, the frontend clears the stored token, emits an auth-state event, and redirects browser clients to `/login`. The `/login` route is currently a placeholder; a complete login form is intentionally outside the Step 7 foundation scope.
+When the API returns `401 Unauthorized`, the frontend clears the stored token, emits an auth-state event, and redirects browser clients to `/login`. The login page submits credentials to `POST /api/auth/login`, stores the returned `accessToken` through the authentication context, and redirects successful sign-ins to `/`.
 
 The API reads `ConnectionStrings:DefaultConnection`. Docker Compose supplies the container connection string, while `api/src/EngiFlow.Api/appsettings.Development.json` points local `dotnet run` usage at `localhost:5432`.
 
@@ -196,6 +197,12 @@ In `Development`, the API applies EF Core migrations at startup and seeds a defa
 | Role | `Administrator` |
 
 Authenticate with:
+
+```text
+http://localhost:3000/login
+```
+
+Or call the API directly:
 
 ```bash
 curl -X POST http://localhost:8080/api/auth/login \
