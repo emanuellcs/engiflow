@@ -122,7 +122,9 @@ The current frontend foundation includes:
 - A baseline Material Design 2 theme with a restrained B2B SaaS palette and Roboto loaded globally through `@fontsource/roboto`.
 - A persistent MUI application shell with an EngiFlow app bar, authenticated user role display, logout action, and route content container.
 - A responsive Material UI login page at `/login` that posts credentials through the shared API client, stores the returned JWT through `AuthContext`, and redirects authenticated users to the workspace root.
-- A typed native `fetch` API client that reads `NEXT_PUBLIC_API_URL`, falls back to `NEXT_PUBLIC_API_BASE_URL`, and then falls back to `http://localhost:8080`.
+- Client-side route protection for the workspace root, redirecting unauthenticated users to `/login`.
+- A protected ECO dashboard at `/` that lists paged ECO summaries with dense Material UI table styling, status and priority chips, loading skeleton rows, and an empty state.
+- A typed native `fetch` API client that reads optional public API base URLs and otherwise uses same-origin `/api/...` requests through the Next.js proxy.
 - A React authentication context that decodes backend JWT claims (`sub`, `tenant`, `role`, optional `exp`), stores the bearer token in local storage, mirrors it to a non-HttpOnly cookie, and clears auth state on `401 Unauthorized`.
 
 ## Tech Stack
@@ -165,23 +167,23 @@ This starts:
 | `api` Swagger UI | `http://localhost:8080/swagger` | Interactive API documentation in Development |
 | `postgres` | `localhost:5432` | Local PostgreSQL database |
 
-PostgreSQL uses the named Docker volume `postgres-data`, so local database state survives container restarts and rebuilds.
+PostgreSQL uses the named Docker volume `postgres-data`, so local database state survives container restarts and rebuilds. The volume is mounted at `/var/lib/postgresql` to match the PostgreSQL 18 Docker image data layout.
 
 ### Frontend Configuration
 
-The web app calls the API through the typed client in `web/lib/api/client.ts`. Configure the browser-visible API URL with:
+The web app calls the API through the typed client in `web/lib/api/client.ts`. By default, browser requests use same-origin `/api/...` URLs, and the Next.js route handler in `web/app/api/[...path]/route.ts` proxies those requests to the ASP.NET Core API. Docker Compose sets the server-side proxy target to:
 
 ```bash
-NEXT_PUBLIC_API_URL=http://localhost:8080
+API_INTERNAL_BASE_URL=http://api:8080
 ```
 
-For compatibility with the existing Docker Compose configuration, `NEXT_PUBLIC_API_BASE_URL` is still accepted as a fallback. Authenticated requests automatically include:
+For non-Docker local development, the proxy falls back to `http://localhost:8080`. If you need the browser to call an externally reachable API directly, set `NEXT_PUBLIC_API_URL` or `NEXT_PUBLIC_API_BASE_URL`; otherwise leave them unset so the same-origin proxy avoids CORS and forwarded-port issues. Authenticated requests automatically include:
 
 ```text
 Authorization: Bearer <accessToken>
 ```
 
-When the API returns `401 Unauthorized`, the frontend clears the stored token, emits an auth-state event, and redirects browser clients to `/login`. The login page submits credentials to `POST /api/auth/login`, stores the returned `accessToken` through the authentication context, and redirects successful sign-ins to `/`.
+When the API returns `401 Unauthorized`, the frontend clears the stored token, emits an auth-state event, and redirects browser clients to `/login`. The login page submits credentials to `POST /api/auth/login`, stores the returned `accessToken` through the authentication context, and redirects successful sign-ins to `/`. The root route is protected client-side and displays the ECO list dashboard after authentication, fetching `GET /api/ecos?pageNumber=1&pageSize=20`.
 
 The API reads `ConnectionStrings:DefaultConnection`. Docker Compose supplies the container connection string, while `api/src/EngiFlow.Api/appsettings.Development.json` points local `dotnet run` usage at `localhost:5432`.
 
@@ -478,7 +480,7 @@ The web build uses Next.js standalone output for the Docker runtime image. In re
 
 ## Current Scope
 
-This foundation includes local orchestration, the core domain model, Application-layer CQRS use cases, validation, EF Core persistence, migrations, JWT authentication, role-based authorization policies, secured ECO/API controllers, Swagger bearer support, frontend MUI SSR/auth/API plumbing, and application/domain/infrastructure/API tests. It intentionally does not yet include frontend ECO workflows, file storage, production onboarding, refresh tokens, or cloud deployment automation.
+This foundation includes local orchestration, the core domain model, Application-layer CQRS use cases, validation, EF Core persistence, migrations, JWT authentication, role-based authorization policies, secured ECO/API controllers, Swagger bearer support, frontend MUI SSR/auth/API plumbing, client-side root route protection, the protected ECO summary dashboard, and application/domain/infrastructure/API tests. It intentionally does not yet include frontend ECO creation or detail workflows, file storage, production onboarding, refresh tokens, or cloud deployment automation.
 
 Those concerns should build on the current boundaries rather than bypass them:
 

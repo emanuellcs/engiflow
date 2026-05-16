@@ -29,7 +29,7 @@ export class ApiError extends Error {
   }
 }
 
-const defaultApiBaseUrl = "http://localhost:8080";
+const defaultApiBaseUrl = "";
 
 export async function apiFetch<TResponse = unknown>(
   path: string,
@@ -71,12 +71,16 @@ function resolveApiUrl(path: string): string {
     return path;
   }
 
+  const normalizedPath = path.startsWith("/") ? path : `/${path}`;
   const baseUrl = (
     process.env.NEXT_PUBLIC_API_URL ||
     process.env.NEXT_PUBLIC_API_BASE_URL ||
     defaultApiBaseUrl
   ).replace(/\/+$/, "");
-  const normalizedPath = path.startsWith("/") ? path : `/${path}`;
+
+  if (!baseUrl) {
+    return normalizedPath;
+  }
 
   return `${baseUrl}${normalizedPath}`;
 }
