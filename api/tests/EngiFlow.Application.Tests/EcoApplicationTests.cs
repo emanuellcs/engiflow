@@ -9,6 +9,9 @@ using EngiFlow.Application.Ecos.Commands;
 using EngiFlow.Application.Ecos.Dtos;
 using EngiFlow.Application.Ecos.Queries;
 using EngiFlow.Application.Exceptions;
+using EngiFlow.Application.Users.Commands;
+using EngiFlow.Application.Users.Dtos;
+using EngiFlow.Application.Users.Queries;
 using EngiFlow.Domain.Companies;
 using EngiFlow.Domain.Ecos;
 using EngiFlow.Domain.Users;
@@ -78,14 +81,15 @@ public sealed class EcoApplicationTests
     public async Task LoginQueryHandler_WhenCredentialsAreValid_ReturnsBearerToken()
     {
         var passwordHashService = new FakePasswordHashService();
-        var user = User.Create(
-            CompanyId.New(),
+        var company = Company.Create("EngiFlow Demo Company");
+        var user = company.RegisterUser(
             "admin@engiflow.local",
             "Administrator",
             UserRole.Administrator);
         user.SetPasswordHash(passwordHashService.HashPassword(user, "EngiFlow_Admin_123!"));
         var jwtTokenService = new FakeJwtTokenService();
         var handler = new LoginQueryHandler(
+            new FakeCompanyRepository(company),
             new FakeUserRepository(user),
             passwordHashService,
             jwtTokenService);
@@ -97,19 +101,23 @@ public sealed class EcoApplicationTests
         Assert.Equal("Bearer", result.TokenType);
         Assert.Equal($"token:{user.Id.Value}", result.AccessToken);
         Assert.Equal(jwtTokenService.ExpiresAtUtc, result.ExpiresAtUtc);
+        Assert.Equal("Administrator", result.UserName);
+        Assert.Equal("EngiFlow Demo Company", result.CompanyName);
+        Assert.Equal(new[] { nameof(UserRole.Administrator) }, result.Roles);
     }
 
     [Fact]
     public async Task LoginQueryHandler_WhenPasswordIsInvalid_ThrowsAuthenticationFailedException()
     {
         var passwordHashService = new FakePasswordHashService();
-        var user = User.Create(
-            CompanyId.New(),
+        var company = Company.Create("EngiFlow Demo Company");
+        var user = company.RegisterUser(
             "admin@engiflow.local",
             "Administrator",
             UserRole.Administrator);
         user.SetPasswordHash(passwordHashService.HashPassword(user, "correct-password"));
         var handler = new LoginQueryHandler(
+            new FakeCompanyRepository(company),
             new FakeUserRepository(user),
             passwordHashService,
             new FakeJwtTokenService());
@@ -122,14 +130,15 @@ public sealed class EcoApplicationTests
     public async Task LoginQueryHandler_WhenUserIsInactive_ThrowsAuthenticationFailedException()
     {
         var passwordHashService = new FakePasswordHashService();
-        var user = User.Create(
-            CompanyId.New(),
+        var company = Company.Create("EngiFlow Demo Company");
+        var user = company.RegisterUser(
             "admin@engiflow.local",
             "Administrator",
             UserRole.Administrator);
         user.SetPasswordHash(passwordHashService.HashPassword(user, "EngiFlow_Admin_123!"));
         user.Deactivate();
         var handler = new LoginQueryHandler(
+            new FakeCompanyRepository(company),
             new FakeUserRepository(user),
             passwordHashService,
             new FakeJwtTokenService());
@@ -142,6 +151,7 @@ public sealed class EcoApplicationTests
     public async Task LoginQueryHandler_WhenUserIsUnknown_ThrowsAuthenticationFailedException()
     {
         var handler = new LoginQueryHandler(
+            new FakeCompanyRepository(),
             new FakeUserRepository(),
             new FakePasswordHashService(),
             new FakeJwtTokenService());
@@ -163,6 +173,34 @@ public sealed class EcoApplicationTests
 
         Assert.Contains(nameof(LoginQuery.Email), exception.Errors.Keys);
         Assert.Contains(nameof(LoginQuery.Password), exception.Errors.Keys);
+    }
+
+    [Fact]
+    public async Task ForgotPasswordCommandHandler_LogsMockResetLink()
+    {
+        var resetLinkLogger = new FakePasswordResetLinkLogger();
+        var handler = new ForgotPasswordCommandHandler(resetLinkLogger);
+
+        await handler.HandleAsync(new ForgotPasswordCommand(" ADA@ACME.EXAMPLE "));
+
+        Assert.Equal("ada@acme.example", resetLinkLogger.Email);
+        Assert.NotNull(resetLinkLogger.ResetLink);
+        Assert.Contains("ada%40acme.example", resetLinkLogger.ResetLink, StringComparison.Ordinal);
+        Assert.Contains("mock-", resetLinkLogger.ResetLink, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task ForgotPasswordCommandValidator_WhenEmailIsInvalid_ThrowsValidationException()
+    {
+        var behavior = new ValidationBehavior<ForgotPasswordCommand, ForgotPasswordResultDto>(
+            new IValidator<ForgotPasswordCommand>[] { new ForgotPasswordCommandValidator() });
+
+        var exception = await Assert.ThrowsAsync<AppValidationException>(() =>
+            behavior.HandleAsync(
+                new ForgotPasswordCommand("not-an-email"),
+                () => Task.FromResult(default(ForgotPasswordResultDto)!)));
+
+        Assert.Contains(nameof(ForgotPasswordCommand.Email), exception.Errors.Keys);
     }
 
     [Fact]
@@ -198,6 +236,9 @@ public sealed class EcoApplicationTests
         Assert.Equal("Bearer", result.TokenType);
         Assert.Equal($"token:{admin.Id.Value}", result.AccessToken);
         Assert.Equal(jwtTokenService.ExpiresAtUtc, result.ExpiresAtUtc);
+        Assert.Equal("Ada Lovelace", result.UserName);
+        Assert.Equal("Acme Engineering", result.CompanyName);
+        Assert.Equal(new[] { nameof(UserRole.Administrator) }, result.Roles);
         Assert.Equal(1, unitOfWork.SaveCount);
     }
 
@@ -264,6 +305,126 @@ public sealed class EcoApplicationTests
 
         var passwordErrors = Assert.Contains(nameof(RegisterCompanyCommand.AdminPassword), exception.Errors);
         Assert.Contains(passwordErrors, message => message.Contains("uppercase", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    public async Task ListUsersQueryHandler_ReturnsActiveUserSummaries()
+    {
+        var company = Company.Create("Acme Engineering");
+        var admin = company.RegisterUser(
+            "admin@acme.example",
+            "Ada Lovelace",
+            UserRole.Administrator);
+        var requester = company.RegisterUser(
+            "requester@acme.example",
+            "Grace Hopper",
+            UserRole.Requester);
+        var inactive = company.RegisterUser(
+            "inactive@acme.example",
+            "Inactive User",
+            UserRole.Requester);
+        inactive.Deactivate();
+        var handler = new ListUsersQueryHandler(new FakeUserRepository(admin, requester, inactive));
+
+        var result = await handler.HandleAsync(new ListUsersQuery());
+
+        Assert.Equal(2, result.Count);
+        Assert.Contains(result, user => user.Email == "admin@acme.example");
+        Assert.Contains(result, user => user.Email == "requester@acme.example");
+        Assert.DoesNotContain(result, user => user.Email == "inactive@acme.example");
+    }
+
+    [Fact]
+    public async Task CreateUserCommandHandler_CreatesTenantUserWithPasswordHash()
+    {
+        var company = Company.Create("Acme Engineering");
+        var users = new FakeUserRepository();
+        var passwordHashService = new FakePasswordHashService();
+        var unitOfWork = new FakeUnitOfWork();
+        var handler = new CreateUserCommandHandler(
+            new FakeCompanyRepository(company),
+            users,
+            passwordHashService,
+            new FakeTenantProvider(company.Id, UserId.New()),
+            unitOfWork);
+
+        var result = await handler.HandleAsync(new CreateUserCommand(
+            "Grace Hopper",
+            " GRACE@ACME.EXAMPLE ",
+            "StrongPass123!",
+            UserRole.Approver));
+
+        var createdUser = Assert.Single(company.Users);
+        Assert.Equal(createdUser.Id.Value, result.Id);
+        Assert.Equal(company.Id, createdUser.CompanyId);
+        Assert.Equal("grace@acme.example", createdUser.Email);
+        Assert.Equal("Grace Hopper", createdUser.DisplayName);
+        Assert.Equal(UserRole.Approver, createdUser.Role);
+        Assert.Equal(passwordHashService.HashPassword(createdUser, "StrongPass123!"), createdUser.PasswordHash);
+        Assert.Equal(1, unitOfWork.SaveCount);
+    }
+
+    [Fact]
+    public async Task CreateUserCommandHandler_WhenEmailAlreadyExists_ThrowsValidationExceptionAndDoesNotSave()
+    {
+        var company = Company.Create("Acme Engineering");
+        var existingUser = company.RegisterUser(
+            "grace@acme.example",
+            "Grace Hopper",
+            UserRole.Requester);
+        var unitOfWork = new FakeUnitOfWork();
+        var handler = new CreateUserCommandHandler(
+            new FakeCompanyRepository(company),
+            new FakeUserRepository(existingUser),
+            new FakePasswordHashService(),
+            new FakeTenantProvider(company.Id, UserId.New()),
+            unitOfWork);
+
+        var exception = await Assert.ThrowsAsync<AppValidationException>(() =>
+            handler.HandleAsync(new CreateUserCommand(
+                "Grace Hopper",
+                " GRACE@ACME.EXAMPLE ",
+                "StrongPass123!",
+                UserRole.Approver)));
+
+        Assert.Contains(nameof(CreateUserCommand.Email), exception.Errors.Keys);
+        Assert.Equal(0, unitOfWork.SaveCount);
+    }
+
+    [Fact]
+    public async Task CreateUserCommandValidator_WhenRoleIsReviewer_ThrowsValidationException()
+    {
+        var behavior = new ValidationBehavior<CreateUserCommand, UserSummaryDto>(
+            new IValidator<CreateUserCommand>[] { new CreateUserCommandValidator() });
+
+        var exception = await Assert.ThrowsAsync<AppValidationException>(() =>
+            behavior.HandleAsync(
+                new CreateUserCommand(
+                    "Review User",
+                    "reviewer@acme.example",
+                    "StrongPass123!",
+                    UserRole.Reviewer),
+                () => Task.FromResult(default(UserSummaryDto)!)));
+
+        Assert.Contains(nameof(CreateUserCommand.Role), exception.Errors.Keys);
+    }
+
+    [Fact]
+    public async Task CreateUserCommandValidator_WhenPasswordMissesComplexity_ThrowsValidationException()
+    {
+        var behavior = new ValidationBehavior<CreateUserCommand, UserSummaryDto>(
+            new IValidator<CreateUserCommand>[] { new CreateUserCommandValidator() });
+
+        var exception = await Assert.ThrowsAsync<AppValidationException>(() =>
+            behavior.HandleAsync(
+                new CreateUserCommand(
+                    "Grace Hopper",
+                    "grace@acme.example",
+                    "longpassword",
+                    UserRole.Requester),
+                () => Task.FromResult(default(UserSummaryDto)!)));
+
+        Assert.Contains(nameof(CreateUserCommand.Password), exception.Errors.Keys);
     }
 
     [Fact]
@@ -493,7 +654,17 @@ public sealed class EcoApplicationTests
 
     private sealed class FakeCompanyRepository : ICompanyRepository
     {
+        public FakeCompanyRepository(params Company[] companies)
+        {
+            Companies = companies.ToList();
+        }
+
         public List<Company> Companies { get; } = [];
+
+        public Task<Company?> GetByIdAsync(CompanyId id, CancellationToken cancellationToken = default)
+        {
+            return Task.FromResult(Companies.SingleOrDefault(company => company.Id == id));
+        }
 
         public Task AddAsync(Company company, CancellationToken cancellationToken = default)
         {
@@ -511,6 +682,11 @@ public sealed class EcoApplicationTests
             _users = users;
         }
 
+        public Task AddAsync(User user, CancellationToken cancellationToken = default)
+        {
+            throw new NotSupportedException("Use Company.RegisterUser in application tests.");
+        }
+
         public Task<User?> GetByIdAsync(UserId id, CancellationToken cancellationToken = default)
         {
             return Task.FromResult(_users.SingleOrDefault(user => user.Id == id));
@@ -521,6 +697,17 @@ public sealed class EcoApplicationTests
             CancellationToken cancellationToken = default)
         {
             return Task.FromResult(_users.SingleOrDefault(user => user.Email == normalizedEmail));
+        }
+
+        public Task<IReadOnlyList<User>> ListActiveAsync(CancellationToken cancellationToken = default)
+        {
+            IReadOnlyList<User> users = _users
+                .Where(user => user.IsActive)
+                .OrderBy(user => user.DisplayName)
+                .ThenBy(user => user.Email)
+                .ToArray();
+
+            return Task.FromResult(users);
         }
     }
 
@@ -541,9 +728,26 @@ public sealed class EcoApplicationTests
     {
         public DateTimeOffset ExpiresAtUtc { get; } = DateTimeOffset.Parse("2026-05-15T01:00:00Z");
 
-        public AccessTokenResult CreateAccessToken(User user)
+        public AccessTokenResult CreateAccessToken(User user, string companyName)
         {
             return new AccessTokenResult($"token:{user.Id.Value}", ExpiresAtUtc);
+        }
+    }
+
+    private sealed class FakePasswordResetLinkLogger : IPasswordResetLinkLogger
+    {
+        public string? Email { get; private set; }
+
+        public string? ResetLink { get; private set; }
+
+        public Task LogMockResetLinkAsync(
+            string normalizedEmail,
+            string resetLink,
+            CancellationToken cancellationToken = default)
+        {
+            Email = normalizedEmail;
+            ResetLink = resetLink;
+            return Task.CompletedTask;
         }
     }
 

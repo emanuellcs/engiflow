@@ -39,6 +39,7 @@ public static class InfrastructureServiceCollectionExtensions
         services.AddScoped<IEngineeringChangeOrderRepository, EngineeringChangeOrderRepository>();
         services.AddScoped<IUserRepository, UserRepository>();
         services.AddScoped<IPasswordHashService, AspNetCorePasswordHashService>();
+        services.AddScoped<IPasswordResetLinkLogger, LoggingPasswordResetLinkLogger>();
         services.AddScoped<IUnitOfWork, EfUnitOfWork>();
 
         services.AddDbContext<EngiFlowDbContext>((serviceProvider, options) =>

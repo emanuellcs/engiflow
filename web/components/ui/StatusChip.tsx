@@ -1,5 +1,4 @@
 import Chip from "@mui/material/Chip";
-import type { ChipProps } from "@mui/material/Chip";
 import type { EcoStatus } from "@/lib/types/eco";
 
 export type { EcoStatus } from "@/lib/types/eco";
@@ -9,12 +8,28 @@ export type StatusChipProps = {
   status: EcoStatus;
 };
 
-const colorByStatus: Record<EcoStatus, ChipProps["color"]> = {
-  Approved: "success",
-  Rejected: "error",
-  UnderReview: "warning",
-  Draft: "default",
-  Implemented: "secondary",
+const chipSxByStatus: Record<EcoStatus, object> = {
+  Draft: {
+    bgcolor: "grey.100",
+    color: "text.secondary",
+    borderColor: "grey.300",
+  },
+  UnderReview: {
+    bgcolor: "info.light",
+    color: "info.contrastText",
+  },
+  Approved: {
+    bgcolor: "success.main",
+    color: "success.contrastText",
+  },
+  Rejected: {
+    bgcolor: "error.main",
+    color: "error.contrastText",
+  },
+  Implemented: {
+    bgcolor: "secondary.main",
+    color: "secondary.contrastText",
+  },
 };
 
 /**
@@ -29,10 +44,13 @@ export default function StatusChip({ status }: StatusChipProps) {
   return (
     <Chip
       label={formatStatusLabel(status)}
-      color={colorByStatus[status]}
       size="small"
       variant={status === "Draft" ? "outlined" : "filled"}
-      sx={{ minWidth: 98, fontWeight: 500 }}
+      sx={{
+        minWidth: 104,
+        fontWeight: 500,
+        ...chipSxByStatus[status],
+      }}
     />
   );
 }

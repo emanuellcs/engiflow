@@ -2,6 +2,9 @@ export type AuthenticatedUser = {
   id: string;
   tenantId: string;
   role: string;
+  roles: string[];
+  userName: string;
+  companyName: string;
   expiresAtUtc?: string;
 };
 
@@ -9,6 +12,9 @@ type JwtPayload = {
   sub?: unknown;
   tenant?: unknown;
   role?: unknown;
+  roles?: unknown;
+  user_name?: unknown;
+  company_name?: unknown;
   exp?: unknown;
 };
 
@@ -18,7 +24,10 @@ export function decodeAuthenticatedUser(token: string): AuthenticatedUser {
   const payload = decodeJwtPayload(token);
   const id = readRequiredClaim(payload.sub, "sub");
   const tenantId = readRequiredClaim(payload.tenant, "tenant");
-  const role = readRequiredClaim(payload.role, "role");
+  const roles = readRoles(payload.role, payload.roles);
+  const role = roles[0];
+  const userName = readOptionalClaim(payload.user_name) ?? "User";
+  const companyName = readOptionalClaim(payload.company_name) ?? "Workspace";
   const expiresAtUtc = readExpiry(payload.exp);
 
   if (expiresAtUtc && Date.parse(expiresAtUtc) <= Date.now()) {
@@ -29,6 +38,9 @@ export function decodeAuthenticatedUser(token: string): AuthenticatedUser {
     id,
     tenantId,
     role,
+    roles,
+    userName,
+    companyName,
     expiresAtUtc,
   };
 }
@@ -56,6 +68,41 @@ function readRequiredClaim(value: unknown, claimName: string): string {
   }
 
   return value;
+}
+
+function readOptionalClaim(value: unknown): string | undefined {
+  if (typeof value !== "string" || value.trim().length === 0) {
+    return undefined;
+  }
+
+  return value.trim();
+}
+
+function readRoles(roleClaim: unknown, rolesClaim: unknown): string[] {
+  const roles = [
+    ...readStringArrayClaim(roleClaim),
+    ...readStringArrayClaim(rolesClaim),
+  ].filter((role, index, allRoles) => allRoles.indexOf(role) === index);
+
+  if (roles.length === 0) {
+    throw new Error("The authentication token is missing the role claim.");
+  }
+
+  return roles;
+}
+
+function readStringArrayClaim(value: unknown): string[] {
+  if (typeof value === "string" && value.trim().length > 0) {
+    return [value.trim()];
+  }
+
+  if (Array.isArray(value)) {
+    return value.filter(
+      (item): item is string => typeof item === "string" && item.trim().length > 0,
+    );
+  }
+
+  return [];
 }
 
 function readExpiry(value: unknown): string | undefined {

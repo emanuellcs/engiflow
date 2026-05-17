@@ -86,4 +86,30 @@ public sealed class AuthController : ControllerBase
 
         return Ok(result);
     }
+
+    /// <summary>
+    /// Accepts a forgot-password request and logs a mock reset link for the MVP flow.
+    /// </summary>
+    /// <param name="request">The account email address supplied by the client.</param>
+    /// <param name="cancellationToken">A token that can cancel the request.</param>
+    /// <returns>An empty success response when the request is accepted.</returns>
+    /// <response code="200">The reset request was accepted.</response>
+    /// <response code="400">The request body failed application validation.</response>
+    /// <response code="500">An unexpected server error occurred.</response>
+    [AllowAnonymous]
+    [HttpPost("forgot-password")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ValidationProblemDetails), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status500InternalServerError)]
+    public async Task<IActionResult> ForgotPasswordAsync(
+        [FromBody] ForgotPasswordRequest request,
+        CancellationToken cancellationToken)
+    {
+        await _mediator.SendCommandAsync<ForgotPasswordCommand, ForgotPasswordResultDto>(
+                new ForgotPasswordCommand(request.Email),
+                cancellationToken)
+            .ConfigureAwait(false);
+
+        return Ok();
+    }
 }

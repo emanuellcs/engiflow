@@ -1,14 +1,19 @@
 "use client";
 
 import AccountCircleIcon from "@mui/icons-material/AccountCircle";
+import AddIcon from "@mui/icons-material/Add";
 import AssignmentIcon from "@mui/icons-material/Assignment";
+import BusinessIcon from "@mui/icons-material/Business";
 import DashboardIcon from "@mui/icons-material/Dashboard";
+import GroupIcon from "@mui/icons-material/Group";
 import LogoutIcon from "@mui/icons-material/Logout";
 import ManageAccountsIcon from "@mui/icons-material/ManageAccounts";
 import MenuIcon from "@mui/icons-material/Menu";
 import AppBar from "@mui/material/AppBar";
+import Avatar from "@mui/material/Avatar";
 import Box from "@mui/material/Box";
 import Button from "@mui/material/Button";
+import Chip from "@mui/material/Chip";
 import Divider from "@mui/material/Divider";
 import Drawer from "@mui/material/Drawer";
 import IconButton from "@mui/material/IconButton";
@@ -19,15 +24,17 @@ import ListItemIcon from "@mui/material/ListItemIcon";
 import ListItemText from "@mui/material/ListItemText";
 import Stack from "@mui/material/Stack";
 import Toolbar from "@mui/material/Toolbar";
+import Tooltip from "@mui/material/Tooltip";
 import Typography from "@mui/material/Typography";
 import { usePathname } from "next/navigation";
 import type { PropsWithChildren, ReactNode } from "react";
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import NextLink from "@/components/ui/NextLink";
 import { useAuth } from "@/lib/auth/AuthContext";
 
-const drawerWidth = 240;
+const drawerWidth = 248;
 const administratorRole = "Administrator";
+const requesterRole = "Requester";
 
 type NavigationItem = {
   label: string;
@@ -38,8 +45,12 @@ type NavigationItem = {
 
 type NavigationDrawerContentProps = {
   pathname: string;
+  companyName: string;
+  userName: string;
+  role: string;
   isAdministrator: boolean;
   onNavigate: () => void;
+  onLogout: () => void;
 };
 
 const navigationItems: NavigationItem[] = [
@@ -54,60 +65,57 @@ const navigationItems: NavigationItem[] = [
     icon: <AssignmentIcon fontSize="small" />,
   },
   {
-    label: "Settings",
+    label: "Team Management",
     href: "/settings/users",
     icon: <ManageAccountsIcon fontSize="small" />,
     administratorOnly: true,
   },
 ];
 
-/**
- * Renders the authenticated EngiFlow application shell with a fixed AppBar,
- * responsive navigation drawer, route title, and user logout controls.
- *
- * @param props - Shell properties.
- * @param props.children - Authenticated route content rendered in the shell body.
- * @returns The global authenticated workspace layout.
- */
 export default function AppShell({ children }: PropsWithChildren) {
   const pathname = usePathname() ?? "/";
   const { logout, user } = useAuth();
   const [isMobileDrawerOpen, setIsMobileDrawerOpen] = useState(false);
   const isAdministrator = user?.role === administratorRole;
-  const pageTitle = useMemo(() => getPageTitle(pathname), [pathname]);
+  const companyName = user?.companyName ?? "Workspace";
+  const userName = user?.userName ?? "User";
+  const role = user?.role ?? "User";
+  const canCreateEco = role === administratorRole || role === requesterRole;
+  const showDashboardAction = pathname !== "/";
+  const showEcosAction = !pathname.startsWith("/ecos");
+  const showNewEcoAction = canCreateEco && !pathname.startsWith("/ecos/new");
+  const showTeamAction = isAdministrator && !pathname.startsWith("/settings/users");
 
-  /**
-   * Opens the temporary mobile drawer from the AppBar hamburger button.
-   *
-   * @returns Nothing.
-   */
   function handleDrawerOpen(): void {
     setIsMobileDrawerOpen(true);
   }
 
-  /**
-   * Closes the temporary mobile drawer after navigation or backdrop dismissal.
-   *
-   * @returns Nothing.
-   */
   function handleDrawerClose(): void {
     setIsMobileDrawerOpen(false);
   }
 
   return (
-    <Box sx={{ display: "flex", bgcolor: "background.default", minHeight: "100vh" }}>
+    <Box sx={{ display: "flex", minHeight: "100vh", bgcolor: "background.default" }}>
       <AppBar
         position="fixed"
-        color="primary"
-        elevation={3}
+        color="inherit"
+        elevation={0}
         sx={{
           width: { md: `calc(100% - ${drawerWidth}px)` },
           ml: { md: `${drawerWidth}px` },
+          borderBottom: 1,
+          borderColor: "divider",
+          zIndex: (theme) => theme.zIndex.drawer + 1,
         }}
       >
-        <Toolbar variant="dense" sx={{ minHeight: { xs: 56, md: 48 } }}>
+        <Toolbar
+          variant="dense"
+          sx={{
+            minHeight: { xs: 56, md: 52 },
+            gap: 1,
+          }}
+        >
           <IconButton
-            color="inherit"
             edge="start"
             aria-label="Open navigation"
             onClick={handleDrawerOpen}
@@ -115,50 +123,86 @@ export default function AppShell({ children }: PropsWithChildren) {
           >
             <MenuIcon />
           </IconButton>
-          <Typography
-            variant="h6"
-            component="p"
-            noWrap
-            sx={{ flexGrow: 1, minWidth: 0, letterSpacing: 0 }}
-          >
-            {pageTitle}
-          </Typography>
-          <Stack
-            direction="row"
-            spacing={{ xs: 0.75, sm: 1.5 }}
-            sx={{ alignItems: "center", minWidth: 0, ml: 1 }}
-          >
-            <AccountCircleIcon
-              fontSize="small"
-              sx={{ display: { xs: "none", sm: "block" } }}
-            />
-            <Typography
-              variant="body2"
-              color="inherit"
-              noWrap
-              sx={{ maxWidth: { xs: 92, sm: 180 } }}
-            >
-              {user?.role ?? "User"}
-            </Typography>
-            <Button
-              color="inherit"
-              size="small"
-              aria-label="Logout"
-              startIcon={<LogoutIcon fontSize="small" />}
-              onClick={logout}
-              sx={{
-                minWidth: { xs: 36, sm: 72 },
-                px: { xs: 1, sm: 1.5 },
-                textTransform: "none",
-                "& .MuiButton-startIcon": {
-                  mr: { xs: 0, sm: 0.5 },
-                },
-              }}
-            >
-              <Box component="span" sx={{ display: { xs: "none", sm: "inline" } }}>
-                Logout
-              </Box>
-            </Button>
+          <Chip
+            icon={<BusinessIcon fontSize="small" />}
+            label={companyName}
+            variant="outlined"
+            size="small"
+            sx={{
+              maxWidth: { xs: 170, sm: 320 },
+              "& .MuiChip-label": {
+                overflow: "hidden",
+                textOverflow: "ellipsis",
+              },
+            }}
+          />
+          <Box sx={{ flex: 1, minWidth: 0 }} />
+          <Stack direction="row" spacing={1} sx={{ alignItems: "center" }}>
+            {showDashboardAction ? (
+              <Tooltip title="Dashboard">
+                <IconButton
+                  component={NextLink}
+                  href="/"
+                  aria-label="Open dashboard"
+                  size="small"
+                >
+                  <DashboardIcon fontSize="small" />
+                </IconButton>
+              </Tooltip>
+            ) : null}
+            {showEcosAction ? (
+              <Tooltip title="ECOs">
+                <IconButton
+                  component={NextLink}
+                  href="/ecos"
+                  aria-label="Open ECOs"
+                  size="small"
+                >
+                  <AssignmentIcon fontSize="small" />
+                </IconButton>
+              </Tooltip>
+            ) : null}
+            {showTeamAction ? (
+              <Tooltip title="Team Management">
+                <IconButton
+                  component={NextLink}
+                  href="/settings/users"
+                  aria-label="Open team management"
+                  size="small"
+                >
+                  <GroupIcon fontSize="small" />
+                </IconButton>
+              </Tooltip>
+            ) : null}
+            {showNewEcoAction ? (
+              <Button
+                component={NextLink}
+                href="/ecos/new"
+                variant="contained"
+                size="small"
+                startIcon={<AddIcon fontSize="small" />}
+                sx={{
+                  minHeight: 32,
+                  textTransform: "none",
+                  display: { xs: "none", sm: "inline-flex" },
+                }}
+              >
+                New ECO
+              </Button>
+            ) : null}
+            {showNewEcoAction ? (
+              <Tooltip title="New ECO">
+                <IconButton
+                  component={NextLink}
+                  href="/ecos/new"
+                  aria-label="Create ECO"
+                  size="small"
+                  sx={{ display: { xs: "inline-flex", sm: "none" } }}
+                >
+                  <AddIcon fontSize="small" />
+                </IconButton>
+              </Tooltip>
+            ) : null}
           </Stack>
         </Toolbar>
       </AppBar>
@@ -183,8 +227,12 @@ export default function AppShell({ children }: PropsWithChildren) {
         >
           <NavigationDrawerContent
             pathname={pathname}
+            companyName={companyName}
+            userName={userName}
+            role={role}
             isAdministrator={isAdministrator}
             onNavigate={handleDrawerClose}
+            onLogout={logout}
           />
         </Drawer>
         <Drawer
@@ -201,8 +249,12 @@ export default function AppShell({ children }: PropsWithChildren) {
         >
           <NavigationDrawerContent
             pathname={pathname}
+            companyName={companyName}
+            userName={userName}
+            role={role}
             isAdministrator={isAdministrator}
             onNavigate={handleDrawerClose}
+            onLogout={logout}
           />
         </Drawer>
       </Box>
@@ -215,7 +267,7 @@ export default function AppShell({ children }: PropsWithChildren) {
           width: { xs: "100%", md: `calc(100% - ${drawerWidth}px)` },
         }}
       >
-        <Toolbar variant="dense" sx={{ minHeight: { xs: 56, md: 48 } }} />
+        <Toolbar variant="dense" sx={{ minHeight: { xs: 56, md: 52 } }} />
         <Box
           sx={{
             width: "100%",
@@ -232,25 +284,28 @@ export default function AppShell({ children }: PropsWithChildren) {
   );
 }
 
-/**
- * Renders drawer branding and the role-filtered navigation list.
- *
- * @param props - Drawer content rendering options.
- * @param props.pathname - Current App Router pathname.
- * @param props.isAdministrator - Whether the current user can see admin links.
- * @param props.onNavigate - Callback invoked after a navigation item is selected.
- * @returns The shared mobile and desktop drawer content.
- */
 function NavigationDrawerContent({
   pathname,
+  companyName,
+  userName,
+  role,
   isAdministrator,
   onNavigate,
+  onLogout,
 }: NavigationDrawerContentProps) {
   return (
-    <Box sx={{ height: "100%", bgcolor: "background.paper" }}>
+    <Box
+      sx={{
+        height: "100%",
+        bgcolor: "background.paper",
+        display: "flex",
+        flexDirection: "column",
+        minHeight: 0,
+      }}
+    >
       <Box
         sx={{
-          minHeight: { xs: 56, md: 48 },
+          minHeight: { xs: 64, md: 68 },
           px: 2,
           display: "flex",
           flexDirection: "column",
@@ -261,97 +316,108 @@ function NavigationDrawerContent({
           EngiFlow
         </Typography>
         <Typography variant="caption" color="text.secondary" noWrap>
-          Workspace
+          {companyName}
         </Typography>
       </Box>
       <Divider />
-      <List dense sx={{ py: 1 }}>
-        {navigationItems
-          .filter((item) => !item.administratorOnly || isAdministrator)
-          .map((item) => {
-            const isSelected = isNavigationItemSelected(pathname, item.href);
 
-            return (
-              <ListItem key={item.href} disablePadding>
-                <ListItemButton
-                  component={NextLink}
-                  href={item.href}
-                  selected={isSelected}
-                  onClick={onNavigate}
-                  sx={{
-                    minHeight: 40,
-                    px: 2,
-                    borderRight: 3,
-                    borderRightColor: isSelected ? "primary.main" : "transparent",
-                    "&.Mui-selected": {
-                      bgcolor: "action.selected",
-                    },
-                    "&.Mui-selected:hover": {
-                      bgcolor: "action.hover",
-                    },
-                  }}
-                >
-                  <ListItemIcon
+      <Box sx={{ flex: 1, minHeight: 0, overflowY: "auto", py: 1 }}>
+        <List dense disablePadding>
+          {navigationItems
+            .filter((item) => !item.administratorOnly || isAdministrator)
+            .map((item) => {
+              const isSelected = isNavigationItemSelected(pathname, item.href);
+
+              return (
+                <ListItem key={item.href} disablePadding>
+                  <ListItemButton
+                    component={NextLink}
+                    href={item.href}
+                    selected={isSelected}
+                    onClick={onNavigate}
                     sx={{
-                      minWidth: 36,
-                      color: isSelected ? "primary.main" : "text.secondary",
-                    }}
-                  >
-                    {item.icon}
-                  </ListItemIcon>
-                  <ListItemText
-                    primary={item.label}
-                    slotProps={{
-                      primary: {
-                        variant: "body2",
-                        sx: { fontWeight: isSelected ? 500 : 400 },
+                      minHeight: 40,
+                      px: 2,
+                      mx: 1,
+                      borderRadius: 1,
+                      "&.Mui-selected": {
+                        bgcolor: "action.selected",
                       },
                     }}
-                  />
-                </ListItemButton>
-              </ListItem>
-            );
-          })}
-      </List>
+                  >
+                    <ListItemIcon
+                      sx={{
+                        minWidth: 36,
+                        color: isSelected ? "primary.main" : "text.secondary",
+                      }}
+                    >
+                      {item.icon}
+                    </ListItemIcon>
+                    <ListItemText
+                      primary={item.label}
+                      slotProps={{
+                        primary: {
+                          variant: "body2",
+                          sx: { fontWeight: isSelected ? 500 : 400 },
+                        },
+                      }}
+                    />
+                  </ListItemButton>
+                </ListItem>
+              );
+            })}
+        </List>
+      </Box>
+
+      <Divider />
+      <Stack
+        direction="row"
+        spacing={1.25}
+        sx={{
+          alignItems: "center",
+          p: 1.5,
+          minWidth: 0,
+        }}
+      >
+        <Avatar sx={{ width: 36, height: 36, bgcolor: "secondary.main" }}>
+          {getInitials(userName)}
+        </Avatar>
+        <Box sx={{ minWidth: 0, flex: 1 }}>
+          <Typography variant="body2" noWrap sx={{ fontWeight: 500 }}>
+            {userName}
+          </Typography>
+          <Stack direction="row" spacing={0.5} sx={{ alignItems: "center" }}>
+            <AccountCircleIcon sx={{ fontSize: 14, color: "text.secondary" }} />
+            <Typography variant="caption" color="text.secondary" noWrap>
+              {role}
+            </Typography>
+          </Stack>
+        </Box>
+        <Tooltip title="Logout">
+          <IconButton size="small" aria-label="Logout" onClick={onLogout}>
+            <LogoutIcon fontSize="small" />
+          </IconButton>
+        </Tooltip>
+      </Stack>
     </Box>
   );
 }
 
-/**
- * Resolves the current App Router pathname into the page title shown in the
- * top AppBar.
- *
- * @param pathname - Current path from usePathname.
- * @returns The human-readable title for the active workspace route.
- */
-function getPageTitle(pathname: string): string {
-  if (pathname === "/") {
-    return "Dashboard";
-  }
-
-  if (pathname.startsWith("/ecos")) {
-    return "Engineering Change Orders";
-  }
-
-  if (pathname.startsWith("/settings/users")) {
-    return "User Management";
-  }
-
-  return "EngiFlow";
-}
-
-/**
- * Determines whether a navigation item should be marked as active for the
- * current route.
- *
- * @param pathname - Current path from usePathname.
- * @param href - Navigation item destination.
- * @returns True when the navigation item represents the active route branch.
- */
 function isNavigationItemSelected(pathname: string, href: string): boolean {
   if (href === "/") {
     return pathname === "/";
   }
 
   return pathname === href || pathname.startsWith(`${href}/`);
+}
+
+function getInitials(name: string): string {
+  const initials = name
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0]?.toUpperCase())
+    .join("");
+
+  return initials || "U";
 }

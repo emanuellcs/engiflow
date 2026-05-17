@@ -7,6 +7,9 @@ using EngiFlow.Application.Ecos.Commands;
 using EngiFlow.Application.Ecos.Dtos;
 using EngiFlow.Application.Ecos.Queries;
 using EngiFlow.Application.Mediation;
+using EngiFlow.Application.Users.Commands;
+using EngiFlow.Application.Users.Dtos;
+using EngiFlow.Application.Users.Queries;
 using FluentValidation;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -37,10 +40,13 @@ public static class DependencyInjection
         services.AddTransient<ICommandHandler<SubmitEcoCommand, EcoDetailsDto>, SubmitEcoCommandHandler>();
         services.AddTransient<ICommandHandler<ApproveEcoCommand, EcoDetailsDto>, ApproveEcoCommandHandler>();
         services.AddTransient<ICommandHandler<RejectEcoCommand, EcoDetailsDto>, RejectEcoCommandHandler>();
+        services.AddTransient<ICommandHandler<CreateUserCommand, UserSummaryDto>, CreateUserCommandHandler>();
+        services.AddTransient<ICommandHandler<ForgotPasswordCommand, ForgotPasswordResultDto>, ForgotPasswordCommandHandler>();
         services.AddTransient<ICommandHandler<RegisterCompanyCommand, LoginResultDto>, RegisterCompanyCommandHandler>();
         services.AddTransient<IQueryHandler<LoginQuery, LoginResultDto>, LoginQueryHandler>();
         services.AddTransient<IQueryHandler<GetEcoByIdQuery, EcoDetailsDto>, GetEcoByIdQueryHandler>();
         services.AddTransient<IQueryHandler<ListEcosQuery, PagedResult<EcoSummaryDto>>, ListEcosQueryHandler>();
+        services.AddTransient<IQueryHandler<ListUsersQuery, IReadOnlyList<UserSummaryDto>>, ListUsersQueryHandler>();
 
         return services;
     }

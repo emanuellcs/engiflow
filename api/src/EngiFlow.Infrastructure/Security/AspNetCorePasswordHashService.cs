@@ -1,6 +1,7 @@
 using EngiFlow.Application.Abstractions.Security;
 using EngiFlow.Domain.Users;
 using Microsoft.AspNetCore.Identity;
+using Microsoft.Extensions.Options;
 
 namespace EngiFlow.Infrastructure.Security;
 
@@ -9,7 +10,14 @@ namespace EngiFlow.Infrastructure.Security;
 /// </summary>
 internal sealed class AspNetCorePasswordHashService : IPasswordHashService
 {
-    private readonly PasswordHasher<User> _passwordHasher = new();
+    private const int PasswordHashIterations = 210_000;
+
+    private readonly PasswordHasher<User> _passwordHasher = new(new OptionsWrapper<PasswordHasherOptions>(
+        new PasswordHasherOptions
+        {
+            CompatibilityMode = PasswordHasherCompatibilityMode.IdentityV3,
+            IterationCount = PasswordHashIterations
+        }));
 
     /// <inheritdoc />
     public string HashPassword(User user, string password)

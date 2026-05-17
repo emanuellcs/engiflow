@@ -22,6 +22,12 @@ internal sealed class UserRepository : IUserRepository
     }
 
     /// <inheritdoc />
+    public async Task AddAsync(User user, CancellationToken cancellationToken = default)
+    {
+        await _dbContext.Users.AddAsync(user, cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <inheritdoc />
     public Task<User?> GetByIdAsync(UserId id, CancellationToken cancellationToken = default)
     {
         return _dbContext.Users.SingleOrDefaultAsync(user => user.Id == id, cancellationToken);
@@ -35,5 +41,16 @@ internal sealed class UserRepository : IUserRepository
         return _dbContext.Users
             .IgnoreQueryFilters()
             .SingleOrDefaultAsync(user => user.Email == normalizedEmail, cancellationToken);
+    }
+
+    /// <inheritdoc />
+    public async Task<IReadOnlyList<User>> ListActiveAsync(CancellationToken cancellationToken = default)
+    {
+        return await _dbContext.Users
+            .Where(user => user.IsActive)
+            .OrderBy(user => user.DisplayName)
+            .ThenBy(user => user.Email)
+            .ToArrayAsync(cancellationToken)
+            .ConfigureAwait(false);
     }
 }

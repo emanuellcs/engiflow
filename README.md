@@ -74,10 +74,13 @@ The current domain foundation is intentionally rich. The `EngineeringChangeOrder
 
 The Application layer exposes EngiFlow-owned CQRS primitives instead of depending on an external mediator package. Commands and queries implement `ICommand<TResponse>` or `IQuery<TResponse>`, handlers implement the matching handler contracts, and `IApplicationMediator` dispatches requests through ordered pipeline behaviors. `ValidationBehavior<TRequest, TResponse>` runs FluentValidation validators before handlers execute and throws the custom application `ValidationException` with errors grouped by request property.
 
-Implemented ECO use cases:
+Implemented application use cases:
 
-- `LoginQuery`: validates email/password credentials and returns a JWT bearer token.
-- `RegisterCompanyCommand`: creates a new company tenant, first administrator, password hash, and immediate JWT bearer token.
+- `LoginQuery`: validates email/password credentials and returns an enriched authenticated session with a JWT bearer token, user name, company name, and roles.
+- `RegisterCompanyCommand`: creates a new company tenant, first administrator, password hash, and immediate enriched authenticated session.
+- `ForgotPasswordCommand`: accepts a reset request and logs an MVP mock reset link.
+- `ListUsersQuery`: lists active users in the current tenant for administrators.
+- `CreateUserCommand`: creates an active Requester or Approver user in the current tenant.
 - `CreateEcoCommand`: creates a draft ECO for the current tenant and current user.
 - `SubmitEcoCommand`: transitions a draft ECO to under review.
 - `ApproveEcoCommand`: transitions an ECO under review to approved.
@@ -122,16 +125,16 @@ The current frontend foundation includes:
 - Material UI App Router SSR wiring through `AppRouterCacheProvider` from `@mui/material-nextjs/v16-appRouter`.
 - A baseline Material Design 2 theme with a restrained B2B SaaS palette and Roboto loaded globally through `@fontsource/roboto`.
 - Protected workspace routes grouped under `web/app/(authenticated)`, with `/login` kept outside the authenticated shell.
-- A responsive Material UI application shell with a fixed top AppBar, mobile hamburger menu, desktop permanent Drawer, mobile temporary Drawer, route-aware page title, authenticated user role display, and logout action.
-- Role-aware shell navigation for Dashboard (`/`), ECOs (`/ecos`), and administrator-visible Settings (`/settings/users`) using Material SVG icons from `@mui/icons-material`.
-- A responsive Material UI login page at `/login` that posts credentials through the shared API client, stores the returned JWT through `AuthContext`, and redirects authenticated users to the workspace root.
+- A responsive Material UI application shell with a clean fixed AppBar, mobile hamburger menu, desktop permanent Drawer, mobile temporary Drawer, route-aware page title, company name display, drawer branding, and bottom-anchored user profile/logout controls.
+- Role-aware shell navigation for Dashboard (`/`), ECOs (`/ecos`), and administrator-visible Team Management (`/settings/users`) using Material SVG icons from `@mui/icons-material`.
+- A responsive split-screen Material UI login page at `/login` that posts credentials through the shared API client, supports "Remember me", opens a forgot-password dialog, stores the enriched auth session through `AuthContext`, and redirects authenticated users to the workspace root.
 - A responsive public company registration wizard at `/register` using Material UI `Stepper`, client-side step validation, backend validation feedback, automatic token storage, and immediate redirect into the workspace.
 - Client-side route protection for all authenticated workspace routes, redirecting unauthenticated users to `/login`.
-- A protected metrics dashboard placeholder at `/`, an ECO dashboard at `/ecos` that lists paged ECO summaries with dense Material UI table styling, reusable status and priority chips, loading skeleton rows, horizontal mobile overflow, linked detail navigation, and an empty state, plus a user management placeholder at `/settings/users`.
+- A protected metrics dashboard placeholder at `/`, an ECO dashboard at `/ecos` that lists paged ECO summaries with dense Material UI table styling, reusable status and priority chips, loading skeleton rows, horizontal mobile overflow, linked detail navigation, and an empty state, plus a Team Management dashboard at `/settings/users` for administrator user listing and Requester/Approver creation.
 - Core ECO frontend workflow routes: `/ecos/new` creates draft ECOs through the shared API client, and `/ecos/[id]` displays read-only ECO details, role-aware submit/approve/reject actions, a rejection reason dialog, a Material UI lifecycle stepper, and the audit trail returned by the API.
 - Reusable atomic UI components under `web/components/ui`, including `PageHeader`, `StatusChip`, `PriorityChip`, and the Next.js link adapter used by Material UI navigation controls.
 - A typed native `fetch` API client that reads optional public API base URLs and otherwise uses same-origin `/api/...` requests through the Next.js proxy.
-- A React authentication context that decodes backend JWT claims (`sub`, `tenant`, `role`, optional `exp`), stores the bearer token in local storage, mirrors it to a non-HttpOnly cookie, and clears auth state on `401 Unauthorized`.
+- A React authentication context that decodes backend JWT claims (`sub`, `tenant`, `role`, `user_name`, `company_name`, optional `exp`), stores remembered sessions in local storage, stores non-remembered sessions in session storage, mirrors the bearer token to a non-HttpOnly cookie for the proxy, and clears auth state on `401 Unauthorized`.
 
 ## Tech Stack
 
@@ -189,7 +192,7 @@ For non-Docker local development, the proxy falls back to `http://localhost:8080
 Authorization: Bearer <accessToken>
 ```
 
-When the API returns `401 Unauthorized`, the frontend clears the stored token, emits an auth-state event, and redirects browser clients to `/login`. The login page submits credentials to `POST /api/auth/login`, stores the returned `accessToken` through the authentication context, and redirects successful sign-ins to `/`. New companies can use `/register`, which submits to `POST /api/auth/register-company`, stores the returned `accessToken`, and redirects the new administrator to `/`. The authenticated route group protects `/`, `/ecos`, `/ecos/new`, `/ecos/[id]`, and `/settings/users`; `/` displays the metrics dashboard placeholder, `/ecos` fetches the ECO list from `GET /api/ecos?pageNumber=1&pageSize=20`, `/ecos/new` posts to `POST /api/ecos`, and `/ecos/[id]` reads `GET /api/ecos/{id}` plus workflow transitions through `PUT /api/ecos/{id}/submit`, `PUT /api/ecos/{id}/approve`, and `PUT /api/ecos/{id}/reject`.
+When the API returns `401 Unauthorized`, the frontend clears the stored session, emits an auth-state event, and redirects browser clients to `/login`. The login page submits credentials to `POST /api/auth/login`, stores the returned auth session through the authentication context, and redirects successful sign-ins to `/`. If "Remember me" is enabled the session is stored in `localStorage`; otherwise it is stored in `sessionStorage`. The login page also submits forgot-password requests to `POST /api/auth/forgot-password` and shows a neutral success message when the request is accepted. New companies can use `/register`, which submits to `POST /api/auth/register-company`, stores the returned auth session as remembered, and redirects the new administrator to `/`. The authenticated route group protects `/`, `/ecos`, `/ecos/new`, `/ecos/[id]`, and `/settings/users`; `/` displays the metrics dashboard placeholder, `/ecos` fetches the ECO list from `GET /api/ecos?pageNumber=1&pageSize=20`, `/ecos/new` posts to `POST /api/ecos`, `/ecos/[id]` reads `GET /api/ecos/{id}` plus workflow transitions through `PUT /api/ecos/{id}/submit`, `PUT /api/ecos/{id}/approve`, and `PUT /api/ecos/{id}/reject`, and `/settings/users` reads `GET /api/users` plus creates Requester or Approver users through `POST /api/users`.
 
 The API reads `ConnectionStrings:DefaultConnection`. Docker Compose supplies the container connection string, while `api/src/EngiFlow.Api/appsettings.Development.json` points local `dotnet run` usage at `localhost:5432`.
 
@@ -229,7 +232,7 @@ curl -X POST http://localhost:8080/api/auth/login \
   }'
 ```
 
-The response contains `accessToken`, `tokenType`, and `expiresAtUtc`. Send the token to secured endpoints as:
+The auth response contains `accessToken`, `tokenType`, `expiresAtUtc`, `userName`, `companyName`, and `roles`. Send the token to secured endpoints as:
 
 ```text
 Authorization: Bearer <accessToken>
@@ -288,6 +291,9 @@ The current REST surface is:
 | --- | --- | --- |
 | `POST` | `/api/auth/login` | Authenticate and issue a JWT bearer token |
 | `POST` | `/api/auth/register-company` | Create a company tenant, first administrator, and JWT bearer token |
+| `POST` | `/api/auth/forgot-password` | Accept a forgot-password request and log a mock reset link |
+| `GET` | `/api/users` | List active users in the current tenant; requires `Administrator` |
+| `POST` | `/api/users` | Create a Requester or Approver in the current tenant; requires `Administrator` |
 | `POST` | `/api/ecos` | Create a draft ECO |
 | `GET` | `/api/ecos/{id}` | Retrieve one ECO with audit history |
 | `GET` | `/api/ecos?pageNumber=1&pageSize=20` | List paged ECO summaries |
@@ -315,6 +321,23 @@ curl -X POST http://localhost:8080/api/auth/login \
   }'
 
 TOKEN="<accessToken from the login response>"
+
+curl -X POST http://localhost:8080/api/auth/forgot-password \
+  -H "Content-Type: application/json" \
+  -d '{ "email": "admin@engiflow.local" }'
+
+curl http://localhost:8080/api/users \
+  -H "Authorization: Bearer $TOKEN"
+
+curl -X POST http://localhost:8080/api/users \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "Grace Hopper",
+    "email": "grace@acme.example",
+    "password": "StrongPass123!",
+    "role": "Approver"
+  }'
 
 curl -X POST http://localhost:8080/api/ecos \
   -H "Authorization: Bearer $TOKEN" \
@@ -446,6 +469,8 @@ The current tests cover:
 - Audit event creation for ECO creation, edits, and transitions.
 - Application CQRS validation behavior.
 - Company registration validation, tenant bootstrap persistence, first administrator creation, login validation, credential verification, JWT claim issuance, and HTTP tenant claim resolution.
+- Forgot-password validation and mock reset-link logging.
+- Administrator user-management listing and Requester/Approver creation validation.
 - ECO command handlers for create, submit, approve, and reject.
 - ECO query handlers for detail retrieval and paginated lists.
 - Infrastructure tenant query filters.
@@ -504,7 +529,7 @@ The web build uses Next.js standalone output for the Docker runtime image. In re
 
 ## Current Scope
 
-This foundation includes local orchestration, the core domain model, Application-layer CQRS use cases, validation, EF Core persistence, migrations, JWT authentication, role-based authorization policies, secured ECO/API controllers, public company registration, Swagger bearer support, frontend MUI SSR/auth/API plumbing, client-side root route protection, the protected ECO summary dashboard, frontend ECO creation/detail workflows, and application/domain/infrastructure/API tests. It intentionally does not yet include file storage, invitations, refresh tokens, or cloud deployment automation.
+This foundation includes local orchestration, the core domain model, Application-layer CQRS use cases, validation, EF Core persistence, migrations, JWT authentication, role-based authorization policies, secured ECO/API controllers, public company registration, forgot-password MVP reset logging, administrator user management, Swagger bearer support, frontend MUI SSR/auth/API plumbing, remember-me session storage, client-side root route protection, the protected ECO summary dashboard, frontend ECO creation/detail workflows, and application/domain/infrastructure/API tests. It intentionally does not yet include file storage, email invitation delivery, refresh tokens, or cloud deployment automation.
 
 Those concerns should build on the current boundaries rather than bypass them:
 

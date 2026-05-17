@@ -1,35 +1,71 @@
 export const AUTH_STATE_CHANGED_EVENT = "engiflow:auth-state-changed";
 export const AUTH_UNAUTHORIZED_EVENT = "engiflow:auth-unauthorized";
 
-const authTokenStorageKey = "engiflow.auth.token";
+export type StoredAuthSession = {
+  accessToken: string;
+  tokenType?: string;
+  expiresAtUtc?: string;
+  userName?: string;
+  companyName?: string;
+  roles?: string[];
+};
+
+const authSessionStorageKey = "engiflow.auth.session";
+const legacyAuthTokenStorageKey = "engiflow.auth.token";
 const authTokenCookieName = "engiflow_auth_token";
+
+export function getStoredAuthSessionSnapshot(): string | null {
+  if (!isBrowser()) {
+    return null;
+  }
+
+  return (
+    readWebStorageItem(window.sessionStorage, authSessionStorageKey) ??
+    readWebStorageItem(window.localStorage, authSessionStorageKey) ??
+    readLegacyAuthSessionSnapshot()
+  );
+}
 
 export function getStoredAuthToken(): string | null {
   if (!isBrowser()) {
     return null;
   }
 
-  const localStorageToken = readLocalStorageToken();
+  const session = parseStoredAuthSession(getStoredAuthSessionSnapshot());
 
-  if (localStorageToken) {
-    return localStorageToken;
+  if (session?.accessToken) {
+    return session.accessToken;
   }
 
   return readCookie(authTokenCookieName);
 }
 
-export function storeAuthToken(token: string, expiresAtUtc?: string): void {
+export function storeAuthSession(
+  session: StoredAuthSession,
+  rememberMe: boolean,
+): void {
   if (!isBrowser()) {
     return;
   }
 
+  const serializedSession = JSON.stringify(session);
+  const primaryStorage = rememberMe ? window.localStorage : window.sessionStorage;
+  const secondaryStorage = rememberMe ? window.sessionStorage : window.localStorage;
+
   try {
-    window.localStorage.setItem(authTokenStorageKey, token);
+    primaryStorage.setItem(authSessionStorageKey, serializedSession);
   } catch {
-    // Cookie mirroring still allows authenticated fetches if local storage is blocked.
+    // Cookie mirroring still allows authenticated fetches if web storage is blocked.
   }
 
-  writeCookie(authTokenCookieName, token, expiresAtUtc);
+  clearWebStorageItem(secondaryStorage, authSessionStorageKey);
+  clearWebStorageItem(window.localStorage, legacyAuthTokenStorageKey);
+  clearWebStorageItem(window.sessionStorage, legacyAuthTokenStorageKey);
+
+  writeCookie(authTokenCookieName, session.accessToken, {
+    expiresAtUtc: session.expiresAtUtc,
+    persistent: rememberMe,
+  });
   dispatchAuthStateChanged();
 }
 
@@ -38,21 +74,67 @@ export function clearStoredAuthToken(): void {
     return;
   }
 
-  try {
-    window.localStorage.removeItem(authTokenStorageKey);
-  } catch {
-    // Clearing the cookie below is enough for the request interceptor fallback.
-  }
+  clearWebStorageItem(window.localStorage, authSessionStorageKey);
+  clearWebStorageItem(window.sessionStorage, authSessionStorageKey);
+  clearWebStorageItem(window.localStorage, legacyAuthTokenStorageKey);
+  clearWebStorageItem(window.sessionStorage, legacyAuthTokenStorageKey);
 
   expireCookie(authTokenCookieName);
   dispatchAuthStateChanged();
 }
 
-function readLocalStorageToken(): string | null {
+function readLegacyAuthSessionSnapshot(): string | null {
+  const legacyToken =
+    readWebStorageItem(window.sessionStorage, legacyAuthTokenStorageKey) ??
+    readWebStorageItem(window.localStorage, legacyAuthTokenStorageKey) ??
+    readCookie(authTokenCookieName);
+
+  if (!legacyToken) {
+    return null;
+  }
+
+  return JSON.stringify({ accessToken: legacyToken });
+}
+
+function parseStoredAuthSession(value: string | null): StoredAuthSession | null {
+  if (!value) {
+    return null;
+  }
+
   try {
-    return window.localStorage.getItem(authTokenStorageKey);
+    const parsed = JSON.parse(value) as Partial<StoredAuthSession>;
+
+    if (
+      parsed &&
+      typeof parsed === "object" &&
+      typeof parsed.accessToken === "string" &&
+      parsed.accessToken.trim().length > 0
+    ) {
+      return {
+        ...parsed,
+        accessToken: parsed.accessToken.trim(),
+      };
+    }
   } catch {
     return null;
+  }
+
+  return null;
+}
+
+function readWebStorageItem(storage: Storage, key: string): string | null {
+  try {
+    return storage.getItem(key);
+  } catch {
+    return null;
+  }
+}
+
+function clearWebStorageItem(storage: Storage, key: string): void {
+  try {
+    storage.removeItem(key);
+  } catch {
+    // Clearing the cookie below is enough for the request interceptor fallback.
   }
 }
 
@@ -69,8 +151,14 @@ function readCookie(name: string): string | null {
   return decodeURIComponent(match.slice(prefix.length));
 }
 
-function writeCookie(name: string, value: string, expiresAtUtc?: string): void {
-  const maxAge = getCookieMaxAge(expiresAtUtc);
+function writeCookie(
+  name: string,
+  value: string,
+  options: { expiresAtUtc?: string; persistent: boolean },
+): void {
+  const maxAge = options.persistent
+    ? getCookieMaxAge(options.expiresAtUtc)
+    : "";
   const secure = window.location.protocol === "https:" ? "; Secure" : "";
 
   document.cookie = [

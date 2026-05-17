@@ -1,5 +1,4 @@
 import Chip from "@mui/material/Chip";
-import type { ChipProps } from "@mui/material/Chip";
 import type { EcoPriority } from "@/lib/types/eco";
 
 export type { EcoPriority } from "@/lib/types/eco";
@@ -9,11 +8,27 @@ export type PriorityChipProps = {
   priority: EcoPriority;
 };
 
-const colorByPriority: Record<EcoPriority, ChipProps["color"]> = {
-  Critical: "error",
-  High: "warning",
-  Medium: "info",
-  Low: "default",
+const chipSxByPriority: Record<EcoPriority, object> = {
+  Critical: {
+    borderColor: "error.main",
+    color: "error.dark",
+    bgcolor: "rgba(211, 47, 47, 0.08)",
+  },
+  High: {
+    borderColor: "warning.dark",
+    color: "warning.dark",
+    bgcolor: "rgba(245, 124, 0, 0.08)",
+  },
+  Medium: {
+    borderColor: "info.main",
+    color: "info.dark",
+    bgcolor: "rgba(2, 136, 209, 0.08)",
+  },
+  Low: {
+    borderColor: "success.main",
+    color: "success.dark",
+    bgcolor: "rgba(46, 125, 50, 0.08)",
+  },
 };
 
 /**
@@ -28,10 +43,13 @@ export default function PriorityChip({ priority }: PriorityChipProps) {
   return (
     <Chip
       label={priority}
-      color={colorByPriority[priority]}
       size="small"
-      variant={priority === "Low" ? "outlined" : "filled"}
-      sx={{ minWidth: 76, fontWeight: 500 }}
+      variant="outlined"
+      sx={{
+        minWidth: 76,
+        fontWeight: 500,
+        ...chipSxByPriority[priority],
+      }}
     />
   );
 }

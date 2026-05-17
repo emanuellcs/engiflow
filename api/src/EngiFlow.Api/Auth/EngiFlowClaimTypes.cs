@@ -19,4 +19,14 @@ internal static class EngiFlowClaimTypes
     /// Identifies the user's role for role-based authorization.
     /// </summary>
     public const string Role = "role";
+
+    /// <summary>
+    /// Identifies the user's display name for client workspace personalization.
+    /// </summary>
+    public const string UserName = "user_name";
+
+    /// <summary>
+    /// Identifies the tenant company's display name for client workspace personalization.
+    /// </summary>
+    public const string CompanyName = "company_name";
 }

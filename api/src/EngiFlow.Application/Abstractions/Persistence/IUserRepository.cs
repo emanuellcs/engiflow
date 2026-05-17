@@ -9,6 +9,13 @@ namespace EngiFlow.Application.Abstractions.Persistence;
 public interface IUserRepository
 {
     /// <summary>
+    /// Stages a new tenant-scoped user for insertion.
+    /// </summary>
+    /// <param name="user">The user to persist.</param>
+    /// <param name="cancellationToken">A token that can cancel the persistence operation.</param>
+    Task AddAsync(User user, CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// Finds a user by identifier within the current tenant.
     /// </summary>
     /// <param name="id">The user identifier.</param>
@@ -25,4 +32,11 @@ public interface IUserRepository
     Task<User?> GetByEmailForAuthenticationAsync(
         string normalizedEmail,
         CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Lists active users within the current tenant.
+    /// </summary>
+    /// <param name="cancellationToken">A token that can cancel the persistence operation.</param>
+    /// <returns>The active users visible in the current tenant boundary.</returns>
+    Task<IReadOnlyList<User>> ListActiveAsync(CancellationToken cancellationToken = default);
 }

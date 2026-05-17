@@ -1,12 +1,21 @@
 "use client";
 
+import AdminPanelSettingsIcon from "@mui/icons-material/AdminPanelSettings";
+import AssignmentTurnedInIcon from "@mui/icons-material/AssignmentTurnedIn";
+import HistoryEduIcon from "@mui/icons-material/HistoryEdu";
 import Alert from "@mui/material/Alert";
 import Box from "@mui/material/Box";
 import Button from "@mui/material/Button";
+import Card from "@mui/material/Card";
+import Checkbox from "@mui/material/Checkbox";
 import CircularProgress from "@mui/material/CircularProgress";
-import Container from "@mui/material/Container";
+import Dialog from "@mui/material/Dialog";
+import DialogActions from "@mui/material/DialogActions";
+import DialogContent from "@mui/material/DialogContent";
+import DialogContentText from "@mui/material/DialogContentText";
+import DialogTitle from "@mui/material/DialogTitle";
+import FormControlLabel from "@mui/material/FormControlLabel";
 import Link from "@mui/material/Link";
-import Paper from "@mui/material/Paper";
 import Stack from "@mui/material/Stack";
 import TextField from "@mui/material/TextField";
 import Typography from "@mui/material/Typography";
@@ -14,24 +23,50 @@ import { useRouter } from "next/navigation";
 import { type FormEvent, useState } from "react";
 import NextLink from "@/components/ui/NextLink";
 import { ApiError, apiFetch } from "@/lib/api/client";
-import { useAuth } from "@/lib/auth/AuthContext";
+import { type AuthSessionResult, useAuth } from "@/lib/auth/AuthContext";
 
-type LoginResponse = {
-  accessToken?: unknown;
+type LoginFieldErrors = {
+  email?: string;
+  password?: string;
 };
 
+const featureItems = [
+  {
+    icon: <AssignmentTurnedInIcon sx={{ color: "primary.light" }} />,
+    title: "ECO Workflow",
+    description: "Create, submit, approve, and reject controlled changes with clear ownership.",
+  },
+  {
+    icon: <HistoryEduIcon sx={{ color: "primary.light" }} />,
+    title: "Audit Trails",
+    description: "Capture immutable activity history for every material workflow decision.",
+  },
+  {
+    icon: <AdminPanelSettingsIcon sx={{ color: "primary.light" }} />,
+    title: "Role-Based Access",
+    description: "Separate requesters, approvers, and administrators across each tenant.",
+  },
+];
+
+const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const defaultLoginError =
   "Unable to sign in. Check your email and password, then try again.";
-const invalidTokenError =
+const invalidAuthResponseError =
   "The server returned an invalid authentication response. Please try again.";
+const forgotPasswordSuccess =
+  "If an account exists, a reset link has been sent";
 
 export default function LoginPage() {
   const router = useRouter();
   const { login } = useAuth();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [rememberMe, setRememberMe] = useState(true);
+  const [fieldErrors, setFieldErrors] = useState<LoginFieldErrors>({});
   const [isPending, setIsPending] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const [isForgotPasswordOpen, setIsForgotPasswordOpen] = useState(false);
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -40,11 +75,19 @@ export default function LoginPage() {
       return;
     }
 
+    const nextErrors = validateLogin(email, password);
+
+    if (hasErrors(nextErrors)) {
+      setFieldErrors(nextErrors);
+      return;
+    }
+
     setIsPending(true);
     setErrorMessage(null);
+    setSuccessMessage(null);
 
     try {
-      const response = await apiFetch<LoginResponse>("/api/auth/login", {
+      const response = await apiFetch<AuthSessionResult>("/api/auth/login", {
         method: "POST",
         skipAuth: true,
         body: {
@@ -52,9 +95,8 @@ export default function LoginPage() {
           password,
         },
       });
-      const accessToken = readAccessToken(response);
 
-      login(accessToken);
+      login(response, rememberMe);
       router.replace("/");
     } catch (error) {
       setErrorMessage(getLoginErrorMessage(error));
@@ -63,134 +105,395 @@ export default function LoginPage() {
     }
   }
 
+  function handleFieldChange(field: "email" | "password", value: string) {
+    if (field === "email") {
+      setEmail(value);
+    } else {
+      setPassword(value);
+    }
+
+    setFieldErrors((current) => {
+      const next = { ...current };
+      delete next[field];
+      return next;
+    });
+  }
+
   return (
-    <Container
-      maxWidth="sm"
-      disableGutters
+    <Box
+      component="main"
       sx={{
-        minHeight: { xs: "calc(100vh - 160px)", sm: "calc(100vh - 176px)" },
+        minHeight: "100vh",
         display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        px: { xs: 0, sm: 2 },
-        py: { xs: 3, sm: 6 },
+        bgcolor: "background.default",
       }}
     >
-      <Paper
+      <Box
         component="section"
-        elevation={2}
         sx={{
-          width: "100%",
-          maxWidth: 480,
-          p: { xs: 3, sm: 4 },
+          display: { xs: "none", md: "flex" },
+          flex: "1 1 50%",
+          minWidth: 0,
+          bgcolor: "secondary.dark",
+          color: "secondary.contrastText",
+          px: { md: 6, lg: 9 },
+          py: 6,
+          alignItems: "center",
         }}
       >
-        <Box
-          component="form"
-          noValidate
-          onSubmit={handleSubmit}
-          sx={{ width: "100%" }}
-        >
-          <Stack spacing={3}>
-            <Stack spacing={1}>
-              <Typography variant="h4" component="h1" sx={{ fontWeight: 500 }}>
-                Sign in
-              </Typography>
-              <Typography variant="body1" color="text.secondary">
-                Access your EngiFlow workspace.
-              </Typography>
-            </Stack>
-
-            {errorMessage ? (
-              <Alert severity="error" variant="outlined">
-                {errorMessage}
-              </Alert>
-            ) : null}
-
-            <Stack spacing={2}>
-              <TextField
-                id="email"
-                name="email"
-                label="Email"
-                type="email"
-                value={email}
-                onChange={(event) => setEmail(event.target.value)}
-                autoComplete="email"
-                disabled={isPending}
-                required
-                fullWidth
-              />
-              <TextField
-                id="password"
-                name="password"
-                label="Password"
-                type="password"
-                value={password}
-                onChange={(event) => setPassword(event.target.value)}
-                autoComplete="current-password"
-                disabled={isPending}
-                required
-                fullWidth
-              />
-            </Stack>
-
-            <Button
-              type="submit"
-              variant="contained"
-              size="large"
-              disabled={isPending}
-              fullWidth
-              sx={{
-                minHeight: 48,
-                textTransform: "none",
-              }}
-            >
-              {isPending ? (
-                <CircularProgress color="inherit" size={22} thickness={5} />
-              ) : (
-                "Sign in"
-              )}
-            </Button>
-
-            <Typography variant="body2" color="text.secondary" align="center">
-              Don&apos;t have an account?{" "}
-              <Link component={NextLink} href="/register" underline="hover">
-                Register your company
-              </Link>
+        <Stack spacing={4} sx={{ maxWidth: 520 }}>
+          <Stack spacing={1.5}>
+            <Typography variant="h3" component="p" sx={{ fontWeight: 500 }}>
+              EngiFlow
+            </Typography>
+            <Typography variant="h6" component="h1" sx={{ color: "grey.100" }}>
+              Engineering change control for modern B2B teams.
             </Typography>
           </Stack>
-        </Box>
-      </Paper>
-    </Container>
+          <Stack spacing={3}>
+            {featureItems.map((item) => (
+              <Stack key={item.title} direction="row" spacing={2}>
+                <Box sx={{ pt: 0.25 }}>{item.icon}</Box>
+                <Box>
+                  <Typography variant="subtitle1" sx={{ fontWeight: 500 }}>
+                    {item.title}
+                  </Typography>
+                  <Typography variant="body2" sx={{ color: "grey.300" }}>
+                    {item.description}
+                  </Typography>
+                </Box>
+              </Stack>
+            ))}
+          </Stack>
+        </Stack>
+      </Box>
+
+      <Stack
+        component="section"
+        sx={{
+          flex: "1 1 50%",
+          minWidth: 0,
+          justifyContent: "center",
+          alignItems: "center",
+          px: { xs: 2, sm: 4, lg: 8 },
+          py: { xs: 4, md: 6 },
+        }}
+      >
+        <Card
+          variant="outlined"
+          sx={{
+            width: "100%",
+            maxWidth: 448,
+            p: { xs: 3, sm: 4 },
+            boxShadow: 1,
+          }}
+        >
+          <Box
+            component="form"
+            noValidate
+            onSubmit={handleSubmit}
+            sx={{ width: "100%" }}
+          >
+            <Stack spacing={2}>
+              <Stack spacing={0.75}>
+                <Typography variant="h4" component="h1">
+                  Sign in
+                </Typography>
+                <Typography variant="body2" color="text.secondary">
+                  Access your EngiFlow workspace.
+                </Typography>
+              </Stack>
+
+              {errorMessage ? (
+                <Alert severity="error">
+                  {errorMessage}
+                </Alert>
+              ) : null}
+              {successMessage ? (
+                <Alert severity="success">
+                  {successMessage}
+                </Alert>
+              ) : null}
+
+              <Stack spacing={1}>
+                <TextField
+                  id="outlined-basic-email"
+                  name="email"
+                  label="Email"
+                  variant="outlined"
+                  type="email"
+                  value={email}
+                  onChange={(event) => handleFieldChange("email", event.target.value)}
+                  autoComplete="email"
+                  autoFocus
+                  disabled={isPending}
+                  required
+                  fullWidth
+                  size="small"
+                  error={Boolean(fieldErrors.email)}
+                  helperText={fieldErrors.email}
+                />
+                <TextField
+                  id="outlined-basic-password"
+                  name="password"
+                  label="Password"
+                  variant="outlined"
+                  type="password"
+                  value={password}
+                  onChange={(event) =>
+                    handleFieldChange("password", event.target.value)
+                  }
+                  autoComplete="current-password"
+                  disabled={isPending}
+                  required
+                  fullWidth
+                  size="small"
+                  error={Boolean(fieldErrors.password)}
+                  helperText={fieldErrors.password}
+                />
+                <Box
+                  sx={{
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                    gap: 2,
+                  }}
+                >
+                  <FormControlLabel
+                    control={
+                      <Checkbox
+                        checked={rememberMe}
+                        onChange={(event) => setRememberMe(event.target.checked)}
+                        size="small"
+                      />
+                    }
+                    label="Remember me"
+                    slotProps={{
+                      typography: { variant: "body2" },
+                    }}
+                    sx={{ m: 0 }}
+                  />
+                  <Link
+                    component="button"
+                    type="button"
+                    variant="body2"
+                    onClick={() => {
+                      setSuccessMessage(null);
+                      setIsForgotPasswordOpen(true);
+                    }}
+                    sx={{ whiteSpace: "nowrap" }}
+                  >
+                    Forgot password?
+                  </Link>
+                </Box>
+              </Stack>
+
+              <Button
+                type="submit"
+                variant="contained"
+                disabled={isPending}
+                fullWidth
+                sx={{ minHeight: 40, textTransform: "none" }}
+              >
+                {isPending ? (
+                  <CircularProgress color="inherit" size={20} thickness={5} />
+                ) : (
+                  "Sign in"
+                )}
+              </Button>
+
+              <Typography variant="body2" color="text.secondary" align="center">
+                Don&apos;t have an account?{" "}
+                <Link component={NextLink} href="/register" underline="hover">
+                  Register your company
+                </Link>
+              </Typography>
+            </Stack>
+          </Box>
+        </Card>
+      </Stack>
+
+      {isForgotPasswordOpen ? (
+        <ForgotPasswordDialog
+          open={isForgotPasswordOpen}
+          initialEmail={email}
+          onClose={() => setIsForgotPasswordOpen(false)}
+          onSuccess={() => {
+            setIsForgotPasswordOpen(false);
+            setSuccessMessage(forgotPasswordSuccess);
+            setErrorMessage(null);
+          }}
+        />
+      ) : null}
+    </Box>
   );
 }
 
-function readAccessToken(response: LoginResponse | null | undefined): string {
-  if (
-    !response ||
-    typeof response !== "object" ||
-    typeof response.accessToken !== "string" ||
-    response.accessToken.trim().length === 0
-  ) {
-    throw new Error(invalidTokenError);
+type ForgotPasswordDialogProps = {
+  open: boolean;
+  initialEmail: string;
+  onClose: () => void;
+  onSuccess: () => void;
+};
+
+function ForgotPasswordDialog({
+  open,
+  initialEmail,
+  onClose,
+  onSuccess,
+}: ForgotPasswordDialogProps) {
+  const [email, setEmail] = useState(initialEmail);
+  const [fieldError, setFieldError] = useState<string | null>(null);
+  const [submitError, setSubmitError] = useState<string | null>(null);
+  const [isPending, setIsPending] = useState(false);
+
+  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+
+    const nextError = validateEmail(email);
+
+    if (nextError) {
+      setFieldError(nextError);
+      return;
+    }
+
+    setIsPending(true);
+    setFieldError(null);
+    setSubmitError(null);
+
+    try {
+      await apiFetch("/api/auth/forgot-password", {
+        method: "POST",
+        skipAuth: true,
+        body: {
+          email: email.trim(),
+        },
+      });
+      onSuccess();
+    } catch (error) {
+      setSubmitError(readProblemDetailsMessage(error) ?? "Unable to submit reset request.");
+    } finally {
+      setIsPending(false);
+    }
   }
 
-  return response.accessToken.trim();
+  return (
+    <Dialog
+      open={open}
+      onClose={isPending ? undefined : onClose}
+      slotProps={{
+        paper: {
+          sx: { width: "100%", maxWidth: 440 },
+        },
+      }}
+    >
+      <Box component="form" noValidate onSubmit={handleSubmit}>
+        <DialogTitle>Reset password</DialogTitle>
+        <DialogContent sx={{ display: "flex", flexDirection: "column", gap: 2 }}>
+          <DialogContentText>
+            Enter your account email address and EngiFlow will send reset
+            instructions if the account exists.
+          </DialogContentText>
+          {submitError ? (
+            <Alert severity="error">
+              {submitError}
+            </Alert>
+          ) : null}
+          <TextField
+            autoFocus
+            required
+            id="forgot-password-email"
+            name="email"
+            label="Email"
+            variant="outlined"
+            type="email"
+            value={email}
+            onChange={(event) => {
+              setEmail(event.target.value);
+              setFieldError(null);
+            }}
+            error={Boolean(fieldError)}
+            helperText={fieldError ?? " "}
+            disabled={isPending}
+            fullWidth
+            size="small"
+          />
+        </DialogContent>
+        <DialogActions sx={{ px: 3, pb: 3 }}>
+          <Button
+            onClick={onClose}
+            disabled={isPending}
+            sx={{ textTransform: "none" }}
+          >
+            Cancel
+          </Button>
+          <Button
+            type="submit"
+            variant="contained"
+            disabled={isPending}
+            sx={{ minWidth: 96, textTransform: "none" }}
+          >
+            {isPending ? (
+              <CircularProgress color="inherit" size={18} thickness={5} />
+            ) : (
+              "Continue"
+            )}
+          </Button>
+        </DialogActions>
+      </Box>
+    </Dialog>
+  );
+}
+
+function validateLogin(email: string, password: string): LoginFieldErrors {
+  const errors: LoginFieldErrors = {};
+  const emailError = validateEmail(email);
+
+  if (emailError) {
+    errors.email = emailError;
+  }
+
+  if (!password) {
+    errors.password = "Password is required.";
+  }
+
+  return errors;
+}
+
+function validateEmail(email: string): string | null {
+  if (!email.trim()) {
+    return "Email is required.";
+  }
+
+  if (!emailPattern.test(email.trim())) {
+    return "Enter a valid email address.";
+  }
+
+  return null;
+}
+
+function hasErrors(errors: LoginFieldErrors): boolean {
+  return Object.values(errors).some(Boolean);
 }
 
 function getLoginErrorMessage(error: unknown): string {
   if (error instanceof ApiError) {
-    return readProblemDetailsMessage(error.details) ?? defaultLoginError;
+    return readProblemDetailsMessage(error) ?? defaultLoginError;
   }
 
-  if (error instanceof Error && error.message === invalidTokenError) {
-    return invalidTokenError;
+  if (
+    error instanceof Error &&
+    error.message === "The server returned an invalid authentication response."
+  ) {
+    return invalidAuthResponseError;
   }
 
   return defaultLoginError;
 }
 
-function readProblemDetailsMessage(details: unknown): string | null {
+function readProblemDetailsMessage(error: unknown): string | null {
+  const details = error instanceof ApiError ? error.details : error;
+
   if (!details || typeof details !== "object") {
     return null;
   }
