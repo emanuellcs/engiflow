@@ -35,6 +35,16 @@ builder.Services
         options.JsonSerializerOptions.Converters.Add(new JsonStringEnumConverter<EcoApprovalDecision>(allowIntegerValues: false));
         options.JsonSerializerOptions.Converters.Add(new JsonStringEnumConverter<UserRole>(allowIntegerValues: false));
     });
+builder.Services.AddCors(options =>
+{
+    options.AddDefaultPolicy(policy =>
+    {
+        policy.SetIsOriginAllowed(_ => true)
+            .AllowAnyHeader()
+            .AllowAnyMethod()
+            .AllowCredentials();
+    });
+});
 builder.Services.AddProblemDetails(options =>
 {
     options.CustomizeProblemDetails = context =>
@@ -155,6 +165,8 @@ if (app.Environment.IsDevelopment())
 }
 
 app.UseHttpsRedirection();
+
+app.UseCors();
 
 app.UseAuthentication();
 app.UseAuthorization();
