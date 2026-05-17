@@ -1,6 +1,7 @@
 using EngiFlow.Application.Abstractions.Persistence;
 using EngiFlow.Application.Abstractions.Security;
 using EngiFlow.Application.Abstractions.Tenancy;
+using EngiFlow.Application.Auth.Commands;
 using EngiFlow.Application.Auth.Dtos;
 using EngiFlow.Application.Auth.Queries;
 using EngiFlow.Application.Behaviors;
@@ -8,6 +9,7 @@ using EngiFlow.Application.Ecos.Commands;
 using EngiFlow.Application.Ecos.Dtos;
 using EngiFlow.Application.Ecos.Queries;
 using EngiFlow.Application.Exceptions;
+using EngiFlow.Domain.Companies;
 using EngiFlow.Domain.Ecos;
 using EngiFlow.Domain.Users;
 using EngiFlow.Domain.ValueObjects;
@@ -161,6 +163,107 @@ public sealed class EcoApplicationTests
 
         Assert.Contains(nameof(LoginQuery.Email), exception.Errors.Keys);
         Assert.Contains(nameof(LoginQuery.Password), exception.Errors.Keys);
+    }
+
+    [Fact]
+    public async Task RegisterCompanyCommandHandler_CreatesCompanyAdministratorAndReturnsBearerToken()
+    {
+        var companies = new FakeCompanyRepository();
+        var users = new FakeUserRepository();
+        var passwordHashService = new FakePasswordHashService();
+        var jwtTokenService = new FakeJwtTokenService();
+        var unitOfWork = new FakeUnitOfWork();
+        var handler = new RegisterCompanyCommandHandler(
+            companies,
+            users,
+            passwordHashService,
+            jwtTokenService,
+            unitOfWork);
+
+        var result = await handler.HandleAsync(new RegisterCompanyCommand(
+            "Acme Engineering",
+            "Ada Lovelace",
+            " ADA@ACME.EXAMPLE ",
+            "StrongPass123!"));
+
+        var company = Assert.Single(companies.Companies);
+        Assert.Equal("Acme Engineering", company.Name);
+
+        var admin = Assert.Single(company.Users);
+        Assert.Equal(company.Id, admin.CompanyId);
+        Assert.Equal("ada@acme.example", admin.Email);
+        Assert.Equal("Ada Lovelace", admin.DisplayName);
+        Assert.Equal(UserRole.Administrator, admin.Role);
+        Assert.Equal(passwordHashService.HashPassword(admin, "StrongPass123!"), admin.PasswordHash);
+        Assert.Equal("Bearer", result.TokenType);
+        Assert.Equal($"token:{admin.Id.Value}", result.AccessToken);
+        Assert.Equal(jwtTokenService.ExpiresAtUtc, result.ExpiresAtUtc);
+        Assert.Equal(1, unitOfWork.SaveCount);
+    }
+
+    [Fact]
+    public async Task RegisterCompanyCommandHandler_WhenEmailAlreadyExists_ThrowsValidationExceptionAndDoesNotSave()
+    {
+        var existingUser = User.Create(
+            CompanyId.New(),
+            "ada@acme.example",
+            "Ada Lovelace",
+            UserRole.Administrator);
+        var companies = new FakeCompanyRepository();
+        var unitOfWork = new FakeUnitOfWork();
+        var handler = new RegisterCompanyCommandHandler(
+            companies,
+            new FakeUserRepository(existingUser),
+            new FakePasswordHashService(),
+            new FakeJwtTokenService(),
+            unitOfWork);
+
+        var exception = await Assert.ThrowsAsync<AppValidationException>(() =>
+            handler.HandleAsync(new RegisterCompanyCommand(
+                "Acme Engineering",
+                "Ada Lovelace",
+                " ADA@ACME.EXAMPLE ",
+                "StrongPass123!")));
+
+        Assert.Contains(nameof(RegisterCompanyCommand.AdminEmail), exception.Errors.Keys);
+        Assert.Empty(companies.Companies);
+        Assert.Equal(0, unitOfWork.SaveCount);
+    }
+
+    [Fact]
+    public async Task RegisterCompanyCommandValidator_WhenRequiredFieldsAreMissing_ThrowsValidationException()
+    {
+        var behavior = new ValidationBehavior<RegisterCompanyCommand, LoginResultDto>(
+            new IValidator<RegisterCompanyCommand>[] { new RegisterCompanyCommandValidator() });
+
+        var exception = await Assert.ThrowsAsync<AppValidationException>(() =>
+            behavior.HandleAsync(
+                new RegisterCompanyCommand(string.Empty, string.Empty, string.Empty, string.Empty),
+                () => Task.FromResult(default(LoginResultDto)!)));
+
+        Assert.Contains(nameof(RegisterCompanyCommand.CompanyName), exception.Errors.Keys);
+        Assert.Contains(nameof(RegisterCompanyCommand.AdminName), exception.Errors.Keys);
+        Assert.Contains(nameof(RegisterCompanyCommand.AdminEmail), exception.Errors.Keys);
+        Assert.Contains(nameof(RegisterCompanyCommand.AdminPassword), exception.Errors.Keys);
+    }
+
+    [Fact]
+    public async Task RegisterCompanyCommandValidator_WhenPasswordMissesComplexity_ThrowsValidationException()
+    {
+        var behavior = new ValidationBehavior<RegisterCompanyCommand, LoginResultDto>(
+            new IValidator<RegisterCompanyCommand>[] { new RegisterCompanyCommandValidator() });
+
+        var exception = await Assert.ThrowsAsync<AppValidationException>(() =>
+            behavior.HandleAsync(
+                new RegisterCompanyCommand(
+                    "Acme Engineering",
+                    "Ada Lovelace",
+                    "ada@acme.example",
+                    "longpassword"),
+                () => Task.FromResult(default(LoginResultDto)!)));
+
+        var passwordErrors = Assert.Contains(nameof(RegisterCompanyCommand.AdminPassword), exception.Errors);
+        Assert.Contains(passwordErrors, message => message.Contains("uppercase", StringComparison.OrdinalIgnoreCase));
     }
 
     [Fact]
@@ -385,6 +488,17 @@ public sealed class EcoApplicationTests
         public Task<int> CountAsync(CancellationToken cancellationToken = default)
         {
             return Task.FromResult(Ecos.Count);
+        }
+    }
+
+    private sealed class FakeCompanyRepository : ICompanyRepository
+    {
+        public List<Company> Companies { get; } = [];
+
+        public Task AddAsync(Company company, CancellationToken cancellationToken = default)
+        {
+            Companies.Add(company);
+            return Task.CompletedTask;
         }
     }
 

@@ -3,6 +3,7 @@ using EngiFlow.Api.Controllers;
 using EngiFlow.Api.Models;
 using EngiFlow.Api.Tenancy;
 using EngiFlow.Application.Abstractions.Cqrs;
+using EngiFlow.Application.Auth.Commands;
 using EngiFlow.Application.Auth.Dtos;
 using EngiFlow.Application.Auth.Queries;
 using EngiFlow.Domain.Users;
@@ -41,10 +42,48 @@ public sealed class AuthControllerTests
     }
 
     [Fact]
+    public async Task RegisterCompanyAsync_DispatchesRegisterCompanyCommandAndReturnsOk()
+    {
+        var registerResult = new LoginResultDto(
+            "jwt-token",
+            "Bearer",
+            DateTimeOffset.Parse("2026-05-15T01:00:00Z"));
+        var mediator = new FakeApplicationMediator { Dispatch = _ => registerResult };
+        var controller = new AuthController(mediator);
+
+        var result = await controller.RegisterCompanyAsync(
+            new RegisterCompanyRequest(
+                "Acme Engineering",
+                "Ada Lovelace",
+                "ada@acme.example",
+                "StrongPass123!"),
+            CancellationToken.None);
+
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        Assert.Same(registerResult, ok.Value);
+
+        var command = Assert.IsType<RegisterCompanyCommand>(mediator.LastRequest);
+        Assert.Equal("Acme Engineering", command.CompanyName);
+        Assert.Equal("Ada Lovelace", command.AdminName);
+        Assert.Equal("ada@acme.example", command.AdminEmail);
+        Assert.Equal("StrongPass123!", command.AdminPassword);
+    }
+
+    [Fact]
     public void LoginAsync_AllowsAnonymousRequests()
     {
         var allowAnonymous = typeof(AuthController)
             .GetMethod(nameof(AuthController.LoginAsync))!
+            .GetCustomAttributes(typeof(AllowAnonymousAttribute), inherit: true);
+
+        Assert.NotEmpty(allowAnonymous);
+    }
+
+    [Fact]
+    public void RegisterCompanyAsync_AllowsAnonymousRequests()
+    {
+        var allowAnonymous = typeof(AuthController)
+            .GetMethod(nameof(AuthController.RegisterCompanyAsync))!
             .GetCustomAttributes(typeof(AllowAnonymousAttribute), inherit: true);
 
         Assert.NotEmpty(allowAnonymous);

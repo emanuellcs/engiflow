@@ -11,7 +11,7 @@
 
 EngiFlow is a multi-tenant B2B SaaS platform for engineering teams that need a controlled, auditable process for Engineering Change Orders (ECOs). An ECO represents a formal request to change an engineering artifact, such as a material selection, CAD specification, manufacturing tolerance, or implementation procedure.
 
-The platform is designed around strict tenant isolation, JWT-backed role-based access control, a domain-owned approval state machine, and an immutable audit trail. The current repository contains the foundational local orchestration, domain model, application use cases, EF Core PostgreSQL persistence layer, and secured ASP.NET Core API surface.
+The platform is designed around strict tenant isolation, JWT-backed role-based access control, a domain-owned approval state machine, and an immutable audit trail. The current repository contains the foundational local orchestration, domain model, application use cases, EF Core PostgreSQL persistence layer, secured ASP.NET Core API surface, and self-service company onboarding.
 
 ## Project Overview
 
@@ -77,6 +77,7 @@ The Application layer exposes EngiFlow-owned CQRS primitives instead of dependin
 Implemented ECO use cases:
 
 - `LoginQuery`: validates email/password credentials and returns a JWT bearer token.
+- `RegisterCompanyCommand`: creates a new company tenant, first administrator, password hash, and immediate JWT bearer token.
 - `CreateEcoCommand`: creates a draft ECO for the current tenant and current user.
 - `SubmitEcoCommand`: transitions a draft ECO to under review.
 - `ApproveEcoCommand`: transitions an ECO under review to approved.
@@ -124,6 +125,7 @@ The current frontend foundation includes:
 - A responsive Material UI application shell with a fixed top AppBar, mobile hamburger menu, desktop permanent Drawer, mobile temporary Drawer, route-aware page title, authenticated user role display, and logout action.
 - Role-aware shell navigation for Dashboard (`/`), ECOs (`/ecos`), and administrator-visible Settings (`/settings/users`) using Material SVG icons from `@mui/icons-material`.
 - A responsive Material UI login page at `/login` that posts credentials through the shared API client, stores the returned JWT through `AuthContext`, and redirects authenticated users to the workspace root.
+- A responsive public company registration wizard at `/register` using Material UI `Stepper`, client-side step validation, backend validation feedback, automatic token storage, and immediate redirect into the workspace.
 - Client-side route protection for all authenticated workspace routes, redirecting unauthenticated users to `/login`.
 - A protected metrics dashboard placeholder at `/`, an ECO dashboard at `/ecos` that lists paged ECO summaries with dense Material UI table styling, reusable status and priority chips, loading skeleton rows, horizontal mobile overflow, and an empty state, plus a user management placeholder at `/settings/users`.
 - Reusable atomic UI components under `web/components/ui`, including `PageHeader`, `StatusChip`, `PriorityChip`, and the Next.js link adapter used by Material UI navigation controls.
@@ -186,7 +188,7 @@ For non-Docker local development, the proxy falls back to `http://localhost:8080
 Authorization: Bearer <accessToken>
 ```
 
-When the API returns `401 Unauthorized`, the frontend clears the stored token, emits an auth-state event, and redirects browser clients to `/login`. The login page submits credentials to `POST /api/auth/login`, stores the returned `accessToken` through the authentication context, and redirects successful sign-ins to `/`. The authenticated route group protects `/`, `/ecos`, and `/settings/users`; `/` displays the metrics dashboard placeholder, while `/ecos` fetches the ECO list from `GET /api/ecos?pageNumber=1&pageSize=20`.
+When the API returns `401 Unauthorized`, the frontend clears the stored token, emits an auth-state event, and redirects browser clients to `/login`. The login page submits credentials to `POST /api/auth/login`, stores the returned `accessToken` through the authentication context, and redirects successful sign-ins to `/`. New companies can use `/register`, which submits to `POST /api/auth/register-company`, stores the returned `accessToken`, and redirects the new administrator to `/`. The authenticated route group protects `/`, `/ecos`, and `/settings/users`; `/` displays the metrics dashboard placeholder, while `/ecos` fetches the ECO list from `GET /api/ecos?pageNumber=1&pageSize=20`.
 
 The API reads `ConnectionStrings:DefaultConnection`. Docker Compose supplies the container connection string, while `api/src/EngiFlow.Api/appsettings.Development.json` points local `dotnet run` usage at `localhost:5432`.
 
@@ -206,6 +208,14 @@ Authenticate with:
 ```text
 http://localhost:3000/login
 ```
+
+New companies can self-register with:
+
+```text
+http://localhost:3000/register
+```
+
+The first administrator password must be at least 12 characters and include uppercase, lowercase, numeric, and symbol characters.
 
 Or call the API directly:
 
@@ -271,11 +281,12 @@ Swagger UI supports JWT bearer authentication. Call `POST /api/auth/login`, copy
 Bearer <accessToken>
 ```
 
-The current secured REST surface is:
+The current REST surface is:
 
 | Method | Route | Purpose |
 | --- | --- | --- |
 | `POST` | `/api/auth/login` | Authenticate and issue a JWT bearer token |
+| `POST` | `/api/auth/register-company` | Create a company tenant, first administrator, and JWT bearer token |
 | `POST` | `/api/ecos` | Create a draft ECO |
 | `GET` | `/api/ecos/{id}` | Retrieve one ECO with audit history |
 | `GET` | `/api/ecos?pageNumber=1&pageSize=20` | List paged ECO summaries |
@@ -286,6 +297,15 @@ The current secured REST surface is:
 Example flow:
 
 ```bash
+curl -X POST http://localhost:8080/api/auth/register-company \
+  -H "Content-Type: application/json" \
+  -d '{
+    "companyName": "Acme Engineering",
+    "adminName": "Ada Lovelace",
+    "adminEmail": "ada@acme.example",
+    "adminPassword": "StrongPass123!"
+  }'
+
 curl -X POST http://localhost:8080/api/auth/login \
   -H "Content-Type: application/json" \
   -d '{
@@ -424,11 +444,11 @@ The current tests cover:
 - Rejected and implemented terminal states.
 - Audit event creation for ECO creation, edits, and transitions.
 - Application CQRS validation behavior.
-- Login validation, credential verification, JWT claim issuance, and HTTP tenant claim resolution.
+- Company registration validation, tenant bootstrap persistence, first administrator creation, login validation, credential verification, JWT claim issuance, and HTTP tenant claim resolution.
 - ECO command handlers for create, submit, approve, and reject.
 - ECO query handlers for detail retrieval and paginated lists.
 - Infrastructure tenant query filters.
-- Tenant-scoped write validation.
+- Tenant-scoped write validation and new-company bootstrap write allowance.
 - Password hash persistence metadata and authentication lookup behavior.
 - ECO audit-event persistence interception.
 - Strongly typed identifier and enum conversion metadata.
@@ -483,7 +503,7 @@ The web build uses Next.js standalone output for the Docker runtime image. In re
 
 ## Current Scope
 
-This foundation includes local orchestration, the core domain model, Application-layer CQRS use cases, validation, EF Core persistence, migrations, JWT authentication, role-based authorization policies, secured ECO/API controllers, Swagger bearer support, frontend MUI SSR/auth/API plumbing, client-side root route protection, the protected ECO summary dashboard, and application/domain/infrastructure/API tests. It intentionally does not yet include frontend ECO creation or detail workflows, file storage, production onboarding, refresh tokens, or cloud deployment automation.
+This foundation includes local orchestration, the core domain model, Application-layer CQRS use cases, validation, EF Core persistence, migrations, JWT authentication, role-based authorization policies, secured ECO/API controllers, public company registration, Swagger bearer support, frontend MUI SSR/auth/API plumbing, client-side root route protection, the protected ECO summary dashboard, and application/domain/infrastructure/API tests. It intentionally does not yet include frontend ECO creation or detail workflows, file storage, invitations, refresh tokens, or cloud deployment automation.
 
 Those concerns should build on the current boundaries rather than bypass them:
 

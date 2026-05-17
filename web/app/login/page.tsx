@@ -5,12 +5,14 @@ import Box from "@mui/material/Box";
 import Button from "@mui/material/Button";
 import CircularProgress from "@mui/material/CircularProgress";
 import Container from "@mui/material/Container";
+import Link from "@mui/material/Link";
 import Paper from "@mui/material/Paper";
 import Stack from "@mui/material/Stack";
 import TextField from "@mui/material/TextField";
 import Typography from "@mui/material/Typography";
 import { useRouter } from "next/navigation";
 import { type FormEvent, useState } from "react";
+import NextLink from "@/components/ui/NextLink";
 import { ApiError, apiFetch } from "@/lib/api/client";
 import { useAuth } from "@/lib/auth/AuthContext";
 
@@ -149,6 +151,13 @@ export default function LoginPage() {
                 "Sign in"
               )}
             </Button>
+
+            <Typography variant="body2" color="text.secondary" align="center">
+              Don&apos;t have an account?{" "}
+              <Link component={NextLink} href="/register" underline="hover">
+                Register your company
+              </Link>
+            </Typography>
           </Stack>
         </Box>
       </Paper>

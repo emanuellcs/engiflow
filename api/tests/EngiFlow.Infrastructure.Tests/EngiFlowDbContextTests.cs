@@ -1,3 +1,5 @@
+using EngiFlow.Application.Abstractions.Tenancy;
+using EngiFlow.Domain.Companies;
 using EngiFlow.Domain.Ecos;
 using EngiFlow.Domain.Users;
 using EngiFlow.Domain.ValueObjects;
@@ -60,6 +62,47 @@ public sealed class EngiFlowDbContextTests
         var exception = await Assert.ThrowsAsync<InvalidOperationException>(() => context.SaveChangesAsync());
 
         Assert.Contains("current tenant", exception.Message);
+    }
+
+    [Fact]
+    public async Task SaveChanges_AllowsNewCompanyBootstrapGraphWithoutCurrentTenant()
+    {
+        var databaseName = Guid.NewGuid().ToString();
+        var options = new DbContextOptionsBuilder<EngiFlowDbContext>()
+            .UseInMemoryDatabase(databaseName)
+            .AddInterceptors(new EcoAuditSaveChangesInterceptor())
+            .Options;
+        var company = Company.Create("Acme Engineering");
+        var admin = company.RegisterUser(
+            "admin@acme.example",
+            "Administrator",
+            UserRole.Administrator);
+        admin.SetPasswordHash("hashed-password");
+
+        await using var context = new EngiFlowDbContext(options, new ThrowingTenantProvider());
+        context.Companies.Add(company);
+        await context.SaveChangesAsync();
+
+        Assert.Equal(1, await context.Companies.CountAsync());
+        Assert.Equal(1, await context.Users.IgnoreQueryFilters().CountAsync());
+    }
+
+    [Fact]
+    public async Task SaveChanges_WhenTenantScopedInsertIsNotNewCompanyGraph_RequiresCurrentTenant()
+    {
+        var options = new DbContextOptionsBuilder<EngiFlowDbContext>()
+            .UseInMemoryDatabase(Guid.NewGuid().ToString())
+            .AddInterceptors(new EcoAuditSaveChangesInterceptor())
+            .Options;
+
+        await using var context = new EngiFlowDbContext(options, new ThrowingTenantProvider());
+        context.Users.Add(User.Create(
+            CompanyId.New(),
+            "admin@acme.example",
+            "Administrator",
+            UserRole.Administrator));
+
+        await Assert.ThrowsAsync<UnauthorizedAccessException>(() => context.SaveChangesAsync());
     }
 
     [Fact]
@@ -187,5 +230,12 @@ public sealed class EngiFlowDbContextTests
     {
         return property.GetValueConverter()?.ProviderClrType
             ?? property.GetTypeMapping().Converter?.ProviderClrType;
+    }
+
+    private sealed class ThrowingTenantProvider : ITenantProvider
+    {
+        public CompanyId CurrentCompanyId => throw new UnauthorizedAccessException("A valid tenant is required.");
+
+        public UserId CurrentUserId => throw new UnauthorizedAccessException("A valid user is required.");
     }
 }

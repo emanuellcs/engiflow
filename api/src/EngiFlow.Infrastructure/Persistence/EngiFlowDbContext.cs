@@ -7,6 +7,7 @@ using EngiFlow.Domain.Users;
 using EngiFlow.Domain.ValueObjects;
 using EngiFlow.Infrastructure.Persistence.Configurations;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.ChangeTracking;
 
 namespace EngiFlow.Infrastructure.Persistence;
 
@@ -130,20 +131,39 @@ public sealed class EngiFlowDbContext : DbContext
     /// </remarks>
     private void ValidateTenantScopedWrites()
     {
+        var tenantScopedEntries = ChangeTracker
+            .Entries<ITenantScoped>()
+            .Where(entry => entry.State is not EntityState.Detached and not EntityState.Unchanged)
+            .ToArray();
+
+        if (tenantScopedEntries.Length == 0 || IsNewTenantBootstrapGraph(tenantScopedEntries))
+        {
+            return;
+        }
+
         var currentCompanyId = CurrentCompanyId;
 
-        foreach (var entry in ChangeTracker.Entries<ITenantScoped>())
+        foreach (var entry in tenantScopedEntries)
         {
-            if (entry.State is EntityState.Detached or EntityState.Unchanged)
-            {
-                continue;
-            }
-
             if (entry.Entity.CompanyId != currentCompanyId)
             {
                 throw new InvalidOperationException(
                     $"Cannot save {entry.Metadata.ClrType.Name} for tenant '{entry.Entity.CompanyId}' while the current tenant is '{currentCompanyId}'.");
             }
         }
+    }
+
+    private bool IsNewTenantBootstrapGraph(IReadOnlyCollection<EntityEntry<ITenantScoped>> tenantScopedEntries)
+    {
+        var addedCompanyIds = ChangeTracker
+            .Entries<Company>()
+            .Where(entry => entry.State == EntityState.Added)
+            .Select(entry => entry.Entity.Id)
+            .ToHashSet();
+
+        return addedCompanyIds.Count > 0
+            && tenantScopedEntries.All(entry =>
+                entry.State == EntityState.Added
+                && addedCompanyIds.Contains(entry.Entity.CompanyId));
     }
 }
