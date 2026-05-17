@@ -29,6 +29,7 @@ import PriorityChip from "@/components/ui/PriorityChip";
 import StatusChip from "@/components/ui/StatusChip";
 import { ApiError, apiFetch } from "@/lib/api/client";
 import { useAuth } from "@/lib/auth/AuthContext";
+import { isAdminOrOwner } from "@/lib/auth/jwt";
 import type {
   EcoPriority,
   EcoReviewContextDto,
@@ -49,8 +50,6 @@ type EcoListFilters = {
 };
 
 const defaultPageSize = 20;
-const administratorRole = "Administrator";
-const ownerRole = "Owner";
 const requesterRole = "Requester";
 const approverRoles = new Set(["Owner", "Administrator", "Approver"]);
 const statusOptions: EcoStatus[] = [
@@ -107,10 +106,7 @@ function EcoDashboard() {
     () => (reviewContext?.users ?? []).filter((item) => approverRoles.has(item.role)),
     [reviewContext],
   );
-  const canCreateEco =
-    user?.role === ownerRole ||
-    user?.role === administratorRole ||
-    user?.role === requesterRole;
+  const canCreateEco = isAdminOrOwner(user?.role) || user?.role === requesterRole;
   const minApprovalsRequired = reviewContext?.minApprovalsRequired ?? 1;
 
   useEffect(() => {

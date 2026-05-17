@@ -31,9 +31,9 @@ import type { PropsWithChildren, ReactNode } from "react";
 import { useState } from "react";
 import NextLink from "@/components/ui/NextLink";
 import { useAuth } from "@/lib/auth/AuthContext";
+import { isAdminOrOwner } from "@/lib/auth/jwt";
 
 const drawerWidth = 248;
-const administratorRole = "Administrator";
 const requesterRole = "Requester";
 
 type NavigationItem = {
@@ -76,11 +76,11 @@ export default function AppShell({ children }: PropsWithChildren) {
   const pathname = usePathname() ?? "/";
   const { logout, user } = useAuth();
   const [isMobileDrawerOpen, setIsMobileDrawerOpen] = useState(false);
-  const isAdministrator = user?.role === administratorRole;
+  const isAdministrator = isAdminOrOwner(user?.role);
   const companyName = user?.companyName ?? "Workspace";
   const userName = user?.userName ?? "User";
   const role = user?.role ?? "User";
-  const canCreateEco = role === administratorRole || role === requesterRole;
+  const canCreateEco = isAdministrator || role === requesterRole;
   const showDashboardAction = pathname !== "/";
   const showEcosAction = !pathname.startsWith("/ecos");
   const showNewEcoAction = canCreateEco && !pathname.startsWith("/ecos/new");

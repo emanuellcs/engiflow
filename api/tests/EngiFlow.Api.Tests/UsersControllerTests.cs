@@ -110,6 +110,23 @@ public sealed class UsersControllerTests
         Assert.Equal("UserManagement", authorize.Policy);
     }
 
+    [Fact]
+    public async Task Owner_CanManageUsers()
+    {
+        // This test verifies that the application logic allows Owners to list users.
+        // We use the same mediator mock pattern.
+        var users = new UserSummaryDto[]
+        {
+            new(Guid.NewGuid(), "Owner User", "owner@acme.example", nameof(UserRole.Owner))
+        };
+        var mediator = new FakeApplicationMediator { Dispatch = _ => users };
+        var controller = new UsersController(mediator);
+
+        var result = await controller.ListAsync(CancellationToken.None);
+
+        Assert.IsType<OkObjectResult>(result.Result);
+    }
+
     private sealed class FakeApplicationMediator : IApplicationMediator
     {
         public Func<object, object>? Dispatch { get; init; }

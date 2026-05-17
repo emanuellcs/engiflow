@@ -36,6 +36,7 @@ import { type FormEvent, useCallback, useEffect, useMemo, useState } from "react
 import PageHeader from "@/components/ui/PageHeader";
 import { ApiError, apiFetch } from "@/lib/api/client";
 import { useAuth } from "@/lib/auth/AuthContext";
+import { isAdminOrOwner } from "@/lib/auth/jwt";
 
 type UserSummary = {
   id: string;
@@ -55,7 +56,6 @@ type InviteRole = "Requester" | "Approver";
 type RoleFilter = "All" | "Administrator" | InviteRole;
 type InviteFieldErrors = Partial<Record<keyof InviteFormState, string>>;
 
-const administratorRole = "Administrator";
 const initialInviteForm: InviteFormState = {
   name: "",
   email: "",
@@ -76,7 +76,7 @@ export default function UserManagementPage() {
   const [rowsPerPage, setRowsPerPage] = useState(10);
   const [searchQuery, setSearchQuery] = useState("");
   const [roleFilter, setRoleFilter] = useState<RoleFilter>("All");
-  const isAdministrator = user?.role === administratorRole;
+  const isAdministrator = isAdminOrOwner(user?.role);
   const filteredUsers = useMemo(() => {
     const normalizedQuery = searchQuery.trim().toLowerCase();
 
@@ -603,6 +603,14 @@ function validateInviteForm(form: InviteFormState): InviteFieldErrors {
 }
 
 function getRoleChipSx(role: string): object {
+  if (role === "Owner") {
+    return {
+      borderColor: "warning.main",
+      color: "warning.dark",
+      bgcolor: "rgba(237, 108, 2, 0.08)",
+    };
+  }
+
   if (role === "Administrator") {
     return {
       borderColor: "primary.main",
