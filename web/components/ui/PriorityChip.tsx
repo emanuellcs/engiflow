@@ -1,7 +1,8 @@
 import Chip from "@mui/material/Chip";
 import type { ChipProps } from "@mui/material/Chip";
+import type { EcoPriority } from "@/lib/types/eco";
 
-export type EcoPriority = "Low" | "Medium" | "High";
+export type { EcoPriority } from "@/lib/types/eco";
 
 export type PriorityChipProps = {
   /** ECO priority returned by the API. */
@@ -9,8 +10,9 @@ export type PriorityChipProps = {
 };
 
 const colorByPriority: Record<EcoPriority, ChipProps["color"]> = {
-  High: "error",
-  Medium: "warning",
+  Critical: "error",
+  High: "warning",
+  Medium: "info",
   Low: "default",
 };
 

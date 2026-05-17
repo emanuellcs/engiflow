@@ -22,6 +22,8 @@ namespace EngiFlow.Api.Controllers;
 [Produces("application/json")]
 public sealed class EcosController : ControllerBase
 {
+    private const string GetByIdRouteName = "GetEcoById";
+
     private readonly IApplicationMediator _mediator;
 
     /// <summary>
@@ -64,7 +66,7 @@ public sealed class EcosController : ControllerBase
                 cancellationToken)
             .ConfigureAwait(false);
 
-        return CreatedAtAction(nameof(GetByIdAsync), new { id = created.Id }, created);
+        return CreatedAtRoute(GetByIdRouteName, new { id = created.Id }, created);
     }
 
     /// <summary>
@@ -81,7 +83,7 @@ public sealed class EcosController : ControllerBase
     /// <response code="400">The route identifier failed application validation.</response>
     /// <response code="404">No tenant-scoped ECO exists for the supplied identifier.</response>
     /// <response code="500">An unexpected server error occurred.</response>
-    [HttpGet("{id:guid}")]
+    [HttpGet("{id:guid}", Name = GetByIdRouteName)]
     [ProducesResponseType(typeof(EcoDetailsDto), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ValidationProblemDetails), StatusCodes.Status400BadRequest)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]

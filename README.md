@@ -127,7 +127,8 @@ The current frontend foundation includes:
 - A responsive Material UI login page at `/login` that posts credentials through the shared API client, stores the returned JWT through `AuthContext`, and redirects authenticated users to the workspace root.
 - A responsive public company registration wizard at `/register` using Material UI `Stepper`, client-side step validation, backend validation feedback, automatic token storage, and immediate redirect into the workspace.
 - Client-side route protection for all authenticated workspace routes, redirecting unauthenticated users to `/login`.
-- A protected metrics dashboard placeholder at `/`, an ECO dashboard at `/ecos` that lists paged ECO summaries with dense Material UI table styling, reusable status and priority chips, loading skeleton rows, horizontal mobile overflow, and an empty state, plus a user management placeholder at `/settings/users`.
+- A protected metrics dashboard placeholder at `/`, an ECO dashboard at `/ecos` that lists paged ECO summaries with dense Material UI table styling, reusable status and priority chips, loading skeleton rows, horizontal mobile overflow, linked detail navigation, and an empty state, plus a user management placeholder at `/settings/users`.
+- Core ECO frontend workflow routes: `/ecos/new` creates draft ECOs through the shared API client, and `/ecos/[id]` displays read-only ECO details, role-aware submit/approve/reject actions, a rejection reason dialog, a Material UI lifecycle stepper, and the audit trail returned by the API.
 - Reusable atomic UI components under `web/components/ui`, including `PageHeader`, `StatusChip`, `PriorityChip`, and the Next.js link adapter used by Material UI navigation controls.
 - A typed native `fetch` API client that reads optional public API base URLs and otherwise uses same-origin `/api/...` requests through the Next.js proxy.
 - A React authentication context that decodes backend JWT claims (`sub`, `tenant`, `role`, optional `exp`), stores the bearer token in local storage, mirrors it to a non-HttpOnly cookie, and clears auth state on `401 Unauthorized`.
@@ -188,7 +189,7 @@ For non-Docker local development, the proxy falls back to `http://localhost:8080
 Authorization: Bearer <accessToken>
 ```
 
-When the API returns `401 Unauthorized`, the frontend clears the stored token, emits an auth-state event, and redirects browser clients to `/login`. The login page submits credentials to `POST /api/auth/login`, stores the returned `accessToken` through the authentication context, and redirects successful sign-ins to `/`. New companies can use `/register`, which submits to `POST /api/auth/register-company`, stores the returned `accessToken`, and redirects the new administrator to `/`. The authenticated route group protects `/`, `/ecos`, and `/settings/users`; `/` displays the metrics dashboard placeholder, while `/ecos` fetches the ECO list from `GET /api/ecos?pageNumber=1&pageSize=20`.
+When the API returns `401 Unauthorized`, the frontend clears the stored token, emits an auth-state event, and redirects browser clients to `/login`. The login page submits credentials to `POST /api/auth/login`, stores the returned `accessToken` through the authentication context, and redirects successful sign-ins to `/`. New companies can use `/register`, which submits to `POST /api/auth/register-company`, stores the returned `accessToken`, and redirects the new administrator to `/`. The authenticated route group protects `/`, `/ecos`, `/ecos/new`, `/ecos/[id]`, and `/settings/users`; `/` displays the metrics dashboard placeholder, `/ecos` fetches the ECO list from `GET /api/ecos?pageNumber=1&pageSize=20`, `/ecos/new` posts to `POST /api/ecos`, and `/ecos/[id]` reads `GET /api/ecos/{id}` plus workflow transitions through `PUT /api/ecos/{id}/submit`, `PUT /api/ecos/{id}/approve`, and `PUT /api/ecos/{id}/reject`.
 
 The API reads `ConnectionStrings:DefaultConnection`. Docker Compose supplies the container connection string, while `api/src/EngiFlow.Api/appsettings.Development.json` points local `dotnet run` usage at `localhost:5432`.
 
@@ -503,7 +504,7 @@ The web build uses Next.js standalone output for the Docker runtime image. In re
 
 ## Current Scope
 
-This foundation includes local orchestration, the core domain model, Application-layer CQRS use cases, validation, EF Core persistence, migrations, JWT authentication, role-based authorization policies, secured ECO/API controllers, public company registration, Swagger bearer support, frontend MUI SSR/auth/API plumbing, client-side root route protection, the protected ECO summary dashboard, and application/domain/infrastructure/API tests. It intentionally does not yet include frontend ECO creation or detail workflows, file storage, invitations, refresh tokens, or cloud deployment automation.
+This foundation includes local orchestration, the core domain model, Application-layer CQRS use cases, validation, EF Core persistence, migrations, JWT authentication, role-based authorization policies, secured ECO/API controllers, public company registration, Swagger bearer support, frontend MUI SSR/auth/API plumbing, client-side root route protection, the protected ECO summary dashboard, frontend ECO creation/detail workflows, and application/domain/infrastructure/API tests. It intentionally does not yet include file storage, invitations, refresh tokens, or cloud deployment automation.
 
 Those concerns should build on the current boundaries rather than bypass them:
 

@@ -13,7 +13,7 @@ namespace EngiFlow.Api.Tests;
 public sealed class EcosControllerTests
 {
     [Fact]
-    public async Task CreateAsync_DispatchesCreateCommandAndReturnsCreatedAtAction()
+    public async Task CreateAsync_DispatchesCreateCommandAndReturnsCreatedAtRoute()
     {
         var eco = CreateEcoDetails();
         var mediator = new FakeApplicationMediator { Dispatch = _ => eco };
@@ -26,8 +26,8 @@ public sealed class EcosControllerTests
                 EcoPriority.High),
             CancellationToken.None);
 
-        var created = Assert.IsType<CreatedAtActionResult>(result.Result);
-        Assert.Equal(nameof(EcosController.GetByIdAsync), created.ActionName);
+        var created = Assert.IsType<CreatedAtRouteResult>(result.Result);
+        Assert.Equal("GetEcoById", created.RouteName);
         Assert.Equal(eco.Id, created.RouteValues?["id"]);
         Assert.Same(eco, created.Value);
 
