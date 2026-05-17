@@ -1,13 +1,12 @@
 "use client";
 
+import AddIcon from "@mui/icons-material/Add";
+import AssignmentOutlinedIcon from "@mui/icons-material/AssignmentOutlined";
 import Alert from "@mui/material/Alert";
-import Box from "@mui/material/Box";
 import Button from "@mui/material/Button";
-import Chip from "@mui/material/Chip";
 import Paper from "@mui/material/Paper";
 import Skeleton from "@mui/material/Skeleton";
 import Stack from "@mui/material/Stack";
-import SvgIcon from "@mui/material/SvgIcon";
 import Table from "@mui/material/Table";
 import TableBody from "@mui/material/TableBody";
 import TableCell from "@mui/material/TableCell";
@@ -15,14 +14,11 @@ import TableContainer from "@mui/material/TableContainer";
 import TableHead from "@mui/material/TableHead";
 import TableRow from "@mui/material/TableRow";
 import Typography from "@mui/material/Typography";
-import type { ChipProps } from "@mui/material/Chip";
-import type { ComponentProps } from "react";
 import { useEffect, useState } from "react";
-import ProtectedRoute from "@/components/ProtectedRoute";
+import PageHeader from "@/components/ui/PageHeader";
+import PriorityChip, { type EcoPriority } from "@/components/ui/PriorityChip";
+import StatusChip, { type EcoStatus } from "@/components/ui/StatusChip";
 import { ApiError, apiFetch } from "@/lib/api/client";
-
-type EcoPriority = "Low" | "Medium" | "High";
-type EcoStatus = "Draft" | "UnderReview" | "Approved" | "Rejected" | "Implemented";
 
 interface EcoSummaryDto {
   id: string;
@@ -48,14 +44,21 @@ interface PagedResult<TItem> {
 const pageSize = 20;
 const skeletonRowCount = 6;
 
-export default function Home() {
-  return (
-    <ProtectedRoute>
-      <EcoDashboard />
-    </ProtectedRoute>
-  );
+/**
+ * Renders the authenticated Engineering Change Orders page.
+ *
+ * @returns The ECO dashboard table view.
+ */
+export default function EcosPage() {
+  return <EcoDashboard />;
 }
 
+/**
+ * Loads and renders the current tenant's Engineering Change Orders in a dense,
+ * horizontally scrollable Material UI table.
+ *
+ * @returns The ECO dashboard content including header, errors, table, and empty state.
+ */
 function EcoDashboard() {
   const [ecos, setEcos] = useState<EcoSummaryDto[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -98,37 +101,25 @@ function EcoDashboard() {
 
   return (
     <Stack spacing={2.5}>
-      <Stack
-        direction={{ xs: "column", sm: "row" }}
-        spacing={2}
-        sx={{
-          alignItems: { xs: "stretch", sm: "center" },
-          justifyContent: "space-between",
-        }}
-      >
-        <Box sx={{ minWidth: 0 }}>
-          <Typography variant="h4" component="h1">
-            Engineering Change Orders
-          </Typography>
-          <Typography variant="body2" color="text.secondary">
-            Review current ECO activity across the workspace.
-          </Typography>
-        </Box>
-        <Button
-          type="button"
-          variant="contained"
-          onClick={() => {
-            console.log("Create ECO clicked");
-          }}
-          sx={{
-            alignSelf: { xs: "stretch", sm: "center" },
-            minWidth: 128,
-            textTransform: "none",
-          }}
-        >
-          Create ECO
-        </Button>
-      </Stack>
+      <PageHeader
+        title="Engineering Change Orders"
+        description="Review current ECO activity across the workspace."
+        actionButton={
+          <Button
+            type="button"
+            variant="contained"
+            startIcon={<AddIcon />}
+            onClick={() => undefined}
+            sx={{
+              width: { xs: "100%", sm: "auto" },
+              minWidth: 128,
+              textTransform: "none",
+            }}
+          >
+            Create ECO
+          </Button>
+        }
+      />
 
       {errorMessage ? (
         <Alert severity="error" variant="outlined">
@@ -136,8 +127,16 @@ function EcoDashboard() {
         </Alert>
       ) : null}
 
-      <TableContainer component={Paper} elevation={1}>
-        <Table size="small" aria-label="Engineering Change Orders">
+      <TableContainer
+        component={Paper}
+        elevation={1}
+        sx={{ width: "100%", overflowX: "auto" }}
+      >
+        <Table
+          size="small"
+          aria-label="Engineering Change Orders"
+          sx={{ minWidth: 760 }}
+        >
           <TableHead>
             <TableRow
               sx={{
@@ -145,6 +144,7 @@ function EcoDashboard() {
                 "& th": {
                   fontWeight: 600,
                   color: "text.primary",
+                  whiteSpace: "nowrap",
                 },
               }}
             >
@@ -177,7 +177,7 @@ function EcoDashboard() {
                       <StatusChip status={eco.status} />
                     </TableCell>
                     <TableCell>
-                      <Typography variant="body2">
+                      <Typography variant="body2" noWrap>
                         {formatCreatedDate(eco.createdAt)}
                       </Typography>
                     </TableCell>
@@ -194,6 +194,11 @@ function EcoDashboard() {
   );
 }
 
+/**
+ * Renders skeleton rows that reserve table space while ECO data is loading.
+ *
+ * @returns A fixed set of loading placeholder rows.
+ */
 function EcoSkeletonRows() {
   return Array.from({ length: skeletonRowCount }, (_, index) => (
     <TableRow key={`eco-skeleton-${index}`}>
@@ -216,6 +221,11 @@ function EcoSkeletonRows() {
   ));
 }
 
+/**
+ * Renders the table body empty state shown when the API returns no ECO rows.
+ *
+ * @returns A full-width empty table row.
+ */
 function EcoEmptyRow() {
   return (
     <TableRow>
@@ -230,7 +240,7 @@ function EcoEmptyRow() {
             textAlign: "center",
           }}
         >
-          <EcoEmptyIcon sx={{ fontSize: 48, color: "grey.500" }} />
+          <AssignmentOutlinedIcon sx={{ fontSize: 48, color: "grey.500" }} />
           <Typography variant="body1" color="text.secondary">
             No Engineering Change Orders found.
           </Typography>
@@ -240,56 +250,22 @@ function EcoEmptyRow() {
   );
 }
 
-function StatusChip({ status }: { status: EcoStatus }) {
-  const colorByStatus: Record<EcoStatus, ChipProps["color"]> = {
-    Approved: "success",
-    Rejected: "error",
-    UnderReview: "warning",
-    Draft: "default",
-    Implemented: "secondary",
-  };
-
-  return (
-    <Chip
-      label={formatEnumLabel(status)}
-      color={colorByStatus[status]}
-      size="small"
-      variant={status === "Draft" ? "outlined" : "filled"}
-      sx={{ minWidth: 98, fontWeight: 500 }}
-    />
-  );
-}
-
-function PriorityChip({ priority }: { priority: EcoPriority }) {
-  const colorByPriority: Record<EcoPriority, ChipProps["color"]> = {
-    High: "error",
-    Medium: "warning",
-    Low: "default",
-  };
-
-  return (
-    <Chip
-      label={priority}
-      color={colorByPriority[priority]}
-      size="small"
-      variant={priority === "Low" ? "outlined" : "filled"}
-      sx={{ minWidth: 76, fontWeight: 500 }}
-    />
-  );
-}
-
-function EcoEmptyIcon(props: ComponentProps<typeof SvgIcon>) {
-  return (
-    <SvgIcon viewBox="0 0 48 48" {...props}>
-      <path d="M12 8h18l6 6v26H12V8Zm16 3v6h6l-6-6Zm-12 1v24h16V20h-8V12h-8Zm4 12h8v3h-8v-3Zm0 7h12v3H20v-3Z" />
-    </SvgIcon>
-  );
-}
-
+/**
+ * Formats a full ECO identifier into the short uppercase token used in tables.
+ *
+ * @param id - ECO identifier returned by the API.
+ * @returns The first eight uppercase characters when the identifier is long.
+ */
 function formatShortId(id: string): string {
   return id.length > 8 ? id.slice(0, 8).toUpperCase() : id.toUpperCase();
 }
 
+/**
+ * Formats an API timestamp as a compact U.S. display date.
+ *
+ * @param value - ISO timestamp returned by the API.
+ * @returns A formatted date or a dash when the timestamp cannot be parsed.
+ */
 function formatCreatedDate(value: string): string {
   const timestamp = Date.parse(value);
 
@@ -304,10 +280,12 @@ function formatCreatedDate(value: string): string {
   }).format(timestamp);
 }
 
-function formatEnumLabel(value: string): string {
-  return value.replace(/([a-z])([A-Z])/g, "$1 $2");
-}
-
+/**
+ * Produces the user-facing ECO list error message for API and network failures.
+ *
+ * @param error - Unknown error thrown while loading the ECO list.
+ * @returns A stable supportable error message for the page alert.
+ */
 function getEcoListErrorMessage(error: unknown): string {
   if (error instanceof ApiError) {
     return "Unable to load Engineering Change Orders. Refresh the page or try again later.";
@@ -316,6 +294,12 @@ function getEcoListErrorMessage(error: unknown): string {
   return "Unable to load Engineering Change Orders. Check your connection and try again.";
 }
 
+/**
+ * Detects abort errors produced by an AbortController-backed fetch request.
+ *
+ * @param error - Unknown error thrown by the ECO load operation.
+ * @returns True when the error is a browser abort event.
+ */
 function isAbortError(error: unknown): boolean {
   return error instanceof DOMException && error.name === "AbortError";
 }
