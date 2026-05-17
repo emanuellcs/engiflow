@@ -1,5 +1,6 @@
 using EngiFlow.Application.Abstractions.Persistence;
 using EngiFlow.Application.Abstractions.Security;
+using EngiFlow.Application.Abstractions.Storage;
 using EngiFlow.Application.Abstractions.Tenancy;
 using EngiFlow.Application.Auth.Commands;
 using EngiFlow.Application.Auth.Dtos;
@@ -554,7 +555,9 @@ public sealed class EcoApplicationTests
                 currentUser.Id,
                 DateTimeOffset.Parse("2026-05-01T00:00:00Z").AddMinutes(index)))
             .ToArray();
-        var handler = new ListEcosQueryHandler(new FakeEcoRepository(ecos));
+        var handler = new ListEcosQueryHandler(
+            new FakeEcoRepository(ecos),
+            new FakeTenantProvider(companyId, currentUser.Id));
 
         var page = await handler.HandleAsync(new ListEcosQuery(PageNumber: 2, PageSize: 2));
 
@@ -565,6 +568,43 @@ public sealed class EcoApplicationTests
         Assert.True(page.HasPreviousPage);
         Assert.True(page.HasNextPage);
         Assert.Equal(2, page.Items.Count);
+    }
+
+    [Fact]
+    public async Task ListEcosQueryHandler_AppliesCurrentUserFilters()
+    {
+        var companyId = CompanyId.New();
+        var currentUser = User.Create(
+            companyId,
+            "reviewer@engiflow.example",
+            "Reviewer",
+            UserRole.Approver);
+        var otherUser = User.Create(
+            companyId,
+            "requester@engiflow.example",
+            "Requester",
+            UserRole.Requester);
+        var createdByCurrentUser = EngineeringChangeOrder.Create(
+            companyId,
+            "Created by current actor",
+            "Update a controlled engineering artifact.",
+            EcoPriority.Medium,
+            currentUser.Id);
+        var createdByOtherUser = EngineeringChangeOrder.Create(
+            companyId,
+            "Created by another actor",
+            "Update a controlled engineering artifact.",
+            EcoPriority.Medium,
+            otherUser.Id);
+        var repository = new FakeEcoRepository(createdByCurrentUser, createdByOtherUser);
+        var handler = new ListEcosQueryHandler(
+            repository,
+            new FakeTenantProvider(companyId, currentUser.Id));
+
+        var page = await handler.HandleAsync(new ListEcosQuery(CreatedByMe: true));
+
+        Assert.Equal(currentUser.Id.Value, Assert.Single(page.Items).CreatedByUserId);
+        Assert.Equal(currentUser.Id, repository.LastFilter?.CreatedByUserId);
     }
 
     [Fact]
@@ -579,6 +619,98 @@ public sealed class EcoApplicationTests
                 () => Task.FromResult(default(PagedResult<EcoSummaryDto>)!)));
 
         Assert.Contains(nameof(ListEcosQuery.PageSize), exception.Errors.Keys);
+    }
+
+    [Fact]
+    public async Task GetEcoReviewContextQueryHandler_ReturnsQuorumAndActiveUsers()
+    {
+        var companyId = CompanyId.New();
+        var currentUser = User.Create(
+            companyId,
+            "owner@engiflow.example",
+            "Owner",
+            UserRole.Owner);
+        var approver = User.Create(
+            companyId,
+            "approver@engiflow.example",
+            "Approver",
+            UserRole.Approver);
+        var inactive = User.Create(
+            companyId,
+            "inactive@engiflow.example",
+            "Inactive",
+            UserRole.Approver);
+        inactive.Deactivate();
+        var settings = CompanySettings.CreateDefault(companyId);
+        settings.SetMinApprovalsRequired(2);
+        var handler = new GetEcoReviewContextQueryHandler(
+            new FakeUserRepository(currentUser, approver, inactive),
+            new FakeCompanySettingsRepository(settings),
+            new FakeTenantProvider(companyId, currentUser.Id));
+
+        var context = await handler.HandleAsync(new GetEcoReviewContextQuery());
+
+        Assert.Equal(2, context.MinApprovalsRequired);
+        Assert.Equal(2, context.Users.Count);
+        Assert.Contains(context.Users, user => user.Id == approver.Id.Value);
+        Assert.DoesNotContain(context.Users, user => user.Id == inactive.Id.Value);
+    }
+
+    [Fact]
+    public async Task GetEcoAttachmentDownloadUrlQueryHandler_ChecksEcoOwnershipAndSignsObjectKey()
+    {
+        var companyId = CompanyId.New();
+        var currentUser = User.Create(
+            companyId,
+            "requester@engiflow.example",
+            "Requester",
+            UserRole.Requester);
+        var eco = EngineeringChangeOrder.Create(
+            companyId,
+            "Use aluminum bracket",
+            "Update load-bearing bracket material from steel to aluminum.",
+            EcoPriority.Medium,
+            currentUser.Id);
+        var attachment = eco.AddAttachment(
+            "drawing.pdf",
+            1024,
+            "tenants/acme/ecos/eco/attachments/drawing.pdf",
+            "application/pdf",
+            currentUser.Id);
+        var storage = new FakeStorageService();
+        var handler = new GetEcoAttachmentDownloadUrlQueryHandler(
+            new FakeEcoRepository(eco),
+            storage);
+
+        var result = await handler.HandleAsync(
+            new GetEcoAttachmentDownloadUrlQuery(eco.Id.Value, attachment.Id.Value));
+
+        Assert.Equal("https://storage.example.test/signed", result.Url);
+        Assert.Equal(attachment.ObjectKey, storage.SignedObjectKey);
+        Assert.True(result.ExpiresAtUtc > DateTimeOffset.UtcNow);
+    }
+
+    [Fact]
+    public async Task GetEcoAttachmentDownloadUrlQueryHandler_WhenAttachmentIsMissing_ThrowsNotFound()
+    {
+        var companyId = CompanyId.New();
+        var currentUser = User.Create(
+            companyId,
+            "requester@engiflow.example",
+            "Requester",
+            UserRole.Requester);
+        var eco = EngineeringChangeOrder.Create(
+            companyId,
+            "Use aluminum bracket",
+            "Update load-bearing bracket material from steel to aluminum.",
+            EcoPriority.Medium,
+            currentUser.Id);
+        var handler = new GetEcoAttachmentDownloadUrlQueryHandler(
+            new FakeEcoRepository(eco),
+            new FakeStorageService());
+
+        await Assert.ThrowsAsync<EntityNotFoundException>(() =>
+            handler.HandleAsync(new GetEcoAttachmentDownloadUrlQuery(eco.Id.Value, Guid.NewGuid())));
     }
 
     private static EcoFixture CreateFixtureWithEco()
@@ -637,6 +769,8 @@ public sealed class EcoApplicationTests
 
         public List<EngineeringChangeOrder> Ecos { get; }
 
+        public EcoListFilter? LastFilter { get; private set; }
+
         public Task AddAsync(EngineeringChangeOrder eco, CancellationToken cancellationToken = default)
         {
             Ecos.Add(eco);
@@ -660,9 +794,11 @@ public sealed class EcoApplicationTests
         public Task<IReadOnlyList<EngineeringChangeOrder>> ListAsync(
             int pageNumber,
             int pageSize,
+            EcoListFilter? filter = null,
             CancellationToken cancellationToken = default)
         {
-            IReadOnlyList<EngineeringChangeOrder> page = Ecos
+            LastFilter = filter;
+            IReadOnlyList<EngineeringChangeOrder> page = ApplyFilter(Ecos, filter)
                 .OrderByDescending(eco => eco.CreatedAt)
                 .Skip((pageNumber - 1) * pageSize)
                 .Take(pageSize)
@@ -671,9 +807,28 @@ public sealed class EcoApplicationTests
             return Task.FromResult(page);
         }
 
-        public Task<int> CountAsync(CancellationToken cancellationToken = default)
+        public Task<int> CountAsync(EcoListFilter? filter = null, CancellationToken cancellationToken = default)
         {
-            return Task.FromResult(Ecos.Count);
+            LastFilter = filter;
+            return Task.FromResult(ApplyFilter(Ecos, filter).Count());
+        }
+
+        private static IEnumerable<EngineeringChangeOrder> ApplyFilter(
+            IEnumerable<EngineeringChangeOrder> ecos,
+            EcoListFilter? filter)
+        {
+            if (filter is null)
+            {
+                return ecos;
+            }
+
+            if (filter.CreatedByUserId is not null)
+            {
+                var createdByUserId = filter.CreatedByUserId.Value;
+                ecos = ecos.Where(eco => eco.CreatedByUserId == createdByUserId);
+            }
+
+            return ecos;
         }
     }
 
@@ -773,6 +928,32 @@ public sealed class EcoApplicationTests
             Email = email;
             ResetLink = resetLink;
             return Task.CompletedTask;
+        }
+    }
+
+    private sealed class FakeStorageService : IStorageService
+    {
+        public string? SignedObjectKey { get; private set; }
+
+        public Task<StorageUploadResult> UploadAsync(
+            StorageUploadRequest request,
+            CancellationToken cancellationToken = default)
+        {
+            throw new NotSupportedException("Upload is not used by this test fake.");
+        }
+
+        public Task DeleteAsync(string objectKey, CancellationToken cancellationToken = default)
+        {
+            return Task.CompletedTask;
+        }
+
+        public Task<string> GeneratePreSignedUrlAsync(
+            string objectKey,
+            TimeSpan expiresIn,
+            CancellationToken cancellationToken = default)
+        {
+            SignedObjectKey = objectKey;
+            return Task.FromResult("https://storage.example.test/signed");
         }
     }
 

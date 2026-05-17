@@ -4,6 +4,7 @@ using EngiFlow.Application.Abstractions.Cqrs;
 using EngiFlow.Application.Ecos.Commands;
 using EngiFlow.Application.Ecos.Dtos;
 using EngiFlow.Application.Ecos.Queries;
+using EngiFlow.Domain.Ecos;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
@@ -109,6 +110,13 @@ public sealed class EcosController : ControllerBase
     /// </remarks>
     /// <param name="pageNumber">The one-based page number to retrieve. Defaults to 1.</param>
     /// <param name="pageSize">The number of ECOs to include in the page. Defaults to 20.</param>
+    /// <param name="search">Optional text search across ECO title and description.</param>
+    /// <param name="status">Optional lifecycle status filter.</param>
+    /// <param name="priority">Optional priority filter.</param>
+    /// <param name="createdFrom">Optional inclusive created-at lower bound.</param>
+    /// <param name="createdTo">Optional inclusive created-at upper bound.</param>
+    /// <param name="createdByMe">Whether to include only ECOs created by the current actor.</param>
+    /// <param name="awaitingMyReview">Whether to include under-review ECOs awaiting the current actor's review.</param>
     /// <param name="cancellationToken">A token that can cancel the request.</param>
     /// <returns>A page of ECO summaries and pagination metadata.</returns>
     /// <response code="200">The page was retrieved.</response>
@@ -121,14 +129,54 @@ public sealed class EcosController : ControllerBase
     public async Task<ActionResult<PagedResult<EcoSummaryDto>>> ListAsync(
         [FromQuery] int pageNumber = 1,
         [FromQuery] int pageSize = 20,
+        [FromQuery] string? search = null,
+        [FromQuery] EcoStatus? status = null,
+        [FromQuery] EcoPriority? priority = null,
+        [FromQuery] DateTimeOffset? createdFrom = null,
+        [FromQuery] DateTimeOffset? createdTo = null,
+        [FromQuery] bool createdByMe = false,
+        [FromQuery] bool awaitingMyReview = false,
         CancellationToken cancellationToken = default)
     {
         var page = await _mediator.SendQueryAsync<ListEcosQuery, PagedResult<EcoSummaryDto>>(
-                new ListEcosQuery(pageNumber, pageSize),
+                new ListEcosQuery(
+                    pageNumber,
+                    pageSize,
+                    search,
+                    status,
+                    priority,
+                    createdFrom,
+                    createdTo,
+                    createdByMe,
+                    awaitingMyReview),
                 cancellationToken)
             .ConfigureAwait(false);
 
         return Ok(page);
+    }
+
+    /// <summary>
+    /// Retrieves tenant users and approval quorum settings needed by ECO review UI.
+    /// </summary>
+    /// <param name="cancellationToken">A token that can cancel the request.</param>
+    /// <returns>The review context for the current tenant.</returns>
+    /// <response code="200">The review context was returned.</response>
+    /// <response code="401">A valid bearer token is required.</response>
+    /// <response code="500">An unexpected server error occurred.</response>
+    [HttpGet("review-context")]
+    [ProducesResponseType(typeof(EcoReviewContextDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status500InternalServerError)]
+    public async Task<ActionResult<EcoReviewContextDto>> GetReviewContextAsync(
+        CancellationToken cancellationToken)
+    {
+        var context = await _mediator
+            .SendQueryAsync<GetEcoReviewContextQuery, EcoReviewContextDto>(
+                new GetEcoReviewContextQuery(),
+                cancellationToken)
+            .ConfigureAwait(false);
+
+        return Ok(context);
     }
 
     /// <summary>
@@ -328,6 +376,36 @@ public sealed class EcosController : ControllerBase
             .ConfigureAwait(false);
 
         return Ok(updated);
+    }
+
+    /// <summary>
+    /// Creates a short-lived pre-signed download URL for one ECO attachment.
+    /// </summary>
+    /// <param name="id">The ECO identifier.</param>
+    /// <param name="attachmentId">The attachment identifier.</param>
+    /// <param name="cancellationToken">A token that can cancel the request.</param>
+    /// <returns>A pre-signed download URL for the attachment.</returns>
+    /// <response code="200">The download URL was generated.</response>
+    /// <response code="400">The route identifiers failed validation.</response>
+    /// <response code="404">No tenant-scoped ECO or attachment exists for the supplied identifiers.</response>
+    /// <response code="500">An unexpected server error occurred.</response>
+    [HttpGet("{id:guid}/attachments/{attachmentId:guid}/download")]
+    [ProducesResponseType(typeof(EcoAttachmentDownloadDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ValidationProblemDetails), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status500InternalServerError)]
+    public async Task<ActionResult<EcoAttachmentDownloadDto>> GetAttachmentDownloadUrlAsync(
+        Guid id,
+        Guid attachmentId,
+        CancellationToken cancellationToken)
+    {
+        var download = await _mediator
+            .SendQueryAsync<GetEcoAttachmentDownloadUrlQuery, EcoAttachmentDownloadDto>(
+                new GetEcoAttachmentDownloadUrlQuery(id, attachmentId),
+                cancellationToken)
+            .ConfigureAwait(false);
+
+        return Ok(download);
     }
 
     /// <summary>

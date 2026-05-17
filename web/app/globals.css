@@ -11,3 +11,65 @@ a {
   color: inherit;
   text-decoration: none;
 }
+
+.rich-text-renderer {
+  overflow-wrap: anywhere;
+}
+
+.rich-text-renderer p:first-child {
+  margin-top: 0;
+}
+
+.rich-text-renderer p:last-child {
+  margin-bottom: 0;
+}
+
+.rich-text-renderer table {
+  border-collapse: collapse;
+  display: block;
+  max-width: 100%;
+  overflow-x: auto;
+}
+
+.rich-text-renderer th,
+.rich-text-renderer td {
+  border: 1px solid rgba(0, 0, 0, 0.12);
+  padding: 6px 8px;
+}
+
+.rich-text-renderer pre {
+  background: #f5f7fa;
+  border: 1px solid rgba(0, 0, 0, 0.12);
+  border-radius: 4px;
+  margin: 12px 0;
+  overflow-x: auto;
+  padding: 12px;
+}
+
+.rich-text-renderer code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  font-size: 0.875em;
+}
+
+.rich-text-renderer :not(pre) > code {
+  background: rgba(0, 0, 0, 0.06);
+  border-radius: 4px;
+  padding: 1px 4px;
+}
+
+.rich-text-renderer blockquote {
+  border-left: 4px solid rgba(21, 101, 192, 0.35);
+  color: rgba(0, 0, 0, 0.68);
+  margin: 12px 0;
+  padding-left: 12px;
+}
+
+.rich-text-renderer .katex-display {
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding-bottom: 4px;
+}
+
+.mermaid-diagram svg {
+  max-width: 100%;
+}

@@ -65,7 +65,17 @@ public sealed class EcosControllerTests
         var mediator = new FakeApplicationMediator { Dispatch = _ => page };
         var controller = new EcosController(mediator);
 
-        var result = await controller.ListAsync(2, 25, CancellationToken.None);
+        var result = await controller.ListAsync(
+            2,
+            25,
+            search: "bracket",
+            status: EcoStatus.UnderReview,
+            priority: EcoPriority.High,
+            createdFrom: DateTimeOffset.Parse("2026-05-01T00:00:00Z"),
+            createdTo: DateTimeOffset.Parse("2026-05-31T23:59:59Z"),
+            createdByMe: true,
+            awaitingMyReview: true,
+            cancellationToken: CancellationToken.None);
 
         var ok = Assert.IsType<OkObjectResult>(result.Result);
         Assert.Same(page, ok.Value);
@@ -73,6 +83,51 @@ public sealed class EcosControllerTests
         var query = Assert.IsType<ListEcosQuery>(mediator.LastRequest);
         Assert.Equal(2, query.PageNumber);
         Assert.Equal(25, query.PageSize);
+        Assert.Equal("bracket", query.Search);
+        Assert.Equal(EcoStatus.UnderReview, query.Status);
+        Assert.Equal(EcoPriority.High, query.Priority);
+        Assert.True(query.CreatedByMe);
+        Assert.True(query.AwaitingMyReview);
+    }
+
+    [Fact]
+    public async Task GetReviewContextAsync_DispatchesQueryAndReturnsOk()
+    {
+        var context = new EcoReviewContextDto(
+            2,
+            [new EcoUserDto(Guid.NewGuid(), "Ada Lovelace", "ada@example.test", "Approver")]);
+        var mediator = new FakeApplicationMediator { Dispatch = _ => context };
+        var controller = new EcosController(mediator);
+
+        var result = await controller.GetReviewContextAsync(CancellationToken.None);
+
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        Assert.Same(context, ok.Value);
+        Assert.IsType<GetEcoReviewContextQuery>(mediator.LastRequest);
+    }
+
+    [Fact]
+    public async Task GetAttachmentDownloadUrlAsync_DispatchesQueryAndReturnsOk()
+    {
+        var ecoId = Guid.NewGuid();
+        var attachmentId = Guid.NewGuid();
+        var download = new EcoAttachmentDownloadDto(
+            "https://storage.example.test/file",
+            DateTimeOffset.Parse("2026-05-15T00:10:00Z"));
+        var mediator = new FakeApplicationMediator { Dispatch = _ => download };
+        var controller = new EcosController(mediator);
+
+        var result = await controller.GetAttachmentDownloadUrlAsync(
+            ecoId,
+            attachmentId,
+            CancellationToken.None);
+
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        Assert.Same(download, ok.Value);
+
+        var query = Assert.IsType<GetEcoAttachmentDownloadUrlQuery>(mediator.LastRequest);
+        Assert.Equal(ecoId, query.EcoId);
+        Assert.Equal(attachmentId, query.AttachmentId);
     }
 
     [Fact]

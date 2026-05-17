@@ -23,7 +23,13 @@ internal static class EcoMappingExtensions
             eco.CreatedByUserId.Value,
             eco.CreatedAt,
             eco.UpdatedAt,
-            eco.ReviewRound);
+            eco.ReviewRound,
+            eco.Approvals.Count(approval =>
+                approval.ReviewRound == eco.ReviewRound &&
+                approval.Decision == EcoApprovalDecision.Approve),
+            eco.Approvals.Count(approval =>
+                approval.ReviewRound == eco.ReviewRound &&
+                approval.Decision == EcoApprovalDecision.RequestChanges));
     }
 
     /// <summary>

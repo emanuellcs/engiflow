@@ -22,6 +22,10 @@ const chipSxByStatus: Record<EcoStatus, object> = {
     bgcolor: "success.main",
     color: "success.contrastText",
   },
+  Canceled: {
+    bgcolor: "grey.700",
+    color: "common.white",
+  },
   Rejected: {
     bgcolor: "error.main",
     color: "error.contrastText",

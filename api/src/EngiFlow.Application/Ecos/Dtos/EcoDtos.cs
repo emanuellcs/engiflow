@@ -14,7 +14,9 @@ public sealed record EcoSummaryDto(
     Guid CreatedByUserId,
     DateTimeOffset CreatedAt,
     DateTimeOffset UpdatedAt,
-    int ReviewRound = 0);
+    int ReviewRound = 0,
+    int CurrentRoundApprovalCount = 0,
+    int CurrentRoundRequestChangesCount = 0);
 
 /// <summary>
 /// Describes one engineering change order with its timeline and review artifacts.
@@ -93,3 +95,26 @@ public sealed record EcoCommentDto(
     Guid AuthorUserId,
     string Body,
     DateTimeOffset CreatedAt);
+
+/// <summary>
+/// Describes a tenant user needed by ECO review and identity display widgets.
+/// </summary>
+public sealed record EcoUserDto(
+    Guid Id,
+    string Name,
+    string Email,
+    string Role);
+
+/// <summary>
+/// Provides UI context needed to render PR-like ECO review state.
+/// </summary>
+public sealed record EcoReviewContextDto(
+    int MinApprovalsRequired,
+    IReadOnlyList<EcoUserDto> Users);
+
+/// <summary>
+/// Describes a short-lived attachment download link.
+/// </summary>
+public sealed record EcoAttachmentDownloadDto(
+    string Url,
+    DateTimeOffset ExpiresAtUtc);

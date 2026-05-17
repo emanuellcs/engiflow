@@ -50,12 +50,26 @@ public interface IEngineeringChangeOrderRepository
     Task<IReadOnlyList<EngineeringChangeOrder>> ListAsync(
         int pageNumber,
         int pageSize,
+        EcoListFilter? filter = null,
         CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Counts all ECO aggregates visible to the current tenant.
     /// </summary>
+    /// <param name="filter">Optional list filtering criteria.</param>
     /// <param name="cancellationToken">A token that can cancel the persistence operation.</param>
     /// <returns>The total ECO count for the current tenant.</returns>
-    Task<int> CountAsync(CancellationToken cancellationToken = default);
+    Task<int> CountAsync(EcoListFilter? filter = null, CancellationToken cancellationToken = default);
 }
+
+/// <summary>
+/// Defines optional tenant-scoped ECO list filtering criteria.
+/// </summary>
+public sealed record EcoListFilter(
+    string? Search,
+    EcoStatus? Status,
+    EcoPriority? Priority,
+    DateTimeOffset? CreatedFrom,
+    DateTimeOffset? CreatedTo,
+    UserId? CreatedByUserId,
+    UserId? AwaitingReviewByUserId);
