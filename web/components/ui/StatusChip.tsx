@@ -1,12 +1,8 @@
 import Chip from "@mui/material/Chip";
 import type { ChipProps } from "@mui/material/Chip";
+import type { EcoStatus } from "@/lib/types/eco";
 
-export type EcoStatus =
-  | "Draft"
-  | "UnderReview"
-  | "Approved"
-  | "Rejected"
-  | "Implemented";
+export type { EcoStatus } from "@/lib/types/eco";
 
 export type StatusChipProps = {
   /** ECO workflow status returned by the API. */

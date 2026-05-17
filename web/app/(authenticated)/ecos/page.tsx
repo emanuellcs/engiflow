@@ -4,6 +4,7 @@ import AddIcon from "@mui/icons-material/Add";
 import AssignmentOutlinedIcon from "@mui/icons-material/AssignmentOutlined";
 import Alert from "@mui/material/Alert";
 import Button from "@mui/material/Button";
+import Link from "@mui/material/Link";
 import Paper from "@mui/material/Paper";
 import Skeleton from "@mui/material/Skeleton";
 import Stack from "@mui/material/Stack";
@@ -15,31 +16,12 @@ import TableHead from "@mui/material/TableHead";
 import TableRow from "@mui/material/TableRow";
 import Typography from "@mui/material/Typography";
 import { useEffect, useState } from "react";
+import NextLink from "@/components/ui/NextLink";
 import PageHeader from "@/components/ui/PageHeader";
-import PriorityChip, { type EcoPriority } from "@/components/ui/PriorityChip";
-import StatusChip, { type EcoStatus } from "@/components/ui/StatusChip";
+import PriorityChip from "@/components/ui/PriorityChip";
+import StatusChip from "@/components/ui/StatusChip";
 import { ApiError, apiFetch } from "@/lib/api/client";
-
-interface EcoSummaryDto {
-  id: string;
-  companyId: string;
-  title: string;
-  priority: EcoPriority;
-  status: EcoStatus;
-  createdByUserId: string;
-  createdAt: string;
-  updatedAt: string;
-}
-
-interface PagedResult<TItem> {
-  items: TItem[];
-  pageNumber: number;
-  pageSize: number;
-  totalCount: number;
-  totalPages: number;
-  hasPreviousPage: boolean;
-  hasNextPage: boolean;
-}
+import type { EcoSummaryDto, PagedResult } from "@/lib/types/eco";
 
 const pageSize = 20;
 const skeletonRowCount = 6;
@@ -106,10 +88,11 @@ function EcoDashboard() {
         description="Review current ECO activity across the workspace."
         actionButton={
           <Button
+            component={NextLink}
+            href="/ecos/new"
             type="button"
             variant="contained"
             startIcon={<AddIcon />}
-            onClick={() => undefined}
             sx={{
               width: { xs: "100%", sm: "auto" },
               minWidth: 128,
@@ -159,16 +142,36 @@ function EcoDashboard() {
             {isLoading ? <EcoSkeletonRows /> : null}
             {!isLoading && ecos.length > 0
               ? ecos.map((eco) => (
-                  <TableRow hover key={eco.id}>
-                    <TableCell>
-                      <Typography variant="body2" sx={{ fontFamily: "monospace" }}>
+                <TableRow hover key={eco.id}>
+                  <TableCell>
+                      <Link
+                        component={NextLink}
+                        href={`/ecos/${eco.id}`}
+                        underline="hover"
+                        color="inherit"
+                        aria-label={`View ECO ${formatShortId(eco.id)}`}
+                        sx={{ fontFamily: "monospace", fontSize: 14 }}
+                      >
                         {formatShortId(eco.id)}
-                      </Typography>
+                      </Link>
                     </TableCell>
                     <TableCell>
-                      <Typography variant="body2" noWrap sx={{ maxWidth: 420 }}>
+                      <Link
+                        component={NextLink}
+                        href={`/ecos/${eco.id}`}
+                        underline="hover"
+                        color="inherit"
+                        sx={{
+                          display: "block",
+                          maxWidth: 420,
+                          overflow: "hidden",
+                          textOverflow: "ellipsis",
+                          whiteSpace: "nowrap",
+                          fontSize: 14,
+                        }}
+                      >
                         {eco.title}
-                      </Typography>
+                      </Link>
                     </TableCell>
                     <TableCell>
                       <PriorityChip priority={eco.priority} />
