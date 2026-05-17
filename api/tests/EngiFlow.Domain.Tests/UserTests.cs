@@ -39,7 +39,7 @@ public sealed class UserTests
             CompanyId.New(),
             "reviewer@engiflow.example",
             "Reviewer",
-            UserRole.Reviewer);
+            UserRole.Viewer);
         user.Deactivate();
 
         Assert.Throws<DomainException>(() => user.ChangeRole(UserRole.Approver));

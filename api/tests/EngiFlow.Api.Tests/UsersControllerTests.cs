@@ -1,4 +1,5 @@
 using EngiFlow.Api.Controllers;
+using EngiFlow.Api.Auth;
 using EngiFlow.Api.Models;
 using EngiFlow.Application.Abstractions.Cqrs;
 using EngiFlow.Application.Users.Commands;
@@ -60,13 +61,53 @@ public sealed class UsersControllerTests
     }
 
     [Fact]
-    public void Controller_IsSecuredForAdministrators()
+    public async Task UpdateRoleAsync_DispatchesUpdateUserRoleCommandAndReturnsOk()
+    {
+        var userId = Guid.NewGuid();
+        var updatedUser = new UserSummaryDto(
+            userId,
+            "Grace Hopper",
+            "grace@acme.example",
+            nameof(UserRole.Viewer));
+        var mediator = new FakeApplicationMediator { Dispatch = _ => updatedUser };
+        var controller = new UsersController(mediator);
+
+        var result = await controller.UpdateRoleAsync(
+            userId,
+            new UpdateUserRoleRequest(UserRole.Viewer),
+            CancellationToken.None);
+
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        Assert.Same(updatedUser, ok.Value);
+
+        var command = Assert.IsType<UpdateUserRoleCommand>(mediator.LastRequest);
+        Assert.Equal(userId, command.UserId);
+        Assert.Equal(UserRole.Viewer, command.Role);
+    }
+
+    [Fact]
+    public async Task DeactivateAsync_DispatchesDeactivateUserCommandAndReturnsNoContent()
+    {
+        var userId = Guid.NewGuid();
+        var mediator = new FakeApplicationMediator { Dispatch = _ => true };
+        var controller = new UsersController(mediator);
+
+        var result = await controller.DeactivateAsync(userId, CancellationToken.None);
+
+        Assert.IsType<NoContentResult>(result);
+
+        var command = Assert.IsType<DeactivateUserCommand>(mediator.LastRequest);
+        Assert.Equal(userId, command.UserId);
+    }
+
+    [Fact]
+    public void Controller_IsSecuredForUserManagementPolicy()
     {
         var authorize = Assert.Single(typeof(UsersController)
             .GetCustomAttributes(typeof(AuthorizeAttribute), inherit: true)
             .Cast<AuthorizeAttribute>());
 
-        Assert.Equal(nameof(UserRole.Administrator), authorize.Roles);
+        Assert.Equal("UserManagement", authorize.Policy);
     }
 
     private sealed class FakeApplicationMediator : IApplicationMediator

@@ -2,6 +2,7 @@ using EngiFlow.Application.Exceptions;
 using EngiFlow.Domain.Exceptions;
 using Microsoft.AspNetCore.Diagnostics;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
 using AppValidationException = EngiFlow.Application.Exceptions.ValidationException;
 
 namespace EngiFlow.Api.ExceptionHandling;
@@ -88,6 +89,14 @@ public sealed class GlobalExceptionHandler : IExceptionHandler
                 Title = "Resource not found.",
                 Detail = notFoundException.Message,
                 Type = "https://tools.ietf.org/html/rfc9110#section-15.5.5",
+                Instance = httpContext.Request.Path
+            },
+            DbUpdateConcurrencyException => new ProblemDetails
+            {
+                Status = StatusCodes.Status409Conflict,
+                Title = "Concurrency conflict.",
+                Detail = "The resource was changed by another request. Refresh the latest state and retry.",
+                Type = "https://tools.ietf.org/html/rfc9110#section-15.5.10",
                 Instance = httpContext.Request.Path
             },
             DomainException domainException => new ProblemDetails

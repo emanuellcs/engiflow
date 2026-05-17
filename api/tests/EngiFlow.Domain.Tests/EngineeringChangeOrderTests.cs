@@ -29,15 +29,14 @@ public sealed class EngineeringChangeOrderTests
     }
 
     [Fact]
-    public void ValidTransitionPath_ReachesImplementedAndRecordsAuditTrail()
+    public void ValidTransitionPath_ReachesApprovedAndRecordsReviewAuditTrail()
     {
         var eco = CreateEco();
 
         eco.SubmitForReview(RequesterId);
         eco.Approve(ApproverId);
-        eco.Implement(ApproverId);
 
-        Assert.Equal(EcoStatus.Implemented, eco.Status);
+        Assert.Equal(EcoStatus.Approved, eco.Status);
         Assert.Collection(
             eco.Events,
             e => Assert.Equal(EcoEventType.Created, e.EventType),
@@ -49,15 +48,15 @@ public sealed class EngineeringChangeOrderTests
             },
             e =>
             {
-                Assert.Equal(EcoEventType.Approved, e.EventType);
+                Assert.Equal(EcoEventType.ReviewDecisionSubmitted, e.EventType);
                 Assert.Equal(EcoStatus.UnderReview, e.OldStatus);
-                Assert.Equal(EcoStatus.Approved, e.NewStatus);
+                Assert.Equal(EcoStatus.UnderReview, e.NewStatus);
             },
             e =>
             {
-                Assert.Equal(EcoEventType.Implemented, e.EventType);
-                Assert.Equal(EcoStatus.Approved, e.OldStatus);
-                Assert.Equal(EcoStatus.Implemented, e.NewStatus);
+                Assert.Equal(EcoEventType.Approved, e.EventType);
+                Assert.Equal(EcoStatus.UnderReview, e.OldStatus);
+                Assert.Equal(EcoStatus.Approved, e.NewStatus);
             });
     }
 
@@ -68,36 +67,37 @@ public sealed class EngineeringChangeOrderTests
 
         var exception = Assert.Throws<DomainException>(() => eco.Approve(ApproverId));
 
-        Assert.Contains("cannot transition", exception.Message);
+        Assert.Contains("under review", exception.Message);
         Assert.Equal(EcoStatus.Draft, eco.Status);
         Assert.Single(eco.Events);
     }
 
     [Fact]
-    public void Reject_FromUnderReview_IsTerminal()
+    public void Reject_FromUnderReview_ReturnsEcoToDraftForRevision()
     {
         var eco = CreateEco();
         eco.SubmitForReview(RequesterId);
 
         eco.Reject(ReviewerId, "Specification is incomplete.");
 
-        Assert.Equal(EcoStatus.Rejected, eco.Status);
-        Assert.Equal(3, eco.Events.Count);
+        Assert.Equal(EcoStatus.Draft, eco.Status);
+        Assert.Equal(4, eco.Events.Count);
+        Assert.Single(eco.Comments);
         Assert.False(eco.CanTransitionTo(EcoStatus.Approved));
         Assert.Throws<DomainException>(() => eco.Approve(ApproverId));
         Assert.Throws<DomainException>(() => eco.Implement(ApproverId));
     }
 
     [Fact]
-    public void ImplementedEco_IsTerminalAndNotEditable()
+    public void ApprovedEco_IsTerminalAndNotEditable()
     {
         var eco = CreateEco();
         eco.SubmitForReview(RequesterId);
         eco.Approve(ApproverId);
-        eco.Implement(ApproverId);
 
         Assert.False(eco.CanTransitionTo(EcoStatus.Rejected));
         Assert.Throws<DomainException>(() => eco.Reject(ReviewerId));
+        Assert.Throws<DomainException>(() => eco.Implement(ApproverId));
         Assert.Throws<DomainException>(() => eco.UpdateDetails(
             "Use titanium bracket",
             "Update load-bearing bracket material.",
@@ -122,6 +122,68 @@ public sealed class EngineeringChangeOrderTests
         Assert.Equal(EcoEventType.DetailsUpdated, update.EventType);
         Assert.Equal(EcoStatus.Draft, update.OldStatus);
         Assert.Equal(EcoStatus.Draft, update.NewStatus);
+    }
+
+    [Fact]
+    public void ReviewRounds_DoNotCountOldApprovalsAfterChangesAreRequested()
+    {
+        var eco = CreateEco();
+        eco.SubmitForReview(RequesterId);
+        eco.SubmitReviewDecision(ApproverId, EcoApprovalDecision.Approve, minApprovalsRequired: 2);
+        eco.SubmitReviewDecision(ReviewerId, EcoApprovalDecision.RequestChanges, minApprovalsRequired: 2, "Revise drawing.");
+
+        eco.SubmitForReview(RequesterId);
+        eco.SubmitReviewDecision(ReviewerId, EcoApprovalDecision.Approve, minApprovalsRequired: 2);
+
+        Assert.Equal(EcoStatus.UnderReview, eco.Status);
+
+        eco.SubmitReviewDecision(ApproverId, EcoApprovalDecision.Approve, minApprovalsRequired: 2);
+
+        Assert.Equal(EcoStatus.Approved, eco.Status);
+        Assert.Equal(2, eco.ReviewRound);
+        Assert.Equal(4, eco.Approvals.Count);
+    }
+
+    [Fact]
+    public void DraftArtifactsAndComments_AreCapturedInTimeline()
+    {
+        var eco = CreateEco();
+
+        var affectedItem = eco.AddAffectedItem(
+            "BRK-1001",
+            "Load-bearing bracket",
+            "A",
+            "B",
+            EcoAffectedItemAction.Modify,
+            RequesterId);
+        var attachment = eco.AddAttachment(
+            "analysis.pdf",
+            1024,
+            "tenants/company/ecos/eco/attachments/analysis.pdf",
+            "application/pdf",
+            RequesterId);
+        var comment = eco.AddComment("Updated tolerance analysis is attached.", RequesterId);
+
+        Assert.Equal(affectedItem, Assert.Single(eco.AffectedItems));
+        Assert.Equal(attachment, Assert.Single(eco.Attachments));
+        Assert.Equal(comment, Assert.Single(eco.Comments));
+        Assert.Contains(eco.Events, ecoEvent => ecoEvent.EventType == EcoEventType.AffectedItemAdded);
+        Assert.Contains(eco.Events, ecoEvent => ecoEvent.EventType == EcoEventType.AttachmentAdded);
+        Assert.Contains(eco.Events, ecoEvent => ecoEvent.EventType == EcoEventType.CommentAdded);
+    }
+
+    [Fact]
+    public void Cancel_FromUnderReview_IsTerminal()
+    {
+        var eco = CreateEco();
+        eco.SubmitForReview(RequesterId);
+
+        eco.Cancel(RequesterId);
+
+        Assert.Equal(EcoStatus.Canceled, eco.Status);
+        Assert.False(eco.CanTransitionTo(EcoStatus.Draft));
+        Assert.Throws<DomainException>(() => eco.AddComment("Cannot comment.", RequesterId));
+        Assert.Throws<DomainException>(() => eco.Approve(ApproverId));
     }
 
     [Fact]

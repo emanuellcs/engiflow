@@ -139,7 +139,13 @@ public sealed class EcosControllerTests
         Assert.Contains(controllerAuthorize, attribute => attribute.Policy is null);
 
         Assert.Equal("EcoAuthoring", GetAuthorizePolicy(nameof(EcosController.CreateAsync)));
+        Assert.Equal("EcoAuthoring", GetAuthorizePolicy(nameof(EcosController.UpdateDetailsAsync)));
+        Assert.Equal("EcoAuthoring", GetAuthorizePolicy(nameof(EcosController.AddAffectedItemAsync)));
+        Assert.Equal("EcoAuthoring", GetAuthorizePolicy(nameof(EcosController.RemoveAffectedItemAsync)));
+        Assert.Equal("EcoAuthoring", GetAuthorizePolicy(nameof(EcosController.UploadAttachmentAsync)));
         Assert.Equal("EcoAuthoring", GetAuthorizePolicy(nameof(EcosController.SubmitAsync)));
+        Assert.Equal("EcoAuthoring", GetAuthorizePolicy(nameof(EcosController.CancelAsync)));
+        Assert.Equal("EcoApproval", GetAuthorizePolicy(nameof(EcosController.SubmitReviewDecisionAsync)));
         Assert.Equal("EcoApproval", GetAuthorizePolicy(nameof(EcosController.ApproveAsync)));
         Assert.Equal("EcoApproval", GetAuthorizePolicy(nameof(EcosController.RejectAsync)));
     }

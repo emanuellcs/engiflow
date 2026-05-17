@@ -1,3 +1,4 @@
+using EngiFlow.Api.Auth;
 using EngiFlow.Api.Models;
 using EngiFlow.Application.Abstractions.Cqrs;
 using EngiFlow.Application.Users.Commands;
@@ -12,7 +13,7 @@ namespace EngiFlow.Api.Controllers;
 /// Provides administrator user-management endpoints for the current tenant.
 /// </summary>
 [ApiController]
-[Authorize(Roles = "Administrator")]
+[Authorize(Policy = EngiFlowAuthorizationPolicies.UserManagement)]
 [Route("api/users")]
 [Produces("application/json")]
 public sealed class UsersController : ControllerBase
@@ -35,7 +36,7 @@ public sealed class UsersController : ControllerBase
     /// <returns>The active tenant users.</returns>
     /// <response code="200">The tenant users were returned.</response>
     /// <response code="401">A valid bearer token is required.</response>
-    /// <response code="403">The authenticated user is not an administrator.</response>
+    /// <response code="403">The authenticated user is not allowed to manage users.</response>
     /// <response code="500">An unexpected server error occurred.</response>
     [HttpGet]
     [ProducesResponseType(typeof(IReadOnlyList<UserSummaryDto>), StatusCodes.Status200OK)]
@@ -62,7 +63,7 @@ public sealed class UsersController : ControllerBase
     /// <response code="201">The user was created.</response>
     /// <response code="400">The request body failed application validation.</response>
     /// <response code="401">A valid bearer token is required.</response>
-    /// <response code="403">The authenticated user is not an administrator.</response>
+    /// <response code="403">The authenticated user is not allowed to manage users.</response>
     /// <response code="500">An unexpected server error occurred.</response>
     [HttpPost]
     [ProducesResponseType(typeof(UserSummaryDto), StatusCodes.Status201Created)]
@@ -84,5 +85,82 @@ public sealed class UsersController : ControllerBase
             .ConfigureAwait(false);
 
         return Created("/api/users", user);
+    }
+
+    /// <summary>
+    /// Changes a tenant user's role.
+    /// </summary>
+    /// <remarks>
+    /// Role changes enforce inter-management protections: users cannot change their own role,
+    /// Owner users are immutable, and no endpoint can promote a user to Owner.
+    /// </remarks>
+    /// <param name="id">The target user identifier.</param>
+    /// <param name="request">The replacement role.</param>
+    /// <param name="cancellationToken">A token that can cancel the request.</param>
+    /// <returns>The updated user summary.</returns>
+    /// <response code="200">The role was updated.</response>
+    /// <response code="400">The request failed application validation.</response>
+    /// <response code="401">A valid bearer token is required.</response>
+    /// <response code="403">The authenticated user is not allowed to manage the target user.</response>
+    /// <response code="404">The target user was not found.</response>
+    /// <response code="409">A role immutability rule rejected the request.</response>
+    /// <response code="500">An unexpected server error occurred.</response>
+    [HttpPatch("{id:guid}/role")]
+    [ProducesResponseType(typeof(UserSummaryDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ValidationProblemDetails), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status409Conflict)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status500InternalServerError)]
+    public async Task<ActionResult<UserSummaryDto>> UpdateRoleAsync(
+        Guid id,
+        [FromBody] UpdateUserRoleRequest request,
+        CancellationToken cancellationToken)
+    {
+        var user = await _mediator.SendCommandAsync<UpdateUserRoleCommand, UserSummaryDto>(
+                new UpdateUserRoleCommand(id, request.Role),
+                cancellationToken)
+            .ConfigureAwait(false);
+
+        return Ok(user);
+    }
+
+    /// <summary>
+    /// Deactivates a tenant user without deleting their database row.
+    /// </summary>
+    /// <remarks>
+    /// This endpoint is exposed as HTTP DELETE for client ergonomics, but the command performs
+    /// a soft delete by setting the user inactive. Inactive users are hidden by the EF Core
+    /// global query filter and cannot authenticate.
+    /// </remarks>
+    /// <param name="id">The target user identifier.</param>
+    /// <param name="cancellationToken">A token that can cancel the request.</param>
+    /// <returns>No content when the user is deactivated.</returns>
+    /// <response code="204">The user was deactivated.</response>
+    /// <response code="400">The route identifier failed application validation.</response>
+    /// <response code="401">A valid bearer token is required.</response>
+    /// <response code="403">The authenticated user is not allowed to manage the target user.</response>
+    /// <response code="404">The target user was not found.</response>
+    /// <response code="409">A user immutability rule rejected the request.</response>
+    /// <response code="500">An unexpected server error occurred.</response>
+    [HttpDelete("{id:guid}")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(typeof(ValidationProblemDetails), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status409Conflict)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status500InternalServerError)]
+    public async Task<IActionResult> DeactivateAsync(
+        Guid id,
+        CancellationToken cancellationToken)
+    {
+        await _mediator.SendCommandAsync<DeactivateUserCommand, bool>(
+                new DeactivateUserCommand(id),
+                cancellationToken)
+            .ConfigureAwait(false);
+
+        return NoContent();
     }
 }

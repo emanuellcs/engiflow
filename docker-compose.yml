@@ -21,6 +21,49 @@ services:
     networks:
       - engiflow
 
+  minio:
+    # S3-compatible object storage for ECO attachments in local development.
+    image: minio/minio:RELEASE.2025-09-07T16-13-09Z-cpuv1
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-minioadmin}
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - minio-data:/data
+    networks:
+      - engiflow
+
+  minio-init:
+    # Creates the attachment bucket on local startup.
+    image: minio/mc:RELEASE.2025-08-13T08-35-41Z-cpuv1
+    depends_on:
+      minio:
+        condition: service_started
+    entrypoint:
+      - /bin/sh
+      - -c
+      - >
+        until mc alias set local http://minio:9000 "${MINIO_ROOT_USER:-minioadmin}" "${MINIO_ROOT_PASSWORD:-minioadmin}"; do sleep 2; done &&
+        mc mb -p "local/${MINIO_BUCKET:-engiflow-attachments}" || true
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-minioadmin}
+      MINIO_BUCKET: ${MINIO_BUCKET:-engiflow-attachments}
+    networks:
+      - engiflow
+
+  mailpit:
+    # Local SMTP sink used for password-recovery development and tests.
+    image: axllent/mailpit:v1.30.0
+    ports:
+      - "1025:1025"
+      - "8025:8025"
+    networks:
+      - engiflow
+
   api:
     # Production-style image for the ASP.NET Core boundary of the Clean Architecture stack.
     build:
@@ -29,10 +72,25 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+      minio-init:
+        condition: service_completed_successfully
+      mailpit:
+        condition: service_started
     environment:
       ASPNETCORE_ENVIRONMENT: Development
       ASPNETCORE_URLS: http://+:8080
       ConnectionStrings__DefaultConnection: Host=postgres;Port=5432;Database=${POSTGRES_DB:-engiflow};Username=${POSTGRES_USER:-engiflow};Password=${POSTGRES_PASSWORD:-engiflow_dev_password}
+      EngiFlow__Storage__S3__BucketName: ${MINIO_BUCKET:-engiflow-attachments}
+      EngiFlow__Storage__S3__Region: us-east-1
+      EngiFlow__Storage__S3__ServiceUrl: http://minio:9000
+      EngiFlow__Storage__S3__AccessKey: ${MINIO_ROOT_USER:-minioadmin}
+      EngiFlow__Storage__S3__SecretKey: ${MINIO_ROOT_PASSWORD:-minioadmin}
+      EngiFlow__Storage__S3__ForcePathStyle: "true"
+      EngiFlow__Email__Smtp__Host: mailpit
+      EngiFlow__Email__Smtp__Port: "1025"
+      EngiFlow__Email__Smtp__UseStartTls: "false"
+      EngiFlow__Email__Smtp__FromEmail: no-reply@engiflow.local
+      EngiFlow__Email__Smtp__FromName: EngiFlow
     ports:
       - "8080:8080"
     networks:
@@ -66,3 +124,5 @@ networks:
 volumes:
   # Named volume keeps PostgreSQL data outside the container lifecycle.
   postgres-data:
+  # Named volume keeps MinIO object data outside the container lifecycle.
+  minio-data:

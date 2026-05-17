@@ -43,6 +43,10 @@ internal sealed class EngineeringChangeOrderRepository : IEngineeringChangeOrder
     {
         return _dbContext.EngineeringChangeOrders
             .Include(eco => eco.Events)
+            .Include(eco => eco.Comments)
+            .Include(eco => eco.AffectedItems)
+            .Include(eco => eco.Approvals)
+            .Include(eco => eco.Attachments)
             .SingleOrDefaultAsync(eco => eco.Id == id, cancellationToken);
     }
 

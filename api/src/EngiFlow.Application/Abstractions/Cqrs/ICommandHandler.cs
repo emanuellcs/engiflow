@@ -1,3 +1,5 @@
+using MediatR;
+
 namespace EngiFlow.Application.Abstractions.Cqrs;
 
 /// <summary>
@@ -5,7 +7,7 @@ namespace EngiFlow.Application.Abstractions.Cqrs;
 /// </summary>
 /// <typeparam name="TCommand">The command request type.</typeparam>
 /// <typeparam name="TResponse">The response DTO produced by the handler.</typeparam>
-public interface ICommandHandler<in TCommand, TResponse>
+public interface ICommandHandler<in TCommand, TResponse> : IRequestHandler<TCommand, TResponse>
     where TCommand : ICommand<TResponse>
 {
     /// <summary>
@@ -15,4 +17,12 @@ public interface ICommandHandler<in TCommand, TResponse>
     /// <param name="cancellationToken">A token that can cancel command execution.</param>
     /// <returns>The command response DTO.</returns>
     Task<TResponse> HandleAsync(TCommand command, CancellationToken cancellationToken = default);
+
+    /// <inheritdoc />
+    Task<TResponse> IRequestHandler<TCommand, TResponse>.Handle(
+        TCommand request,
+        CancellationToken cancellationToken)
+    {
+        return HandleAsync(request, cancellationToken);
+    }
 }

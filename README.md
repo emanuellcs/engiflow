@@ -11,7 +11,7 @@
 
 EngiFlow is a multi-tenant B2B SaaS platform for engineering teams that need a controlled, auditable process for Engineering Change Orders (ECOs). An ECO represents a formal request to change an engineering artifact, such as a material selection, CAD specification, manufacturing tolerance, or implementation procedure.
 
-The platform is designed around strict tenant isolation, JWT-backed role-based access control, a domain-owned approval state machine, and an immutable audit trail. The current repository contains the foundational local orchestration, domain model, application use cases, EF Core PostgreSQL persistence layer, secured ASP.NET Core API surface, and self-service company onboarding.
+The platform is designed around strict tenant isolation, JWT-backed role-based access control, a domain-owned approval state machine, optimistic concurrency, S3-compatible attachment storage, real-time tenant updates, and an immutable audit trail. The current repository contains the foundational local orchestration, domain model, application use cases, EF Core PostgreSQL persistence layer, secured ASP.NET Core API surface, and self-service company onboarding.
 
 ## Project Overview
 
@@ -19,9 +19,10 @@ Engineering changes frequently affect cost, quality, compliance, safety, and pro
 
 - ECOs are created as drafts.
 - Drafts can be edited before review.
-- Review is required before approval or rejection.
-- Approved ECOs can be implemented.
-- Rejected and implemented ECOs are terminal.
+- Review is required before approval.
+- Approvers can request changes, which returns the ECO to draft and starts a new review round on resubmission.
+- Tenant quorum settings determine how many current-round approvals are required.
+- Approved and canceled ECOs are terminal in the active workflow.
 - Every material business action produces an audit event.
 
 Multi-tenancy is a first-class architectural constraint. Company identity is modeled as the tenant boundary, and tenant-scoped entities carry a `CompanyId` so infrastructure can enforce global query filters and data isolation from the tenant claim in the authenticated JWT.
@@ -37,10 +38,14 @@ flowchart LR
         Web["web: Next.js standalone server<br/>Port 3000"]
         Api["api: ASP.NET Core Web API<br/>Port 8080"]
         Db[("postgres: PostgreSQL<br/>Port 5432<br/>Named volume")]
+        Minio[("minio: S3-compatible storage<br/>Ports 9000/9001")]
+        Mailpit["mailpit: SMTP sink<br/>Ports 1025/8025"]
 
         Browser --> Web
         Web --> Api
         Api --> Db
+        Api --> Minio
+        Api --> Mailpit
     end
 
     subgraph FutureAws["Future AWS Topology"]
@@ -49,11 +54,13 @@ flowchart LR
         ApiRunner["AWS App Runner<br/>API service"]
         Rds[("Amazon RDS for PostgreSQL")]
         S3[("Amazon S3<br/>attachments and exports")]
+        Ses["SMTP provider or SES"]
 
         CloudFront --> WebRunner
         WebRunner --> ApiRunner
         ApiRunner --> Rds
         ApiRunner --> S3
+        ApiRunner --> Ses
     end
 
     Web -. deployment analogue .-> WebRunner
@@ -72,19 +79,22 @@ The API is split into four projects:
 
 The current domain foundation is intentionally rich. The `EngineeringChangeOrder` aggregate owns its state transitions and creates `EcoEvent` audit records during business operations so callers cannot bypass the approval workflow or forget audit history. Infrastructure persists those pending audit events through a SaveChanges interceptor so application code does not need a second manual audit insert.
 
-The Application layer exposes EngiFlow-owned CQRS primitives instead of depending on an external mediator package. Commands and queries implement `ICommand<TResponse>` or `IQuery<TResponse>`, handlers implement the matching handler contracts, and `IApplicationMediator` dispatches requests through ordered pipeline behaviors. `ValidationBehavior<TRequest, TResponse>` runs FluentValidation validators before handlers execute and throws the custom application `ValidationException` with errors grouped by request property.
+The Application layer exposes EngiFlow-owned CQRS primitives on top of MediatR. Commands and queries implement `ICommand<TResponse>` or `IQuery<TResponse>`, which adapt to `IRequest<TResponse>` while controllers continue to dispatch through `IApplicationMediator`. `ValidationBehavior<TRequest, TResponse>` runs FluentValidation validators before handlers execute. Infrastructure registers `TransactionBehavior<TRequest, TResponse>`, which wraps commands, not queries, in an EF Core transaction, commits on success, rolls back on exceptions, and executes registered external compensations such as S3 object deletion.
 
 Implemented application use cases:
 
 - `LoginQuery`: validates email/password credentials and returns an enriched authenticated session with a JWT bearer token, user name, company name, and roles.
-- `RegisterCompanyCommand`: creates a new company tenant, first administrator, password hash, and immediate enriched authenticated session.
-- `ForgotPasswordCommand`: accepts a reset request and logs an MVP mock reset link.
-- `ListUsersQuery`: lists active users in the current tenant for administrators.
-- `CreateUserCommand`: creates an active Requester or Approver user in the current tenant.
+- `RegisterCompanyCommand`: creates a new company tenant, first Owner, default company settings, password hash, and immediate enriched authenticated session.
+- `ForgotPasswordCommand`: accepts a reset request and sends the reset link through SMTP.
+- `ListUsersQuery`: lists active users in the current tenant for Owners and Administrators.
+- `CreateUserCommand`: creates an active Administrator, Approver, Requester, or Viewer in the current tenant.
+- `UpdateUserRoleCommand` and `DeactivateUserCommand`: enforce Owner immutability, self-role-change protection, and soft-delete deactivation.
 - `CreateEcoCommand`: creates a draft ECO for the current tenant and current user.
+- `UpdateEcoDetailsCommand`, `AddAffectedItemCommand`, `RemoveAffectedItemCommand`, `AddCommentCommand`, and `UploadAttachmentCommand`: manage draft ECO content, timeline comments, engineering diff rows, and S3 attachment metadata.
 - `SubmitEcoCommand`: transitions a draft ECO to under review.
-- `ApproveEcoCommand`: transitions an ECO under review to approved.
-- `RejectEcoCommand`: transitions an ECO under review to rejected with a required reason.
+- `SubmitReviewDecisionCommand`: records Approve or RequestChanges decisions and applies tenant quorum rules.
+- `ApproveEcoCommand` and `RejectEcoCommand`: compatibility wrappers over the review-decision workflow.
+- `CancelEcoCommand`: transitions nonterminal ECOs to canceled.
 - `GetEcoByIdQuery`: retrieves one ECO with sorted audit history.
 - `ListEcosQuery`: retrieves a tenant-scoped paginated list of ECO summaries.
 
@@ -92,11 +102,12 @@ Implemented application use cases:
 stateDiagram-v2
     [*] --> Draft: Create ECO
     Draft --> UnderReview: SubmitForReview
-    UnderReview --> Approved: Approve
-    UnderReview --> Rejected: Reject
-    Approved --> Implemented: Implement
-    Rejected --> [*]
-    Implemented --> [*]
+    Draft --> Canceled: Cancel
+    UnderReview --> Approved: Approve quorum met
+    UnderReview --> Draft: RequestChanges
+    UnderReview --> Canceled: Cancel
+    Approved --> [*]
+    Canceled --> [*]
 
     note right of Draft
         Draft ECOs can be edited.
@@ -104,14 +115,14 @@ stateDiagram-v2
     end note
 
     note right of UnderReview
-        Approval or rejection must be explicit.
+        Approvals count only for the active review round.
     end note
 
-    note right of Rejected
+    note right of Approved
         Terminal state.
     end note
 
-    note right of Implemented
+    note right of Canceled
         Terminal state.
     end note
 ```
@@ -141,11 +152,12 @@ The current frontend foundation includes:
 | Area | Technology |
 | --- | --- |
 | Frontend | Next.js 16, React 19, TypeScript, Material UI |
-| Backend | ASP.NET Core Web API, JWT bearer authentication, .NET 10, C# |
+| Backend | ASP.NET Core Web API, SignalR, JWT bearer authentication, .NET 10, C# |
 | Domain | Clean Architecture, Domain-Driven Design, rich aggregates |
-| Application | Custom CQRS mediator, FluentValidation, DTO-based use cases |
-| Persistence | EF Core 10, Npgsql, PostgreSQL 18 |
-| Orchestration | Docker Compose with a dedicated bridge network |
+| Application | MediatR-backed CQRS, FluentValidation, transactional pipeline behaviors, DTO-based use cases |
+| Persistence | EF Core 10, Npgsql, PostgreSQL 18, xmin optimistic concurrency |
+| Integrations | AWSSDK.S3 for S3/MinIO attachments, MailKit SMTP for password reset email |
+| Orchestration | Docker Compose with PostgreSQL, MinIO, Mailpit, and a dedicated bridge network |
 | Testing | xUnit for API, application, domain, and infrastructure tests |
 | Future Infrastructure | AWS App Runner, Amazon RDS for PostgreSQL, Amazon S3, Terraform |
 
@@ -175,8 +187,10 @@ This starts:
 | `api` | `http://localhost:8080` | ASP.NET Core API |
 | `api` Swagger UI | `http://localhost:8080/swagger` | Interactive API documentation in Development |
 | `postgres` | `localhost:5432` | Local PostgreSQL database |
+| `minio` | `http://localhost:9001` | Local S3-compatible attachment store console |
+| `mailpit` | `http://localhost:8025` | Local password-reset email inbox |
 
-PostgreSQL uses the named Docker volume `postgres-data`, so local database state survives container restarts and rebuilds. The volume is mounted at `/var/lib/postgresql` to match the PostgreSQL 18 Docker image data layout.
+PostgreSQL uses the named Docker volume `postgres-data`, and MinIO uses `minio-data`, so local database and object state survive container restarts and rebuilds. The attachment bucket defaults to `engiflow-attachments`.
 
 ### Frontend Configuration
 
@@ -192,20 +206,20 @@ For non-Docker local development, the proxy falls back to `http://localhost:8080
 Authorization: Bearer <accessToken>
 ```
 
-When the API returns `401 Unauthorized`, the frontend clears the stored session, emits an auth-state event, and redirects browser clients to `/login`. The login page submits credentials to `POST /api/auth/login`, stores the returned auth session through the authentication context, and redirects successful sign-ins to `/`. If "Remember me" is enabled the session is stored in `localStorage`; otherwise it is stored in `sessionStorage`. The login page also submits forgot-password requests to `POST /api/auth/forgot-password` and shows a neutral success message when the request is accepted. New companies can use `/register`, which submits to `POST /api/auth/register-company`, stores the returned auth session as remembered, and redirects the new administrator to `/`. The authenticated route group protects `/`, `/ecos`, `/ecos/new`, `/ecos/[id]`, and `/settings/users`; `/` displays the metrics dashboard placeholder, `/ecos` fetches the ECO list from `GET /api/ecos?pageNumber=1&pageSize=20`, `/ecos/new` posts to `POST /api/ecos`, `/ecos/[id]` reads `GET /api/ecos/{id}` plus workflow transitions through `PUT /api/ecos/{id}/submit`, `PUT /api/ecos/{id}/approve`, and `PUT /api/ecos/{id}/reject`, and `/settings/users` reads `GET /api/users` plus creates Requester or Approver users through `POST /api/users`.
+When the API returns `401 Unauthorized`, the frontend clears the stored session, emits an auth-state event, and redirects browser clients to `/login`. The login page submits credentials to `POST /api/auth/login`, stores the returned auth session through the authentication context, and redirects successful sign-ins to `/`. If "Remember me" is enabled the session is stored in `localStorage`; otherwise it is stored in `sessionStorage`. The login page also submits forgot-password requests to `POST /api/auth/forgot-password`; in local Docker those messages are visible in Mailpit at `http://localhost:8025`. New companies can use `/register`, which submits to `POST /api/auth/register-company`, stores the returned auth session as remembered, and redirects the new Owner to `/`. Existing frontend ECO screens still use the compatibility approve/reject routes; the backend now also exposes the PR-like review-decision, comment, affected-item, attachment, and cancel routes listed below.
 
 The API reads `ConnectionStrings:DefaultConnection`. Docker Compose supplies the container connection string, while `api/src/EngiFlow.Api/appsettings.Development.json` points local `dotnet run` usage at `localhost:5432`.
 
 ### Security and Default Login
 
-In `Development`, the API applies EF Core migrations at startup and seeds a default company plus administrator when the database has no companies. The seeded credentials are for local development only:
+In `Development`, the API applies EF Core migrations at startup and seeds a default company plus Owner when the database has no companies. The seeded credentials are for local development only:
 
 | Field | Value |
 | --- | --- |
 | Company | `EngiFlow Demo Company` |
 | Email | `admin@engiflow.local` |
 | Password | `EngiFlow_Admin_123!` |
-| Role | `Administrator` |
+| Role | `Owner` |
 
 Authenticate with:
 
@@ -219,7 +233,7 @@ New companies can self-register with:
 http://localhost:3000/register
 ```
 
-The first administrator password must be at least 12 characters and include uppercase, lowercase, numeric, and symbol characters.
+The first user is the tenant `Owner`. Their password must be at least 12 characters and include uppercase, lowercase, numeric, and symbol characters.
 
 Or call the API directly:
 
@@ -257,6 +271,34 @@ JWT settings are read from `EngiFlow:Authentication:Jwt`:
 
 `appsettings.Development.json` includes a development signing key. Production deployments must override `SigningKey`, `Issuer`, and `Audience` through environment-specific configuration or secret management.
 
+Attachment storage and password-reset email use these configuration sections:
+
+```json
+{
+  "EngiFlow": {
+    "Storage": {
+      "S3": {
+        "BucketName": "engiflow-attachments",
+        "Region": "us-east-1",
+        "ServiceUrl": "http://localhost:9000",
+        "AccessKey": "minioadmin",
+        "SecretKey": "minioadmin",
+        "ForcePathStyle": true
+      }
+    },
+    "Email": {
+      "Smtp": {
+        "Host": "localhost",
+        "Port": 1025,
+        "UseStartTls": false,
+        "FromEmail": "no-reply@engiflow.local",
+        "FromName": "EngiFlow"
+      }
+    }
+  }
+}
+```
+
 ### API Documentation and ECO Workflow
 
 The API exposes Swagger UI in the `Development` environment. With Docker Compose, open:
@@ -290,16 +332,26 @@ The current REST surface is:
 | Method | Route | Purpose |
 | --- | --- | --- |
 | `POST` | `/api/auth/login` | Authenticate and issue a JWT bearer token |
-| `POST` | `/api/auth/register-company` | Create a company tenant, first administrator, and JWT bearer token |
-| `POST` | `/api/auth/forgot-password` | Accept a forgot-password request and log a mock reset link |
-| `GET` | `/api/users` | List active users in the current tenant; requires `Administrator` |
-| `POST` | `/api/users` | Create a Requester or Approver in the current tenant; requires `Administrator` |
+| `POST` | `/api/auth/register-company` | Create a company tenant, first Owner, default settings, and JWT bearer token |
+| `POST` | `/api/auth/forgot-password` | Accept a forgot-password request and send an SMTP reset email |
+| `GET` | `/api/users` | List active users in the current tenant; requires Owner or Administrator |
+| `POST` | `/api/users` | Create an Administrator, Approver, Requester, or Viewer; requires Owner or Administrator |
+| `PATCH` | `/api/users/{id}/role` | Change a user's role while enforcing Owner immutability and self-role-change protections |
+| `DELETE` | `/api/users/{id}` | Soft-delete a user by deactivating them |
 | `POST` | `/api/ecos` | Create a draft ECO |
 | `GET` | `/api/ecos/{id}` | Retrieve one ECO with audit history |
 | `GET` | `/api/ecos?pageNumber=1&pageSize=20` | List paged ECO summaries |
+| `PUT` | `/api/ecos/{id}/details` | Update draft ECO title, description, and priority |
+| `POST` | `/api/ecos/{id}/affected-items` | Add a draft ECO affected-item diff row |
+| `DELETE` | `/api/ecos/{id}/affected-items/{itemId}` | Remove a draft ECO affected-item diff row |
+| `POST` | `/api/ecos/{id}/comments` | Add a timeline comment to a non-canceled ECO |
+| `POST` | `/api/ecos/{id}/attachments` | Upload a validated multipart attachment to S3/MinIO and record metadata |
 | `PUT` | `/api/ecos/{id}/submit` | Submit a draft ECO for review |
-| `PUT` | `/api/ecos/{id}/approve` | Approve an ECO under review |
-| `PUT` | `/api/ecos/{id}/reject` | Reject an ECO under review |
+| `POST` | `/api/ecos/{id}/review-decisions` | Submit `Approve` or `RequestChanges` for the active review round |
+| `PUT` | `/api/ecos/{id}/cancel` | Cancel a draft or under-review ECO |
+| `PUT` | `/api/ecos/{id}/approve` | Compatibility approval route |
+| `PUT` | `/api/ecos/{id}/reject` | Compatibility request-changes route |
+| SignalR | `/hubs/ecos` | Authenticated tenant group for committed ECO timeline/status updates |
 
 Example flow:
 
@@ -339,6 +391,11 @@ curl -X POST http://localhost:8080/api/users \
     "role": "Approver"
   }'
 
+curl -X PATCH http://localhost:8080/api/users/<user-id>/role \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{ "role": "Viewer" }'
+
 curl -X POST http://localhost:8080/api/ecos \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
@@ -354,19 +411,41 @@ curl "http://localhost:8080/api/ecos?pageNumber=1&pageSize=20" \
 curl http://localhost:8080/api/ecos/<eco-id> \
   -H "Authorization: Bearer $TOKEN"
 
+curl -X POST http://localhost:8080/api/ecos/<eco-id>/affected-items \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "partNumber": "BRK-1001",
+    "description": "Load-bearing bracket",
+    "currentRevision": "A",
+    "newRevision": "B",
+    "action": "Modify"
+  }'
+
+curl -X POST http://localhost:8080/api/ecos/<eco-id>/comments \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{ "body": "Updated tolerance analysis is attached." }'
+
+curl -X POST http://localhost:8080/api/ecos/<eco-id>/attachments \
+  -H "Authorization: Bearer $TOKEN" \
+  -F "file=@./sample.pdf;type=application/pdf"
+
 curl -X PUT http://localhost:8080/api/ecos/<eco-id>/submit \
   -H "Authorization: Bearer $TOKEN"
 
-curl -X PUT http://localhost:8080/api/ecos/<eco-id>/approve \
-  -H "Authorization: Bearer $TOKEN"
-
-curl -X PUT http://localhost:8080/api/ecos/<eco-id>/reject \
+curl -X POST http://localhost:8080/api/ecos/<eco-id>/review-decisions \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
-  -d '{ "reason": "Specification is incomplete." }'
+  -d '{ "decision": "Approve", "comment": "Meets release criteria." }'
+
+curl -X POST http://localhost:8080/api/ecos/<eco-id>/review-decisions \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{ "decision": "RequestChanges", "comment": "Specification is incomplete." }'
 ```
 
-ECO routes require authentication. Create and submit require `Requester` or `Administrator`; approve and reject require `Approver` or `Administrator`; reads require any authenticated role.
+ECO routes require authentication. Create, draft edits, attachments, submit, and cancel require `Owner`, `Administrator`, or `Requester`; review decisions require `Owner`, `Administrator`, or `Approver`; reads and comments require any authenticated active user. User-management routes require `Owner` or `Administrator`, but Owner users cannot be deactivated or have their role changed, users cannot change their own role, and no endpoint can create or promote a user to Owner.
 
 ### API Error Handling
 
@@ -378,6 +457,7 @@ The API uses a global ASP.NET Core exception handler that returns RFC 7807 `Prob
 | Application `ValidationException` | `400 Bad Request` | `ValidationProblemDetails` with `errors` grouped by field |
 | `EntityNotFoundException` | `404 Not Found` | `ProblemDetails` with the missing resource detail |
 | Domain `DomainException` | `409 Conflict` | `ProblemDetails` with the violated business rule |
+| EF Core `DbUpdateConcurrencyException` | `409 Conflict` | `ProblemDetails` instructing the client to refresh and retry |
 | Unhandled exception | `500 Internal Server Error` | Generic `ProblemDetails`; full details are logged server-side |
 
 Validation responses are designed for frontend form rendering:
@@ -461,23 +541,24 @@ dotnet test api/tests/EngiFlow.Domain.Tests/EngiFlow.Domain.Tests.csproj
 The current tests cover:
 
 - Company tenant preservation.
-- User validation and active-user invariants.
+- User validation, active-user invariants, Owner immutability, role validation, and soft-delete behavior.
 - ECO creation in draft status.
-- Valid approval flow from draft to implemented.
+- Valid approval flow from draft to under review to approved.
 - Invalid transitions such as approving directly from draft.
-- Rejected and implemented terminal states.
-- Audit event creation for ECO creation, edits, and transitions.
-- Application CQRS validation behavior.
-- Company registration validation, tenant bootstrap persistence, first administrator creation, login validation, credential verification, JWT claim issuance, and HTTP tenant claim resolution.
-- Forgot-password validation and mock reset-link logging.
-- Administrator user-management listing and Requester/Approver creation validation.
-- ECO command handlers for create, submit, approve, and reject.
+- RequestChanges returning ECOs to draft without counting old-round approvals toward future quorum.
+- Approved and canceled terminal states.
+- Audit event creation for ECO creation, details, affected items, comments, attachments, review decisions, and transitions.
+- Application CQRS validation behavior and MediatR-backed command handlers.
+- Company registration validation, tenant bootstrap persistence, first Owner creation, default company settings, login validation, credential verification, JWT claim issuance, and HTTP tenant claim resolution.
+- Forgot-password validation and SMTP sender dispatch.
+- Owner/Administrator user-management listing, creation, role update, and deactivation validation.
+- ECO command handlers for create, edit, submit, review decisions, cancellation, and compatibility approval/request-changes routes.
 - ECO query handlers for detail retrieval and paginated lists.
 - Infrastructure tenant query filters.
 - Tenant-scoped write validation and new-company bootstrap write allowance.
 - Password hash persistence metadata and authentication lookup behavior.
 - ECO audit-event persistence interception.
-- Strongly typed identifier and enum conversion metadata.
+- Strongly typed identifier, enum conversion, relationship, settings, and xmin concurrency metadata.
 
 Run the full API solution test suite:
 
@@ -529,12 +610,13 @@ The web build uses Next.js standalone output for the Docker runtime image. In re
 
 ## Current Scope
 
-This foundation includes local orchestration, the core domain model, Application-layer CQRS use cases, validation, EF Core persistence, migrations, JWT authentication, role-based authorization policies, secured ECO/API controllers, public company registration, forgot-password MVP reset logging, administrator user management, Swagger bearer support, frontend MUI SSR/auth/API plumbing, remember-me session storage, client-side root route protection, the protected ECO summary dashboard, frontend ECO creation/detail workflows, and application/domain/infrastructure/API tests. It intentionally does not yet include file storage, email invitation delivery, refresh tokens, or cloud deployment automation.
+This foundation includes local orchestration, the core domain model, MediatR-backed Application-layer CQRS use cases, validation, transactional command behavior, EF Core persistence, migrations, JWT authentication, role-based authorization policies, secured ECO/API controllers, public company registration, Mailpit-backed forgot-password email, Owner/Administrator user management, soft-delete users, S3/MinIO attachment storage with compensation, SignalR tenant broadcasts, Swagger bearer support, frontend MUI SSR/auth/API plumbing, remember-me session storage, client-side root route protection, the protected ECO summary dashboard, frontend ECO creation/detail workflows, and application/domain/infrastructure/API tests. It intentionally does not yet include refresh tokens, production invitation delivery, advanced notification preferences, or cloud deployment automation.
 
 Those concerns should build on the current boundaries rather than bypass them:
 
 - Persistence enforces `ITenantScoped` filters and strongly typed identifier conversions.
 - API endpoints should dispatch Application commands and queries through `IApplicationMediator`.
 - Application command handlers should call aggregate methods instead of mutating status directly.
+- External side effects inside commands should register compensations with `IExternalOperationCompensation`.
 - Audit history should remain append-only.
 - Tenant identity should be resolved centrally from authenticated JWT claims and applied consistently across queries and commands.

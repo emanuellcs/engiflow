@@ -9,6 +9,7 @@ using EngiFlow.Application.Ecos.Commands;
 using EngiFlow.Application.Ecos.Dtos;
 using EngiFlow.Application.Ecos.Queries;
 using EngiFlow.Application.Exceptions;
+using EngiFlow.Application.Messaging;
 using EngiFlow.Application.Users.Commands;
 using EngiFlow.Application.Users.Dtos;
 using EngiFlow.Application.Users.Queries;
@@ -17,6 +18,7 @@ using EngiFlow.Domain.Ecos;
 using EngiFlow.Domain.Users;
 using EngiFlow.Domain.ValueObjects;
 using FluentValidation;
+using MediatR;
 using AppValidationException = EngiFlow.Application.Exceptions.ValidationException;
 
 namespace EngiFlow.Application.Tests;
@@ -61,7 +63,8 @@ public sealed class EcoApplicationTests
             ecos,
             users,
             unitOfWork,
-            new FakeTenantProvider(companyId, currentUser.Id));
+            new FakeTenantProvider(companyId, currentUser.Id),
+            new FakePostCommitNotificationQueue());
 
         var dto = await handler.HandleAsync(new CreateEcoCommand(
             "Use aluminum bracket",
@@ -176,17 +179,17 @@ public sealed class EcoApplicationTests
     }
 
     [Fact]
-    public async Task ForgotPasswordCommandHandler_LogsMockResetLink()
+    public async Task ForgotPasswordCommandHandler_SendsResetEmail()
     {
-        var resetLinkLogger = new FakePasswordResetLinkLogger();
-        var handler = new ForgotPasswordCommandHandler(resetLinkLogger);
+        var resetEmailSender = new FakePasswordResetEmailSender();
+        var handler = new ForgotPasswordCommandHandler(resetEmailSender);
 
         await handler.HandleAsync(new ForgotPasswordCommand(" ADA@ACME.EXAMPLE "));
 
-        Assert.Equal("ada@acme.example", resetLinkLogger.Email);
-        Assert.NotNull(resetLinkLogger.ResetLink);
-        Assert.Contains("ada%40acme.example", resetLinkLogger.ResetLink, StringComparison.Ordinal);
-        Assert.Contains("mock-", resetLinkLogger.ResetLink, StringComparison.Ordinal);
+        Assert.Equal("ada@acme.example", resetEmailSender.Email);
+        Assert.NotNull(resetEmailSender.ResetLink);
+        Assert.Contains("ada%40acme.example", resetEmailSender.ResetLink, StringComparison.Ordinal);
+        Assert.Contains("mock-", resetEmailSender.ResetLink, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -211,11 +214,13 @@ public sealed class EcoApplicationTests
         var passwordHashService = new FakePasswordHashService();
         var jwtTokenService = new FakeJwtTokenService();
         var unitOfWork = new FakeUnitOfWork();
+        var settings = new FakeCompanySettingsRepository();
         var handler = new RegisterCompanyCommandHandler(
             companies,
             users,
             passwordHashService,
             jwtTokenService,
+            settings,
             unitOfWork);
 
         var result = await handler.HandleAsync(new RegisterCompanyCommand(
@@ -231,14 +236,15 @@ public sealed class EcoApplicationTests
         Assert.Equal(company.Id, admin.CompanyId);
         Assert.Equal("ada@acme.example", admin.Email);
         Assert.Equal("Ada Lovelace", admin.DisplayName);
-        Assert.Equal(UserRole.Administrator, admin.Role);
+        Assert.Equal(UserRole.Owner, admin.Role);
         Assert.Equal(passwordHashService.HashPassword(admin, "StrongPass123!"), admin.PasswordHash);
+        Assert.Single(settings.Settings);
         Assert.Equal("Bearer", result.TokenType);
         Assert.Equal($"token:{admin.Id.Value}", result.AccessToken);
         Assert.Equal(jwtTokenService.ExpiresAtUtc, result.ExpiresAtUtc);
         Assert.Equal("Ada Lovelace", result.UserName);
         Assert.Equal("Acme Engineering", result.CompanyName);
-        Assert.Equal(new[] { nameof(UserRole.Administrator) }, result.Roles);
+        Assert.Equal(new[] { nameof(UserRole.Owner) }, result.Roles);
         Assert.Equal(1, unitOfWork.SaveCount);
     }
 
@@ -257,6 +263,7 @@ public sealed class EcoApplicationTests
             new FakeUserRepository(existingUser),
             new FakePasswordHashService(),
             new FakeJwtTokenService(),
+            new FakeCompanySettingsRepository(),
             unitOfWork);
 
         var exception = await Assert.ThrowsAsync<AppValidationException>(() =>
@@ -338,14 +345,18 @@ public sealed class EcoApplicationTests
     public async Task CreateUserCommandHandler_CreatesTenantUserWithPasswordHash()
     {
         var company = Company.Create("Acme Engineering");
+        var owner = company.RegisterUser(
+            "owner@acme.example",
+            "Tenant Owner",
+            UserRole.Owner);
         var users = new FakeUserRepository();
         var passwordHashService = new FakePasswordHashService();
         var unitOfWork = new FakeUnitOfWork();
         var handler = new CreateUserCommandHandler(
             new FakeCompanyRepository(company),
-            users,
+            new FakeUserRepository(owner),
             passwordHashService,
-            new FakeTenantProvider(company.Id, UserId.New()),
+            new FakeTenantProvider(company.Id, owner.Id),
             unitOfWork);
 
         var result = await handler.HandleAsync(new CreateUserCommand(
@@ -354,7 +365,7 @@ public sealed class EcoApplicationTests
             "StrongPass123!",
             UserRole.Approver));
 
-        var createdUser = Assert.Single(company.Users);
+        var createdUser = Assert.Single(company.Users, user => user.Email == "grace@acme.example");
         Assert.Equal(createdUser.Id.Value, result.Id);
         Assert.Equal(company.Id, createdUser.CompanyId);
         Assert.Equal("grace@acme.example", createdUser.Email);
@@ -368,6 +379,10 @@ public sealed class EcoApplicationTests
     public async Task CreateUserCommandHandler_WhenEmailAlreadyExists_ThrowsValidationExceptionAndDoesNotSave()
     {
         var company = Company.Create("Acme Engineering");
+        var owner = company.RegisterUser(
+            "owner@acme.example",
+            "Tenant Owner",
+            UserRole.Owner);
         var existingUser = company.RegisterUser(
             "grace@acme.example",
             "Grace Hopper",
@@ -375,9 +390,9 @@ public sealed class EcoApplicationTests
         var unitOfWork = new FakeUnitOfWork();
         var handler = new CreateUserCommandHandler(
             new FakeCompanyRepository(company),
-            new FakeUserRepository(existingUser),
+            new FakeUserRepository(owner, existingUser),
             new FakePasswordHashService(),
-            new FakeTenantProvider(company.Id, UserId.New()),
+            new FakeTenantProvider(company.Id, owner.Id),
             unitOfWork);
 
         var exception = await Assert.ThrowsAsync<AppValidationException>(() =>
@@ -392,7 +407,7 @@ public sealed class EcoApplicationTests
     }
 
     [Fact]
-    public async Task CreateUserCommandValidator_WhenRoleIsReviewer_ThrowsValidationException()
+    public async Task CreateUserCommandValidator_WhenRoleIsOwner_ThrowsValidationException()
     {
         var behavior = new ValidationBehavior<CreateUserCommand, UserSummaryDto>(
             new IValidator<CreateUserCommand>[] { new CreateUserCommandValidator() });
@@ -403,7 +418,7 @@ public sealed class EcoApplicationTests
                     "Review User",
                     "reviewer@acme.example",
                     "StrongPass123!",
-                    UserRole.Reviewer),
+                    UserRole.Owner),
                 () => Task.FromResult(default(UserSummaryDto)!)));
 
         Assert.Contains(nameof(CreateUserCommand.Role), exception.Errors.Keys);
@@ -435,12 +450,15 @@ public sealed class EcoApplicationTests
             fixture.Ecos,
             fixture.Users,
             fixture.UnitOfWork,
-            fixture.TenantProvider);
+            fixture.TenantProvider,
+            fixture.Notifications);
         var approveHandler = new ApproveEcoCommandHandler(
             fixture.Ecos,
             fixture.Users,
+            fixture.Settings,
             fixture.UnitOfWork,
-            fixture.TenantProvider);
+            fixture.TenantProvider,
+            fixture.Notifications);
 
         var submitted = await submitHandler.HandleAsync(new SubmitEcoCommand(fixture.Eco.Id.Value));
         var approved = await approveHandler.HandleAsync(new ApproveEcoCommand(fixture.Eco.Id.Value));
@@ -453,25 +471,28 @@ public sealed class EcoApplicationTests
     }
 
     [Fact]
-    public async Task RejectEcoCommandHandler_RejectsUnderReviewEcoWithReason()
+    public async Task RejectEcoCommandHandler_ReturnsUnderReviewEcoToDraftWithReason()
     {
         var fixture = CreateFixtureWithEco();
         fixture.Eco.SubmitForReview(fixture.CurrentUser.Id);
         var handler = new RejectEcoCommandHandler(
             fixture.Ecos,
             fixture.Users,
+            fixture.Settings,
             fixture.UnitOfWork,
-            fixture.TenantProvider);
+            fixture.TenantProvider,
+            fixture.Notifications);
 
         var dto = await handler.HandleAsync(new RejectEcoCommand(
             fixture.Eco.Id.Value,
             "Specification is incomplete."));
 
-        Assert.Equal(EcoStatus.Rejected, dto.Status);
+        Assert.Equal(EcoStatus.Draft, dto.Status);
         Assert.Equal(1, fixture.UnitOfWork.SaveCount);
-        Assert.Contains(dto.Events, ecoEvent =>
-            ecoEvent.EventType == EcoEventType.Rejected
-            && ecoEvent.Description.Contains("Specification is incomplete.", StringComparison.Ordinal));
+        Assert.Contains(dto.Events, ecoEvent => ecoEvent.EventType == EcoEventType.ChangesRequested);
+        Assert.NotNull(dto.Comments);
+        Assert.Contains(dto.Comments!, comment =>
+            comment.Body.Contains("Specification is incomplete.", StringComparison.Ordinal));
     }
 
     [Fact]
@@ -496,7 +517,7 @@ public sealed class EcoApplicationTests
             companyId,
             "reviewer@engiflow.example",
             "Reviewer",
-            UserRole.Reviewer);
+            UserRole.Approver);
         var eco = EngineeringChangeOrder.Create(
             companyId,
             "Use aluminum bracket",
@@ -578,8 +599,10 @@ public sealed class EcoApplicationTests
         var users = new FakeUserRepository(currentUser);
         var unitOfWork = new FakeUnitOfWork();
         var tenantProvider = new FakeTenantProvider(companyId, currentUser.Id);
+        var settings = new FakeCompanySettingsRepository(CompanySettings.CreateDefault(companyId));
+        var notifications = new FakePostCommitNotificationQueue();
 
-        return new EcoFixture(eco, currentUser, ecos, users, unitOfWork, tenantProvider);
+        return new EcoFixture(eco, currentUser, ecos, users, unitOfWork, tenantProvider, settings, notifications);
     }
 
     private sealed record EcoFixture(
@@ -588,7 +611,9 @@ public sealed class EcoApplicationTests
         FakeEcoRepository Ecos,
         FakeUserRepository Users,
         FakeUnitOfWork UnitOfWork,
-        FakeTenantProvider TenantProvider);
+        FakeTenantProvider TenantProvider,
+        FakeCompanySettingsRepository Settings,
+        FakePostCommitNotificationQueue Notifications);
 
     private sealed class FakeTenantProvider : ITenantProvider
     {
@@ -734,20 +759,60 @@ public sealed class EcoApplicationTests
         }
     }
 
-    private sealed class FakePasswordResetLinkLogger : IPasswordResetLinkLogger
+    private sealed class FakePasswordResetEmailSender : IPasswordResetEmailSender
     {
         public string? Email { get; private set; }
 
         public string? ResetLink { get; private set; }
 
-        public Task LogMockResetLinkAsync(
-            string normalizedEmail,
+        public Task SendPasswordResetAsync(
+            string email,
             string resetLink,
             CancellationToken cancellationToken = default)
         {
-            Email = normalizedEmail;
+            Email = email;
             ResetLink = resetLink;
             return Task.CompletedTask;
+        }
+    }
+
+    private sealed class FakeCompanySettingsRepository : ICompanySettingsRepository
+    {
+        public FakeCompanySettingsRepository(params CompanySettings[] settings)
+        {
+            Settings = settings.ToList();
+        }
+
+        public List<CompanySettings> Settings { get; }
+
+        public Task<CompanySettings?> GetByCompanyIdAsync(
+            CompanyId companyId,
+            CancellationToken cancellationToken = default)
+        {
+            return Task.FromResult(Settings.SingleOrDefault(settings => settings.CompanyId == companyId));
+        }
+
+        public Task AddAsync(CompanySettings settings, CancellationToken cancellationToken = default)
+        {
+            Settings.Add(settings);
+            return Task.CompletedTask;
+        }
+    }
+
+    private sealed class FakePostCommitNotificationQueue : IPostCommitNotificationQueue
+    {
+        private readonly List<INotification> _notifications = [];
+
+        public IReadOnlyCollection<INotification> Notifications => _notifications.AsReadOnly();
+
+        public void Enqueue(INotification notification)
+        {
+            _notifications.Add(notification);
+        }
+
+        public void Clear()
+        {
+            _notifications.Clear();
         }
     }
 

@@ -37,4 +37,28 @@ internal static class StronglyTypedIdConverters
     /// </summary>
     public static readonly ValueConverter<EcoEventId, Guid> EcoEventId =
         new(id => id.Value, value => Domain.ValueObjects.EcoEventId.From(value));
+
+    /// <summary>
+    /// Converts <see cref="EcoCommentId"/> values to and from database UUID values.
+    /// </summary>
+    public static readonly ValueConverter<EcoCommentId, Guid> EcoCommentId =
+        new(id => id.Value, value => Domain.ValueObjects.EcoCommentId.From(value));
+
+    /// <summary>
+    /// Converts <see cref="EcoAffectedItemId"/> values to and from database UUID values.
+    /// </summary>
+    public static readonly ValueConverter<EcoAffectedItemId, Guid> EcoAffectedItemId =
+        new(id => id.Value, value => Domain.ValueObjects.EcoAffectedItemId.From(value));
+
+    /// <summary>
+    /// Converts <see cref="EcoApprovalId"/> values to and from database UUID values.
+    /// </summary>
+    public static readonly ValueConverter<EcoApprovalId, Guid> EcoApprovalId =
+        new(id => id.Value, value => Domain.ValueObjects.EcoApprovalId.From(value));
+
+    /// <summary>
+    /// Converts <see cref="EcoAttachmentId"/> values to and from database UUID values.
+    /// </summary>
+    public static readonly ValueConverter<EcoAttachmentId, Guid> EcoAttachmentId =
+        new(id => id.Value, value => Domain.ValueObjects.EcoAttachmentId.From(value));
 }

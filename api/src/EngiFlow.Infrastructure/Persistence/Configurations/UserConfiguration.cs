@@ -22,7 +22,7 @@ internal sealed class UserConfiguration : IEntityTypeConfiguration<User>
             "users",
             table => table.HasCheckConstraint(
                 "ck_users_role",
-                "\"role\" IN ('Requester', 'Reviewer', 'Approver', 'Administrator')"));
+                "\"role\" IN ('Owner', 'Administrator', 'Approver', 'Requester', 'Viewer')"));
 
         builder.HasKey(user => user.Id);
 

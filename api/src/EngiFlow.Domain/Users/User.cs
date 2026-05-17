@@ -146,6 +146,12 @@ public sealed class User : ITenantScoped
     {
         EnsureActive();
         DomainGuard.AgainstInvalidEnum(role, nameof(role));
+
+        if (Role == UserRole.Owner || role == UserRole.Owner)
+        {
+            throw new DomainException("The Owner role is immutable.");
+        }
+
         Role = role;
     }
 
@@ -169,6 +175,11 @@ public sealed class User : ITenantScoped
     /// </remarks>
     public void Deactivate(DateTimeOffset? deactivatedAt = null)
     {
+        if (Role == UserRole.Owner)
+        {
+            throw new DomainException("Owner users cannot be deactivated.");
+        }
+
         if (!IsActive)
         {
             return;

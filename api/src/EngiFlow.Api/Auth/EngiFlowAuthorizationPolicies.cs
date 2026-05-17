@@ -14,4 +14,9 @@ internal static class EngiFlowAuthorizationPolicies
     /// Allows users who can approve or reject engineering change orders.
     /// </summary>
     public const string EcoApproval = "EcoApproval";
+
+    /// <summary>
+    /// Allows tenant owners and administrators to manage users.
+    /// </summary>
+    public const string UserManagement = "UserManagement";
 }

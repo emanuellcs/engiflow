@@ -54,6 +54,32 @@ public sealed class EngiFlowDbContextTests
     }
 
     [Fact]
+    public async Task UserQueryFilter_HidesInactiveUsers()
+    {
+        var databaseName = Guid.NewGuid().ToString();
+        var companyId = CompanyId.New();
+
+        await using (var context = CreateContext(databaseName, companyId))
+        {
+            context.Users.Add(User.Create(companyId, "active@engiflow.example", "Active User", UserRole.Requester));
+            var inactive = User.Create(companyId, "inactive@engiflow.example", "Inactive User", UserRole.Requester);
+            inactive.Deactivate();
+            context.Users.Add(inactive);
+            await context.SaveChangesAsync();
+        }
+
+        await using (var context = CreateContext(databaseName, companyId))
+        {
+            var visibleUsers = await context.Users.ToListAsync();
+            var allUsers = await context.Users.IgnoreQueryFilters().ToListAsync();
+
+            var visibleUser = Assert.Single(visibleUsers);
+            Assert.Equal("active@engiflow.example", visibleUser.Email);
+            Assert.Equal(2, allUsers.Count);
+        }
+    }
+
+    [Fact]
     public async Task SaveChanges_WhenTenantScopedEntityBelongsToDifferentTenant_Throws()
     {
         var currentCompanyId = CompanyId.New();
@@ -239,6 +265,24 @@ public sealed class EngiFlowDbContextTests
         Assert.Equal(
             typeof(string),
             GetProviderClrType(ecoEventEntity.FindProperty(nameof(EcoEvent.EventType))!));
+    }
+
+    [Fact]
+    public void EcoModel_MapsRowVersionToPostgresXminConcurrencyToken()
+    {
+        var options = new DbContextOptionsBuilder<EngiFlowDbContext>()
+            .UseNpgsql("Host=localhost;Database=engiflow_test;Username=test;Password=test")
+            .Options;
+        using var context = new EngiFlowDbContext(
+            options,
+            new StaticTenantProvider(CompanyId.New(), UserId.New()));
+        var ecoEntity = context.Model.FindEntityType(typeof(EngineeringChangeOrder))!;
+        var rowVersion = ecoEntity.FindProperty(nameof(EngineeringChangeOrder.RowVersion))!;
+
+        Assert.Equal(typeof(uint), rowVersion.ClrType);
+        Assert.True(rowVersion.IsConcurrencyToken);
+        Assert.Equal(ValueGenerated.OnAddOrUpdate, rowVersion.ValueGenerated);
+        Assert.Equal("xmin", rowVersion.GetColumnName());
     }
 
     private static EngiFlowDbContext CreateContext(string databaseName, CompanyId companyId)

@@ -3,9 +3,11 @@ using System.Text;
 using System.Text.Json.Serialization;
 using EngiFlow.Api.Auth;
 using EngiFlow.Api.ExceptionHandling;
+using EngiFlow.Api.Hubs;
 using EngiFlow.Api.Initialization;
 using EngiFlow.Api.Tenancy;
 using EngiFlow.Application;
+using EngiFlow.Application.Ecos.Notifications;
 using EngiFlow.Application.Abstractions.Security;
 using EngiFlow.Application.Abstractions.Tenancy;
 using EngiFlow.Domain.Ecos;
@@ -14,6 +16,7 @@ using EngiFlow.Infrastructure;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi;
+using MediatR;
 
 var builder = WebApplication.CreateBuilder(args);
 var jwtOptions = builder.Configuration.GetSection(JwtOptions.SectionName).Get<JwtOptions>()
@@ -28,6 +31,8 @@ builder.Services
         options.JsonSerializerOptions.Converters.Add(new JsonStringEnumConverter<EcoPriority>(allowIntegerValues: false));
         options.JsonSerializerOptions.Converters.Add(new JsonStringEnumConverter<EcoStatus>(allowIntegerValues: false));
         options.JsonSerializerOptions.Converters.Add(new JsonStringEnumConverter<EcoEventType>(allowIntegerValues: false));
+        options.JsonSerializerOptions.Converters.Add(new JsonStringEnumConverter<EcoAffectedItemAction>(allowIntegerValues: false));
+        options.JsonSerializerOptions.Converters.Add(new JsonStringEnumConverter<EcoApprovalDecision>(allowIntegerValues: false));
         options.JsonSerializerOptions.Converters.Add(new JsonStringEnumConverter<UserRole>(allowIntegerValues: false));
     });
 builder.Services.AddProblemDetails(options =>
@@ -45,7 +50,17 @@ builder.Services.AddOptions<DevelopmentSeedOptions>()
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddScoped<ITenantProvider, HttpContextTenantProvider>();
 builder.Services.AddScoped<IJwtTokenService, JwtTokenService>();
+builder.Services.AddScoped<INotificationHandler<EcoChangedNotification>, EcoDomainEventHandler>();
 builder.Services.AddSingleton<EngiFlowDatabaseInitializer>();
+builder.Services.AddSignalR()
+    .AddJsonProtocol(options =>
+    {
+        options.PayloadSerializerOptions.Converters.Add(new JsonStringEnumConverter<EcoPriority>(allowIntegerValues: false));
+        options.PayloadSerializerOptions.Converters.Add(new JsonStringEnumConverter<EcoStatus>(allowIntegerValues: false));
+        options.PayloadSerializerOptions.Converters.Add(new JsonStringEnumConverter<EcoEventType>(allowIntegerValues: false));
+        options.PayloadSerializerOptions.Converters.Add(new JsonStringEnumConverter<EcoAffectedItemAction>(allowIntegerValues: false));
+        options.PayloadSerializerOptions.Converters.Add(new JsonStringEnumConverter<EcoApprovalDecision>(allowIntegerValues: false));
+    });
 builder.Services
     .AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     .AddJwtBearer(options =>
@@ -70,11 +85,15 @@ builder.Services.AddAuthorization(options =>
     options.AddPolicy(
         EngiFlowAuthorizationPolicies.EcoAuthoring,
         policy => policy.RequireAuthenticatedUser()
-            .RequireRole(nameof(UserRole.Requester), nameof(UserRole.Administrator)));
+            .RequireRole(nameof(UserRole.Owner), nameof(UserRole.Administrator), nameof(UserRole.Requester)));
     options.AddPolicy(
         EngiFlowAuthorizationPolicies.EcoApproval,
         policy => policy.RequireAuthenticatedUser()
-            .RequireRole(nameof(UserRole.Approver), nameof(UserRole.Administrator)));
+            .RequireRole(nameof(UserRole.Owner), nameof(UserRole.Administrator), nameof(UserRole.Approver)));
+    options.AddPolicy(
+        EngiFlowAuthorizationPolicies.UserManagement,
+        policy => policy.RequireAuthenticatedUser()
+            .RequireRole(nameof(UserRole.Owner), nameof(UserRole.Administrator)));
 });
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(options =>
@@ -113,7 +132,7 @@ var connectionString = builder.Configuration.GetConnectionString("DefaultConnect
     ?? throw new InvalidOperationException("Connection string 'DefaultConnection' is required.");
 
 builder.Services.AddApplication();
-builder.Services.AddInfrastructure(connectionString);
+builder.Services.AddInfrastructure(connectionString, builder.Configuration);
 
 var app = builder.Build();
 
@@ -141,5 +160,6 @@ app.UseAuthentication();
 app.UseAuthorization();
 
 app.MapControllers();
+app.MapHub<EcoHub>("/hubs/ecos");
 
 app.Run();

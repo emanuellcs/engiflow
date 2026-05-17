@@ -28,7 +28,7 @@ internal sealed class EngineeringChangeOrderConfiguration : IEntityTypeConfigura
                     "\"priority\" IN ('Low', 'Medium', 'High', 'Critical')");
                 table.HasCheckConstraint(
                     "ck_engineering_change_orders_status",
-                    "\"status\" IN ('Draft', 'UnderReview', 'Approved', 'Rejected', 'Implemented')");
+                    "\"status\" IN ('Draft', 'UnderReview', 'Approved', 'Canceled', 'Rejected', 'Implemented')");
             });
 
         builder.HasKey(eco => eco.Id);
@@ -70,6 +70,13 @@ internal sealed class EngineeringChangeOrderConfiguration : IEntityTypeConfigura
             .HasMaxLength(32)
             .IsRequired();
 
+        builder.Property(eco => eco.ReviewRound)
+            .HasColumnName("review_round")
+            .IsRequired();
+
+        builder.Property(eco => eco.RowVersion)
+            .IsRowVersion();
+
         builder.Property(eco => eco.CreatedByUserId)
             .HasColumnName("created_by_user_id")
             .HasConversion(StronglyTypedIdConverters.UserId)
@@ -103,7 +110,43 @@ internal sealed class EngineeringChangeOrderConfiguration : IEntityTypeConfigura
             .HasPrincipalKey(eco => new { eco.Id, eco.CompanyId })
             .OnDelete(DeleteBehavior.Cascade);
 
+        builder.HasMany(eco => eco.Comments)
+            .WithOne()
+            .HasForeignKey(comment => new { comment.EngineeringChangeOrderId, comment.CompanyId })
+            .HasPrincipalKey(eco => new { eco.Id, eco.CompanyId })
+            .OnDelete(DeleteBehavior.Cascade);
+
+        builder.HasMany(eco => eco.AffectedItems)
+            .WithOne()
+            .HasForeignKey(item => new { item.EngineeringChangeOrderId, item.CompanyId })
+            .HasPrincipalKey(eco => new { eco.Id, eco.CompanyId })
+            .OnDelete(DeleteBehavior.Cascade);
+
+        builder.HasMany(eco => eco.Approvals)
+            .WithOne()
+            .HasForeignKey(approval => new { approval.EngineeringChangeOrderId, approval.CompanyId })
+            .HasPrincipalKey(eco => new { eco.Id, eco.CompanyId })
+            .OnDelete(DeleteBehavior.Cascade);
+
+        builder.HasMany(eco => eco.Attachments)
+            .WithOne()
+            .HasForeignKey(attachment => new { attachment.EngineeringChangeOrderId, attachment.CompanyId })
+            .HasPrincipalKey(eco => new { eco.Id, eco.CompanyId })
+            .OnDelete(DeleteBehavior.Cascade);
+
         builder.Navigation(eco => eco.Events)
+            .UsePropertyAccessMode(PropertyAccessMode.Field);
+
+        builder.Navigation(eco => eco.Comments)
+            .UsePropertyAccessMode(PropertyAccessMode.Field);
+
+        builder.Navigation(eco => eco.AffectedItems)
+            .UsePropertyAccessMode(PropertyAccessMode.Field);
+
+        builder.Navigation(eco => eco.Approvals)
+            .UsePropertyAccessMode(PropertyAccessMode.Field);
+
+        builder.Navigation(eco => eco.Attachments)
             .UsePropertyAccessMode(PropertyAccessMode.Field);
     }
 }
