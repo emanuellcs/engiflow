@@ -35,6 +35,7 @@ public static class InfrastructureServiceCollectionExtensions
         }
 
         services.AddScoped<EcoAuditSaveChangesInterceptor>();
+        services.AddScoped<ICompanyRepository, CompanyRepository>();
         services.AddScoped<IEngineeringChangeOrderRepository, EngineeringChangeOrderRepository>();
         services.AddScoped<IUserRepository, UserRepository>();
         services.AddScoped<IPasswordHashService, AspNetCorePasswordHashService>();

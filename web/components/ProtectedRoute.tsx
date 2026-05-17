@@ -7,6 +7,14 @@ import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/lib/auth/AuthContext";
 
+/**
+ * Guards authenticated routes by redirecting anonymous users to the login page
+ * and rendering a loading state while auth state is being evaluated.
+ *
+ * @param props - Protected route properties.
+ * @param props.children - Authenticated route content to render after auth passes.
+ * @returns The protected children or an authentication loading indicator.
+ */
 export default function ProtectedRoute({ children }: PropsWithChildren) {
   const router = useRouter();
   const { isAuthenticated, isLoading } = useAuth();
@@ -24,6 +32,12 @@ export default function ProtectedRoute({ children }: PropsWithChildren) {
   return <>{children}</>;
 }
 
+/**
+ * Renders the centered progress indicator shown while protected content is
+ * waiting for authentication state.
+ *
+ * @returns A status region containing a Material UI circular progress indicator.
+ */
 function ProtectedRouteLoading() {
   return (
     <Box
