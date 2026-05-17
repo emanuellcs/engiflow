@@ -21,6 +21,7 @@ import { type FormEvent, useState } from "react";
 import NextLink from "@/components/ui/NextLink";
 import PageHeader from "@/components/ui/PageHeader";
 import { ApiError, apiFetch } from "@/lib/api/client";
+import { useAuth } from "@/lib/auth/AuthContext";
 import type {
   CreateEcoPriority,
   CreateEcoRequest,
@@ -45,6 +46,8 @@ const titleMaxLength = 200;
 const descriptionMaxLength = 4000;
 const defaultCreateError =
   "Unable to create the Engineering Change Order. Review the details and try again.";
+const administratorRole = "Administrator";
+const requesterRole = "Requester";
 
 /**
  * Renders the authenticated new ECO creation route.
@@ -53,10 +56,13 @@ const defaultCreateError =
  */
 export default function NewEcoPage() {
   const router = useRouter();
+  const { user } = useAuth();
   const [form, setForm] = useState<CreateEcoFormState>(initialFormState);
   const [fieldErrors, setFieldErrors] = useState<CreateEcoFieldErrors>({});
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const canCreateEco =
+    user?.role === administratorRole || user?.role === requesterRole;
 
   /**
    * Validates and submits the ECO draft to the API.
@@ -143,6 +149,35 @@ export default function NewEcoPage() {
     });
   }
 
+  if (!canCreateEco) {
+    return (
+      <Stack spacing={2.5}>
+        <PageHeader
+          title="New Engineering Change Order"
+          description="Create a draft ECO for review by the engineering approval team."
+          actionButton={
+            <Button
+              component={NextLink}
+              href="/ecos"
+              type="button"
+              variant="outlined"
+              startIcon={<ArrowBackIcon />}
+              sx={{
+                width: { xs: "100%", sm: "auto" },
+                textTransform: "none",
+              }}
+            >
+              Back to ECOs
+            </Button>
+          }
+        />
+        <Alert severity="warning">
+          Requester or Administrator access is required to create ECOs.
+        </Alert>
+      </Stack>
+    );
+  }
+
   return (
     <Stack spacing={2.5}>
       <PageHeader
@@ -176,7 +211,7 @@ export default function NewEcoPage() {
         <Box component="form" noValidate onSubmit={handleSubmit}>
           <Stack spacing={2.5}>
             {errorMessage ? (
-              <Alert severity="error" variant="outlined">
+              <Alert severity="error">
                 {errorMessage}
               </Alert>
             ) : null}

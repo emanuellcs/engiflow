@@ -25,7 +25,10 @@ public sealed class AuthControllerTests
         var loginResult = new LoginResultDto(
             "jwt-token",
             "Bearer",
-            DateTimeOffset.Parse("2026-05-15T01:00:00Z"));
+            DateTimeOffset.Parse("2026-05-15T01:00:00Z"),
+            "Administrator",
+            "EngiFlow Demo Company",
+            [nameof(UserRole.Administrator)]);
         var mediator = new FakeApplicationMediator { Dispatch = _ => loginResult };
         var controller = new AuthController(mediator);
 
@@ -47,7 +50,10 @@ public sealed class AuthControllerTests
         var registerResult = new LoginResultDto(
             "jwt-token",
             "Bearer",
-            DateTimeOffset.Parse("2026-05-15T01:00:00Z"));
+            DateTimeOffset.Parse("2026-05-15T01:00:00Z"),
+            "Ada Lovelace",
+            "Acme Engineering",
+            [nameof(UserRole.Administrator)]);
         var mediator = new FakeApplicationMediator { Dispatch = _ => registerResult };
         var controller = new AuthController(mediator);
 
@@ -70,6 +76,23 @@ public sealed class AuthControllerTests
     }
 
     [Fact]
+    public async Task ForgotPasswordAsync_DispatchesForgotPasswordCommandAndReturnsOk()
+    {
+        var forgotPasswordResult = new ForgotPasswordResultDto();
+        var mediator = new FakeApplicationMediator { Dispatch = _ => forgotPasswordResult };
+        var controller = new AuthController(mediator);
+
+        var result = await controller.ForgotPasswordAsync(
+            new ForgotPasswordRequest("ada@acme.example"),
+            CancellationToken.None);
+
+        Assert.IsType<OkResult>(result);
+
+        var command = Assert.IsType<ForgotPasswordCommand>(mediator.LastRequest);
+        Assert.Equal("ada@acme.example", command.Email);
+    }
+
+    [Fact]
     public void LoginAsync_AllowsAnonymousRequests()
     {
         var allowAnonymous = typeof(AuthController)
@@ -84,6 +107,16 @@ public sealed class AuthControllerTests
     {
         var allowAnonymous = typeof(AuthController)
             .GetMethod(nameof(AuthController.RegisterCompanyAsync))!
+            .GetCustomAttributes(typeof(AllowAnonymousAttribute), inherit: true);
+
+        Assert.NotEmpty(allowAnonymous);
+    }
+
+    [Fact]
+    public void ForgotPasswordAsync_AllowsAnonymousRequests()
+    {
+        var allowAnonymous = typeof(AuthController)
+            .GetMethod(nameof(AuthController.ForgotPasswordAsync))!
             .GetCustomAttributes(typeof(AllowAnonymousAttribute), inherit: true);
 
         Assert.NotEmpty(allowAnonymous);
@@ -124,7 +157,7 @@ public sealed class AuthControllerTests
     }
 
     [Fact]
-    public void JwtTokenService_EmitsSubjectTenantAndRoleClaims()
+    public void JwtTokenService_EmitsSubjectTenantRoleAndDisplayClaims()
     {
         var options = Options.Create(new JwtOptions
         {
@@ -140,13 +173,15 @@ public sealed class AuthControllerTests
             UserRole.Administrator);
         var service = new JwtTokenService(options);
 
-        var token = service.CreateAccessToken(user);
+        var token = service.CreateAccessToken(user, "EngiFlow Demo Company");
         using var payload = JsonDocument.Parse(Base64UrlDecode(token.AccessToken.Split('.')[1]));
         var claims = payload.RootElement;
 
         Assert.Equal(user.Id.Value.ToString(), claims.GetProperty("sub").GetString());
         Assert.Equal(user.CompanyId.Value.ToString(), claims.GetProperty("tenant").GetString());
         Assert.Equal(nameof(UserRole.Administrator), claims.GetProperty("role").GetString());
+        Assert.Equal("Administrator", claims.GetProperty("user_name").GetString());
+        Assert.Equal("EngiFlow Demo Company", claims.GetProperty("company_name").GetString());
         Assert.True(token.ExpiresAtUtc > DateTimeOffset.UtcNow);
     }
 

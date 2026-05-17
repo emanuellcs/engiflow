@@ -26,7 +26,7 @@ public sealed class JwtTokenService : IJwtTokenService
     }
 
     /// <inheritdoc />
-    public AccessTokenResult CreateAccessToken(User user)
+    public AccessTokenResult CreateAccessToken(User user, string companyName)
     {
         ArgumentNullException.ThrowIfNull(user);
 
@@ -34,10 +34,12 @@ public sealed class JwtTokenService : IJwtTokenService
         var expiresAt = issuedAt.AddMinutes(_options.AccessTokenMinutes);
         var signingKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(_options.SigningKey));
         var signingCredentials = new SigningCredentials(signingKey, SecurityAlgorithms.HmacSha256);
-        var claims = new[]
+        var claims = new List<Claim>
         {
             new Claim(EngiFlowClaimTypes.Subject, user.Id.Value.ToString()),
             new Claim(EngiFlowClaimTypes.Tenant, user.CompanyId.Value.ToString()),
+            new Claim(EngiFlowClaimTypes.UserName, user.DisplayName),
+            new Claim(EngiFlowClaimTypes.CompanyName, companyName),
             new Claim(EngiFlowClaimTypes.Role, user.Role.ToString())
         };
 

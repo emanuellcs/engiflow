@@ -297,7 +297,7 @@ export default function EcoDetailsPage() {
       />
 
       {actionErrorMessage ? (
-        <Alert severity="error" variant="outlined">
+        <Alert severity="error">
           {actionErrorMessage}
         </Alert>
       ) : null}
@@ -313,7 +313,7 @@ export default function EcoDetailsPage() {
           }}
         >
           <Stack spacing={2}>
-            <Alert severity="error" variant="outlined">
+            <Alert severity="error">
               {routeLoadErrorMessage}
             </Alert>
             <Box>
@@ -670,7 +670,7 @@ function RejectEcoDialog({
             in the current ECO workflow.
           </DialogContentText>
           {errorMessage ? (
-            <Alert severity="error" variant="outlined">
+            <Alert severity="error">
               {errorMessage}
             </Alert>
           ) : null}

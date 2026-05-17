@@ -21,10 +21,13 @@ import PageHeader from "@/components/ui/PageHeader";
 import PriorityChip from "@/components/ui/PriorityChip";
 import StatusChip from "@/components/ui/StatusChip";
 import { ApiError, apiFetch } from "@/lib/api/client";
+import { useAuth } from "@/lib/auth/AuthContext";
 import type { EcoSummaryDto, PagedResult } from "@/lib/types/eco";
 
 const pageSize = 20;
 const skeletonRowCount = 6;
+const administratorRole = "Administrator";
+const requesterRole = "Requester";
 
 /**
  * Renders the authenticated Engineering Change Orders page.
@@ -42,9 +45,12 @@ export default function EcosPage() {
  * @returns The ECO dashboard content including header, errors, table, and empty state.
  */
 function EcoDashboard() {
+  const { user } = useAuth();
   const [ecos, setEcos] = useState<EcoSummaryDto[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const canCreateEco =
+    user?.role === administratorRole || user?.role === requesterRole;
 
   useEffect(() => {
     const controller = new AbortController();
@@ -86,7 +92,7 @@ function EcoDashboard() {
       <PageHeader
         title="Engineering Change Orders"
         description="Review current ECO activity across the workspace."
-        actionButton={
+        actionButton={canCreateEco ? (
           <Button
             component={NextLink}
             href="/ecos/new"
@@ -101,11 +107,11 @@ function EcoDashboard() {
           >
             Create ECO
           </Button>
-        }
+        ) : undefined}
       />
 
       {errorMessage ? (
-        <Alert severity="error" variant="outlined">
+        <Alert severity="error">
           {errorMessage}
         </Alert>
       ) : null}

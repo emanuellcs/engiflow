@@ -20,7 +20,7 @@ import { useRouter } from "next/navigation";
 import { type FormEvent, type ReactNode, useState } from "react";
 import NextLink from "@/components/ui/NextLink";
 import { ApiError, apiFetch } from "@/lib/api/client";
-import { useAuth } from "@/lib/auth/AuthContext";
+import { type AuthSessionResult, useAuth } from "@/lib/auth/AuthContext";
 
 type RegisterFormState = {
   companyName: string;
@@ -31,10 +31,6 @@ type RegisterFormState = {
 
 type RegisterFieldErrors = Partial<Record<keyof RegisterFormState, string>>;
 
-type RegisterCompanyResponse = {
-  accessToken?: unknown;
-};
-
 const steps = ["Company Details", "Administrator Profile"] as const;
 const initialFormState: RegisterFormState = {
   companyName: "",
@@ -44,7 +40,7 @@ const initialFormState: RegisterFormState = {
 };
 const defaultRegisterError =
   "Unable to register your company. Review the details and try again.";
-const invalidTokenError =
+const invalidAuthResponseError =
   "The server returned an invalid authentication response. Please try again.";
 const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const symbolPattern = /[^a-zA-Z0-9]/;
@@ -95,7 +91,7 @@ export default function RegisterPage() {
     setErrorMessage(null);
 
     try {
-      const response = await apiFetch<RegisterCompanyResponse>(
+      const response = await apiFetch<AuthSessionResult>(
         "/api/auth/register-company",
         {
           method: "POST",
@@ -108,9 +104,8 @@ export default function RegisterPage() {
           },
         },
       );
-      const accessToken = readAccessToken(response);
 
-      login(accessToken);
+      login(response, true);
       router.replace("/");
     } catch (error) {
       setErrorMessage(getRegisterErrorMessage(error));
@@ -310,7 +305,7 @@ export default function RegisterPage() {
             </Stack>
 
             {errorMessage ? (
-              <Alert severity="error" variant="outlined">
+              <Alert severity="error">
                 {errorMessage}
               </Alert>
             ) : null}
@@ -410,28 +405,16 @@ function stepHasErrors(
   return Boolean(errors.adminName || errors.adminEmail || errors.adminPassword);
 }
 
-function readAccessToken(
-  response: RegisterCompanyResponse | null | undefined,
-): string {
-  if (
-    !response ||
-    typeof response !== "object" ||
-    typeof response.accessToken !== "string" ||
-    response.accessToken.trim().length === 0
-  ) {
-    throw new Error(invalidTokenError);
-  }
-
-  return response.accessToken.trim();
-}
-
 function getRegisterErrorMessage(error: unknown): string {
   if (error instanceof ApiError) {
     return readProblemDetailsMessage(error.details) ?? defaultRegisterError;
   }
 
-  if (error instanceof Error && error.message === invalidTokenError) {
-    return invalidTokenError;
+  if (
+    error instanceof Error &&
+    error.message === "The server returned an invalid authentication response."
+  ) {
+    return invalidAuthResponseError;
   }
 
   return defaultRegisterError;

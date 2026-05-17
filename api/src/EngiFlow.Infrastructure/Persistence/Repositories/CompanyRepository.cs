@@ -1,5 +1,7 @@
 using EngiFlow.Application.Abstractions.Persistence;
 using EngiFlow.Domain.Companies;
+using EngiFlow.Domain.ValueObjects;
+using Microsoft.EntityFrameworkCore;
 
 namespace EngiFlow.Infrastructure.Persistence.Repositories;
 
@@ -17,6 +19,12 @@ internal sealed class CompanyRepository : ICompanyRepository
     public CompanyRepository(EngiFlowDbContext dbContext)
     {
         _dbContext = dbContext;
+    }
+
+    /// <inheritdoc />
+    public Task<Company?> GetByIdAsync(CompanyId id, CancellationToken cancellationToken = default)
+    {
+        return _dbContext.Companies.SingleOrDefaultAsync(company => company.Id == id, cancellationToken);
     }
 
     /// <inheritdoc />

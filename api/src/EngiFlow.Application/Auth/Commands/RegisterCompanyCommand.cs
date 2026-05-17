@@ -132,8 +132,8 @@ public sealed class RegisterCompanyCommandHandler : ICommandHandler<RegisterComp
         await _companies.AddAsync(company, cancellationToken).ConfigureAwait(false);
         await _unitOfWork.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
 
-        var token = _jwtTokenService.CreateAccessToken(admin);
-        return new LoginResultDto(token.AccessToken, "Bearer", token.ExpiresAtUtc);
+        var token = _jwtTokenService.CreateAccessToken(admin, company.Name);
+        return AuthResultFactory.Create(token, admin, company);
     }
 
     private static string NormalizeEmail(string email)

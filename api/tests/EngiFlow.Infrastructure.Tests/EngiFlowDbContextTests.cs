@@ -1,13 +1,16 @@
+using EngiFlow.Application.Abstractions.Security;
 using EngiFlow.Application.Abstractions.Tenancy;
 using EngiFlow.Domain.Companies;
 using EngiFlow.Domain.Ecos;
 using EngiFlow.Domain.Users;
 using EngiFlow.Domain.ValueObjects;
+using EngiFlow.Infrastructure;
 using EngiFlow.Infrastructure.Persistence;
 using EngiFlow.Infrastructure.Persistence.Interceptors;
 using EngiFlow.Infrastructure.Tenancy;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace EngiFlow.Infrastructure.Tests;
 
@@ -146,6 +149,28 @@ public sealed class EngiFlowDbContextTests
         Assert.Contains(
             userEntity.GetIndexes(),
             index => index.GetDatabaseName() == "ux_users_email" && index.IsUnique);
+    }
+
+    [Fact]
+    public void PasswordHashService_ProducesOneWayHashesThatVerifyPasswords()
+    {
+        using var serviceProvider = new ServiceCollection()
+            .AddLogging()
+            .AddInfrastructure("Host=localhost;Database=engiflow_test;Username=test;Password=test")
+            .BuildServiceProvider();
+        var passwordHashService = serviceProvider.GetRequiredService<IPasswordHashService>();
+        var user = User.Create(
+            CompanyId.New(),
+            "admin@acme.example",
+            "Administrator",
+            UserRole.Administrator);
+
+        var passwordHash = passwordHashService.HashPassword(user, "StrongPass123!");
+        user.SetPasswordHash(passwordHash);
+
+        Assert.NotEqual("StrongPass123!", passwordHash);
+        Assert.StartsWith("AQAAAA", passwordHash, StringComparison.Ordinal);
+        Assert.True(passwordHashService.VerifyPassword(user, "StrongPass123!"));
     }
 
     [Fact]

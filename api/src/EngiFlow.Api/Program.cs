@@ -28,6 +28,7 @@ builder.Services
         options.JsonSerializerOptions.Converters.Add(new JsonStringEnumConverter<EcoPriority>(allowIntegerValues: false));
         options.JsonSerializerOptions.Converters.Add(new JsonStringEnumConverter<EcoStatus>(allowIntegerValues: false));
         options.JsonSerializerOptions.Converters.Add(new JsonStringEnumConverter<EcoEventType>(allowIntegerValues: false));
+        options.JsonSerializerOptions.Converters.Add(new JsonStringEnumConverter<UserRole>(allowIntegerValues: false));
     });
 builder.Services.AddProblemDetails(options =>
 {

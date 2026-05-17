@@ -45,6 +45,7 @@ public sealed class LoginQueryValidator : AbstractValidator<LoginQuery>
 /// </summary>
 public sealed class LoginQueryHandler : IQueryHandler<LoginQuery, LoginResultDto>
 {
+    private readonly ICompanyRepository _companies;
     private readonly IJwtTokenService _jwtTokenService;
     private readonly IPasswordHashService _passwordHashService;
     private readonly IUserRepository _users;
@@ -52,14 +53,17 @@ public sealed class LoginQueryHandler : IQueryHandler<LoginQuery, LoginResultDto
     /// <summary>
     /// Initializes a new instance of the <see cref="LoginQueryHandler"/> class.
     /// </summary>
+    /// <param name="companies">The company repository used to resolve tenant display metadata.</param>
     /// <param name="users">The user repository used for authentication lookup.</param>
     /// <param name="passwordHashService">The password hash verification service.</param>
     /// <param name="jwtTokenService">The JWT issuing service.</param>
     public LoginQueryHandler(
+        ICompanyRepository companies,
         IUserRepository users,
         IPasswordHashService passwordHashService,
         IJwtTokenService jwtTokenService)
     {
+        _companies = companies;
         _users = users;
         _passwordHashService = passwordHashService;
         _jwtTokenService = jwtTokenService;
@@ -82,8 +86,16 @@ public sealed class LoginQueryHandler : IQueryHandler<LoginQuery, LoginResultDto
             throw new AuthenticationFailedException();
         }
 
-        var token = _jwtTokenService.CreateAccessToken(user);
-        return new LoginResultDto(token.AccessToken, "Bearer", token.ExpiresAtUtc);
+        var company = await _companies.GetByIdAsync(user.CompanyId, cancellationToken)
+            .ConfigureAwait(false);
+
+        if (company is null || !company.IsActive)
+        {
+            throw new AuthenticationFailedException();
+        }
+
+        var token = _jwtTokenService.CreateAccessToken(user, company.Name);
+        return AuthResultFactory.Create(token, user, company);
     }
 
     private static string NormalizeEmail(string email)
