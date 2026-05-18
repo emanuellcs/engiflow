@@ -47,7 +47,7 @@ Browser HTTP calls normally use the Next.js `/api/...` proxy unless a public API
 | --- | --- |
 | Frontend | Next.js 16, React 19, TypeScript, Material UI, MUI X DataGrid, MUI X Date Pickers |
 | Backend | .NET 10, ASP.NET Core Web API, SignalR, JWT bearer authentication |
-| Application | MediatR-backed CQRS, FluentValidation, post-commit notifications |
+| Application | Internal CQRS Dispatcher-backed CQRS, FluentValidation, post-commit notifications |
 | Domain | Clean Architecture, DDD aggregate roots, strongly typed IDs |
 | Persistence | EF Core 10, Npgsql, PostgreSQL 18, `xmin` optimistic concurrency |
 | Storage | S3-compatible attachment storage, MinIO for local development |

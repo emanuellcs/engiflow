@@ -13,14 +13,14 @@ The EngiFlow API is a .NET 10 ASP.NET Core backend for tenant-scoped Engineering
 
 The API project is the composition root. Domain and application layers do not depend on ASP.NET Core, EF Core, or storage SDKs.
 
-## CQRS and MediatR
+## CQRS and Internal CQRS Dispatcher
 
 Application use cases are expressed as EngiFlow-owned CQRS contracts:
 
 - `ICommand<TResponse>` for mutating requests.
 - `IQuery<TResponse>` for read-only requests.
-- `ICommandHandler<TCommand, TResponse>` and `IQueryHandler<TQuery, TResponse>` adapt to MediatR `IRequestHandler`.
-- Controllers dispatch through `IApplicationMediator` instead of depending directly on MediatR.
+- `ICommandHandler<TCommand, TResponse>` and `IQueryHandler<TQuery, TResponse>` adapt to Internal CQRS Dispatcher `IRequestHandler`.
+- Controllers dispatch through `IApplicationMediator` instead of depending directly on Internal CQRS Dispatcher.
 
 Important use cases:
 
@@ -42,7 +42,7 @@ Examples:
 
 ## Transaction Behavior
 
-Infrastructure registers `TransactionBehavior<TRequest, TResponse>` as a MediatR open pipeline behavior.
+Infrastructure registers `TransactionBehavior<TRequest, TResponse>` as a Internal CQRS Dispatcher open pipeline behavior.
 
 Behavior:
 
@@ -57,7 +57,7 @@ This keeps database writes ACID-compliant while avoiding false real-time broadca
 
 ## Post-Commit Notifications
 
-Application handlers enqueue MediatR notifications in `IPostCommitNotificationQueue`. The transaction behavior publishes them after commit.
+Application handlers enqueue Internal CQRS Dispatcher notifications in `IPostCommitNotificationQueue`. The transaction behavior publishes them after commit.
 
 Current notification families:
 
