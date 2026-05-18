@@ -2,7 +2,7 @@
 
 EngiFlow is a production-oriented B2B SaaS platform for controlled Product Lifecycle Management workflows. It gives engineering, manufacturing, quality, and operations teams a governed Engineering Change Order (ECO) process with tenant isolation, role-based access control, real-time collaboration, approval quorum policy, S3-compatible file storage, and an immutable audit trail.
 
-The current branch, `feat/eco-pr-workflow-and-realtime`, completes the MVP governance layer: ISO 9001 segregation of duties, tenant workflow policies, administrator team management, last-login visibility, and real-time security enforcement.
+This foundational MVP establishes a robust governance layer, featuring strict ISO 9001 segregation of duties, dynamic tenant workflow policies, comprehensive administrator team management with last-login visibility, and real-time security enforcement.
 
 ## Business Value
 
