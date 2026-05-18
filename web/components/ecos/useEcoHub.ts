@@ -108,7 +108,13 @@ export function useEcoHub({ token, onEcoChanged }: UseEcoHubOptions): UseEcoHubR
 }
 
 function resolveEcoHubUrl(): string {
-  return "/api/hubs/ecos";
+  const baseUrl = (
+    process.env.NEXT_PUBLIC_API_URL ||
+    process.env.NEXT_PUBLIC_API_BASE_URL ||
+    ""
+  ).replace(/\/+$/, "");
+
+  return baseUrl ? `${baseUrl}/hubs/ecos` : "/api/hubs/ecos";
 }
 
 function getSignalRErrorMessage(error: unknown): string | null {
