@@ -1,5 +1,5 @@
-using EngiFlow.Application.Abstractions.Cqrs;
 using FluentValidation;
+using EngiFlow.Application.Mediation;
 using AppValidationException = EngiFlow.Application.Exceptions.ValidationException;
 
 namespace EngiFlow.Application.Behaviors;
@@ -15,6 +15,7 @@ namespace EngiFlow.Application.Behaviors;
 /// background jobs, or future message consumers.
 /// </remarks>
 public sealed class ValidationBehavior<TRequest, TResponse> : IPipelineBehavior<TRequest, TResponse>
+    where TRequest : notnull
 {
     private readonly IReadOnlyCollection<IValidator<TRequest>> _validators;
 
@@ -28,10 +29,33 @@ public sealed class ValidationBehavior<TRequest, TResponse> : IPipelineBehavior<
     }
 
     /// <inheritdoc />
+    public async Task<TResponse> Handle(
+        TRequest request,
+        RequestHandlerDelegate<TResponse> next,
+        CancellationToken cancellationToken = default)
+    {
+        return await HandleCoreAsync(request, () => next(), cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Executes validation using the legacy in-process CQRS delegate shape.
+    /// </summary>
+    /// <param name="request">The request being validated.</param>
+    /// <param name="next">The legacy next-handler delegate.</param>
+    /// <param name="cancellationToken">A token that can cancel validation.</param>
+    /// <returns>The response DTO produced by the next handler.</returns>
     public async Task<TResponse> HandleAsync(
         TRequest request,
         RequestHandlerDelegate<TResponse> next,
         CancellationToken cancellationToken = default)
+    {
+        return await HandleCoreAsync(request, () => next(), cancellationToken).ConfigureAwait(false);
+    }
+
+    private async Task<TResponse> HandleCoreAsync(
+        TRequest request,
+        Func<Task<TResponse>> next,
+        CancellationToken cancellationToken)
     {
         if (_validators.Count == 0)
         {

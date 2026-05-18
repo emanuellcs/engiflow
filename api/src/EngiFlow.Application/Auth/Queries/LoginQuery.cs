@@ -12,7 +12,7 @@ namespace EngiFlow.Application.Auth.Queries;
 /// </summary>
 /// <param name="Email">The user's email address.</param>
 /// <param name="Password">The user's plain-text password for verification.</param>
-public sealed record LoginQuery(string Email, string Password) : IQuery<LoginResultDto>;
+public sealed record LoginQuery(string Email, string Password) : ICommand<LoginResultDto>;
 
 /// <summary>
 /// Validates <see cref="LoginQuery"/> requests before credential verification.
@@ -43,7 +43,7 @@ public sealed class LoginQueryValidator : AbstractValidator<LoginQuery>
 /// <summary>
 /// Handles credential validation and token issuance for login requests.
 /// </summary>
-public sealed class LoginQueryHandler : IQueryHandler<LoginQuery, LoginResultDto>
+public sealed class LoginQueryHandler : ICommandHandler<LoginQuery, LoginResultDto>
 {
     private readonly ICompanyRepository _companies;
     private readonly IJwtTokenService _jwtTokenService;
@@ -93,6 +93,10 @@ public sealed class LoginQueryHandler : IQueryHandler<LoginQuery, LoginResultDto
         {
             throw new AuthenticationFailedException();
         }
+
+        user.RecordSuccessfulLogin();
+        await _users.RecordSuccessfulLoginAsync(user.Id, user.LastLoginAt!.Value, cancellationToken)
+            .ConfigureAwait(false);
 
         var token = _jwtTokenService.CreateAccessToken(user, company.Name);
         return AuthResultFactory.Create(token, user, company);

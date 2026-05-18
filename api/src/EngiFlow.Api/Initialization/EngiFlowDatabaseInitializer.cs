@@ -65,13 +65,15 @@ public sealed class EngiFlowDatabaseInitializer
         var admin = company.RegisterUser(
             seed.AdminEmail,
             seed.AdminDisplayName,
-            UserRole.Administrator);
+            UserRole.Owner);
         admin.SetPasswordHash(passwordHashService.HashPassword(admin, seed.AdminPassword));
+        var settings = CompanySettings.CreateDefault(company.Id);
 
         await using var seedContext = new EngiFlowDbContext(
             options,
             new StaticTenantProvider(company.Id, admin.Id));
         seedContext.Companies.Add(company);
+        seedContext.CompanySettings.Add(settings);
         await seedContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
 
         _logger.LogInformation(

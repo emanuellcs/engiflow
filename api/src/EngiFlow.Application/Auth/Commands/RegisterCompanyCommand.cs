@@ -79,6 +79,7 @@ public sealed class RegisterCompanyCommandHandler : ICommandHandler<RegisterComp
     private readonly ICompanyRepository _companies;
     private readonly IJwtTokenService _jwtTokenService;
     private readonly IPasswordHashService _passwordHashService;
+    private readonly ICompanySettingsRepository _settings;
     private readonly IUnitOfWork _unitOfWork;
     private readonly IUserRepository _users;
 
@@ -89,18 +90,21 @@ public sealed class RegisterCompanyCommandHandler : ICommandHandler<RegisterComp
     /// <param name="users">The user repository used to enforce global email uniqueness.</param>
     /// <param name="passwordHashService">The password hashing service.</param>
     /// <param name="jwtTokenService">The JWT issuing service.</param>
+    /// <param name="settings">The company settings repository.</param>
     /// <param name="unitOfWork">The unit of work used to save the company and administrator atomically.</param>
     public RegisterCompanyCommandHandler(
         ICompanyRepository companies,
         IUserRepository users,
         IPasswordHashService passwordHashService,
         IJwtTokenService jwtTokenService,
+        ICompanySettingsRepository settings,
         IUnitOfWork unitOfWork)
     {
         _companies = companies;
         _users = users;
         _passwordHashService = passwordHashService;
         _jwtTokenService = jwtTokenService;
+        _settings = settings;
         _unitOfWork = unitOfWork;
     }
 
@@ -126,10 +130,11 @@ public sealed class RegisterCompanyCommandHandler : ICommandHandler<RegisterComp
         var admin = company.RegisterUser(
             normalizedEmail,
             command.AdminName,
-            UserRole.Administrator);
+            UserRole.Owner);
         admin.SetPasswordHash(_passwordHashService.HashPassword(admin, command.AdminPassword));
 
         await _companies.AddAsync(company, cancellationToken).ConfigureAwait(false);
+        await _settings.AddAsync(CompanySettings.CreateDefault(company.Id), cancellationToken).ConfigureAwait(false);
         await _unitOfWork.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
 
         var token = _jwtTokenService.CreateAccessToken(admin, company.Name);

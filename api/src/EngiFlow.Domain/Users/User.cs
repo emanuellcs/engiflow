@@ -93,6 +93,11 @@ public sealed class User : ITenantScoped
     public DateTimeOffset CreatedAt { get; private set; }
 
     /// <summary>
+    /// Gets the UTC timestamp when the user last authenticated successfully.
+    /// </summary>
+    public DateTimeOffset? LastLoginAt { get; private set; }
+
+    /// <summary>
     /// Gets the UTC timestamp when the user was deactivated, when applicable.
     /// </summary>
     public DateTimeOffset? DeactivatedAt { get; private set; }
@@ -146,6 +151,12 @@ public sealed class User : ITenantScoped
     {
         EnsureActive();
         DomainGuard.AgainstInvalidEnum(role, nameof(role));
+
+        if (Role == UserRole.Owner || role == UserRole.Owner)
+        {
+            throw new DomainException("The Owner role is immutable.");
+        }
+
         Role = role;
     }
 
@@ -160,6 +171,16 @@ public sealed class User : ITenantScoped
     }
 
     /// <summary>
+    /// Records a successful authentication timestamp.
+    /// </summary>
+    /// <param name="loggedInAt">Optional timestamp used for deterministic tests.</param>
+    public void RecordSuccessfulLogin(DateTimeOffset? loggedInAt = null)
+    {
+        EnsureActive();
+        LastLoginAt = DomainGuard.UtcTimestamp(loggedInAt);
+    }
+
+    /// <summary>
     /// Deactivates the user and prevents the user from acting in the domain.
     /// </summary>
     /// <param name="deactivatedAt">Optional timestamp used for deterministic tests or imports.</param>
@@ -169,6 +190,11 @@ public sealed class User : ITenantScoped
     /// </remarks>
     public void Deactivate(DateTimeOffset? deactivatedAt = null)
     {
+        if (Role == UserRole.Owner)
+        {
+            throw new DomainException("Owner users cannot be deactivated.");
+        }
+
         if (!IsActive)
         {
             return;

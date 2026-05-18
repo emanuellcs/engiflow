@@ -6,7 +6,7 @@ using FluentValidation;
 namespace EngiFlow.Application.Auth.Commands;
 
 /// <summary>
-/// Command that accepts a forgot-password request and logs an MVP reset link.
+/// Command that accepts a forgot-password request and sends a password reset email.
 /// </summary>
 /// <param name="Email">The account email address requesting a password reset.</param>
 public sealed record ForgotPasswordCommand(string Email) : ICommand<ForgotPasswordResultDto>;
@@ -32,19 +32,19 @@ public sealed class ForgotPasswordCommandValidator : AbstractValidator<ForgotPas
 }
 
 /// <summary>
-/// Handles accepted forgot-password requests for the MVP reset flow.
+/// Handles accepted forgot-password requests for the SMTP reset flow.
 /// </summary>
 public sealed class ForgotPasswordCommandHandler : ICommandHandler<ForgotPasswordCommand, ForgotPasswordResultDto>
 {
-    private readonly IPasswordResetLinkLogger _resetLinkLogger;
+    private readonly IPasswordResetEmailSender _resetEmailSender;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="ForgotPasswordCommandHandler"/> class.
     /// </summary>
-    /// <param name="resetLinkLogger">The logger used to write mock reset links.</param>
-    public ForgotPasswordCommandHandler(IPasswordResetLinkLogger resetLinkLogger)
+    /// <param name="resetEmailSender">The email sender used to deliver reset links.</param>
+    public ForgotPasswordCommandHandler(IPasswordResetEmailSender resetEmailSender)
     {
-        _resetLinkLogger = resetLinkLogger;
+        _resetEmailSender = resetEmailSender;
     }
 
     /// <inheritdoc />
@@ -55,7 +55,7 @@ public sealed class ForgotPasswordCommandHandler : ICommandHandler<ForgotPasswor
         var normalizedEmail = command.Email.Trim().ToLowerInvariant();
         var resetLink = $"https://engiflow.local/reset-password?email={Uri.EscapeDataString(normalizedEmail)}&token=mock-{Guid.NewGuid():N}";
 
-        await _resetLinkLogger.LogMockResetLinkAsync(normalizedEmail, resetLink, cancellationToken)
+        await _resetEmailSender.SendPasswordResetAsync(normalizedEmail, resetLink, cancellationToken)
             .ConfigureAwait(false);
 
         return new ForgotPasswordResultDto();

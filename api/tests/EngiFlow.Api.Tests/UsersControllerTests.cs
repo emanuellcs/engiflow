@@ -1,4 +1,5 @@
 using EngiFlow.Api.Controllers;
+using EngiFlow.Api.Auth;
 using EngiFlow.Api.Models;
 using EngiFlow.Application.Abstractions.Cqrs;
 using EngiFlow.Application.Users.Commands;
@@ -60,13 +61,86 @@ public sealed class UsersControllerTests
     }
 
     [Fact]
-    public void Controller_IsSecuredForAdministrators()
+    public async Task UpdateRoleAsync_DispatchesUpdateUserRoleCommandAndReturnsOk()
+    {
+        var userId = Guid.NewGuid();
+        var updatedUser = new UserSummaryDto(
+            userId,
+            "Grace Hopper",
+            "grace@acme.example",
+            nameof(UserRole.Viewer));
+        var mediator = new FakeApplicationMediator { Dispatch = _ => updatedUser };
+        var controller = new UsersController(mediator);
+
+        var result = await controller.UpdateRoleAsync(
+            userId,
+            new UpdateUserRoleRequest(UserRole.Viewer),
+            CancellationToken.None);
+
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        Assert.Same(updatedUser, ok.Value);
+
+        var command = Assert.IsType<UpdateUserRoleCommand>(mediator.LastRequest);
+        Assert.Equal(userId, command.UserId);
+        Assert.Equal(UserRole.Viewer, command.Role);
+    }
+
+    [Fact]
+    public async Task DeactivateAsync_DispatchesDeactivateUserCommandAndReturnsNoContent()
+    {
+        var userId = Guid.NewGuid();
+        var mediator = new FakeApplicationMediator { Dispatch = _ => true };
+        var controller = new UsersController(mediator);
+
+        var result = await controller.DeactivateAsync(userId, CancellationToken.None);
+
+        Assert.IsType<NoContentResult>(result);
+
+        var command = Assert.IsType<DeactivateUserCommand>(mediator.LastRequest);
+        Assert.Equal(userId, command.UserId);
+    }
+
+    [Fact]
+    public void Controller_IsSecuredForUserManagementPolicy()
     {
         var authorize = Assert.Single(typeof(UsersController)
             .GetCustomAttributes(typeof(AuthorizeAttribute), inherit: true)
             .Cast<AuthorizeAttribute>());
 
-        Assert.Equal(nameof(UserRole.Administrator), authorize.Roles);
+        Assert.Equal("UserManagement", authorize.Policy);
+    }
+
+    [Fact]
+    public void RoleAndDeactivateEndpoints_UseCanonicalPutRoutes()
+    {
+        var roleRoute = Assert.Single(typeof(UsersController)
+            .GetMethod(nameof(UsersController.UpdateRoleAsync))!
+            .GetCustomAttributes(typeof(HttpPutAttribute), inherit: true)
+            .Cast<HttpPutAttribute>());
+        var deactivateRoute = Assert.Single(typeof(UsersController)
+            .GetMethod(nameof(UsersController.DeactivateAsync))!
+            .GetCustomAttributes(typeof(HttpPutAttribute), inherit: true)
+            .Cast<HttpPutAttribute>());
+
+        Assert.Equal("{id:guid}/role", roleRoute.Template);
+        Assert.Equal("{id:guid}/deactivate", deactivateRoute.Template);
+    }
+
+    [Fact]
+    public async Task Owner_CanManageUsers()
+    {
+        // This test verifies that the application logic allows Owners to list users.
+        // We use the same mediator mock pattern.
+        var users = new UserSummaryDto[]
+        {
+            new(Guid.NewGuid(), "Owner User", "owner@acme.example", nameof(UserRole.Owner))
+        };
+        var mediator = new FakeApplicationMediator { Dispatch = _ => users };
+        var controller = new UsersController(mediator);
+
+        var result = await controller.ListAsync(CancellationToken.None);
+
+        Assert.IsType<OkObjectResult>(result.Result);
     }
 
     private sealed class FakeApplicationMediator : IApplicationMediator

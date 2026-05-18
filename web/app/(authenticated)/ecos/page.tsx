@@ -2,77 +2,164 @@
 
 import AddIcon from "@mui/icons-material/Add";
 import AssignmentOutlinedIcon from "@mui/icons-material/AssignmentOutlined";
-import Alert from "@mui/material/Alert";
+import FilterAltOffIcon from "@mui/icons-material/FilterAltOff";
+import SearchIcon from "@mui/icons-material/Search";
+import Avatar from "@mui/material/Avatar";
+import Box from "@mui/material/Box";
 import Button from "@mui/material/Button";
+import Checkbox from "@mui/material/Checkbox";
+import FormControl from "@mui/material/FormControl";
+import FormControlLabel from "@mui/material/FormControlLabel";
+import InputAdornment from "@mui/material/InputAdornment";
+import InputLabel from "@mui/material/InputLabel";
 import Link from "@mui/material/Link";
+import MenuItem from "@mui/material/MenuItem";
 import Paper from "@mui/material/Paper";
-import Skeleton from "@mui/material/Skeleton";
+import Select, { type SelectChangeEvent } from "@mui/material/Select";
 import Stack from "@mui/material/Stack";
-import Table from "@mui/material/Table";
-import TableBody from "@mui/material/TableBody";
-import TableCell from "@mui/material/TableCell";
-import TableContainer from "@mui/material/TableContainer";
-import TableHead from "@mui/material/TableHead";
-import TableRow from "@mui/material/TableRow";
+import TextField from "@mui/material/TextField";
 import Typography from "@mui/material/Typography";
-import { useEffect, useState } from "react";
+import { DataGrid, type GridColDef, type GridPaginationModel } from "@mui/x-data-grid";
+import { DatePicker } from "@mui/x-date-pickers/DatePicker";
+import type { Dayjs } from "dayjs";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import NextLink from "@/components/ui/NextLink";
 import PageHeader from "@/components/ui/PageHeader";
 import PriorityChip from "@/components/ui/PriorityChip";
 import StatusChip from "@/components/ui/StatusChip";
 import { ApiError, apiFetch } from "@/lib/api/client";
 import { useAuth } from "@/lib/auth/AuthContext";
-import type { EcoSummaryDto, PagedResult } from "@/lib/types/eco";
+import { isAdminOrOwner } from "@/lib/auth/jwt";
+import type {
+  EcoPriority,
+  EcoReviewContextDto,
+  EcoStatus,
+  EcoSummaryDto,
+  EcoUserDto,
+  PagedResult,
+} from "@/lib/types/eco";
 
-const pageSize = 20;
-const skeletonRowCount = 6;
-const administratorRole = "Administrator";
+type EcoListFilters = {
+  search: string;
+  status: "All" | EcoStatus;
+  priority: "All" | EcoPriority;
+  createdFrom: Dayjs | null;
+  createdTo: Dayjs | null;
+  createdByMe: boolean;
+  awaitingMyReview: boolean;
+};
+
+const defaultPageSize = 20;
 const requesterRole = "Requester";
+const approverRoles = new Set(["Owner", "Administrator", "Approver"]);
+const statusOptions: EcoStatus[] = [
+  "Draft",
+  "UnderReview",
+  "Approved",
+  "Canceled",
+  "Rejected",
+  "Implemented",
+];
+const priorityOptions: EcoPriority[] = ["Low", "Medium", "High", "Critical"];
+const initialFilters: EcoListFilters = {
+  search: "",
+  status: "All",
+  priority: "All",
+  createdFrom: null,
+  createdTo: null,
+  createdByMe: false,
+  awaitingMyReview: false,
+};
 
 /**
  * Renders the authenticated Engineering Change Orders page.
  *
- * @returns The ECO dashboard table view.
+ * @returns The ECO DataGrid dashboard.
  */
 export default function EcosPage() {
   return <EcoDashboard />;
 }
 
 /**
- * Loads and renders the current tenant's Engineering Change Orders in a dense,
- * horizontally scrollable Material UI table.
+ * Loads and renders the current tenant's Engineering Change Orders in a
+ * server-paginated MUI X DataGrid with PR-like review context.
  *
- * @returns The ECO dashboard content including header, errors, table, and empty state.
+ * @returns The ECO dashboard content.
  */
 function EcoDashboard() {
   const { user } = useAuth();
-  const [ecos, setEcos] = useState<EcoSummaryDto[]>([]);
+  const [rows, setRows] = useState<EcoSummaryDto[]>([]);
+  const [rowCount, setRowCount] = useState(0);
+  const [paginationModel, setPaginationModel] = useState<GridPaginationModel>({
+    page: 0,
+    pageSize: defaultPageSize,
+  });
+  const [filters, setFilters] = useState<EcoListFilters>(initialFilters);
+  const [reviewContext, setReviewContext] = useState<EcoReviewContextDto | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const canCreateEco =
-    user?.role === administratorRole || user?.role === requesterRole;
+  const usersById = useMemo(
+    () => createUserLookup(reviewContext?.users ?? []),
+    [reviewContext],
+  );
+  const approvers = useMemo(
+    () => (reviewContext?.users ?? []).filter((item) => approverRoles.has(item.role)),
+    [reviewContext],
+  );
+  const canCreateEco = isAdminOrOwner(user?.role) || user?.role === requesterRole;
+  const minApprovalsRequired = reviewContext?.minApprovalsRequired ?? 1;
 
   useEffect(() => {
     const controller = new AbortController();
 
-    async function loadEcos() {
+    async function loadReviewContext(): Promise<void> {
+      try {
+        const context = await apiFetch<EcoReviewContextDto>(
+          "/api/ecos/review-context",
+          { signal: controller.signal },
+        );
+
+        setReviewContext(context);
+      } catch (error) {
+        if (!isAbortError(error)) {
+          setReviewContext({ minApprovalsRequired: 1, users: [] });
+        }
+      }
+    }
+
+    void loadReviewContext();
+
+    return () => {
+      controller.abort();
+    };
+  }, []);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    const searchDebounce = window.setTimeout(() => {
+      void loadEcos();
+    }, 250);
+
+    async function loadEcos(): Promise<void> {
       setIsLoading(true);
       setErrorMessage(null);
 
       try {
         const result = await apiFetch<PagedResult<EcoSummaryDto>>(
-          `/api/ecos?pageNumber=1&pageSize=${pageSize}`,
+          buildEcoListPath(paginationModel, filters),
           { signal: controller.signal },
         );
 
-        setEcos(Array.isArray(result.items) ? result.items : []);
+        setRows(Array.isArray(result.items) ? result.items : []);
+        setRowCount(Number.isFinite(result.totalCount) ? result.totalCount : 0);
       } catch (error) {
         if (isAbortError(error)) {
           return;
         }
 
+        setRows([]);
+        setRowCount(0);
         setErrorMessage(getEcoListErrorMessage(error));
-        setEcos([]);
       } finally {
         if (!controller.signal.aborted) {
           setIsLoading(false);
@@ -80,18 +167,129 @@ function EcoDashboard() {
       }
     }
 
-    void loadEcos();
-
     return () => {
+      window.clearTimeout(searchDebounce);
       controller.abort();
     };
+  }, [filters, paginationModel]);
+
+  const resetToFirstPage = useCallback(() => {
+    setPaginationModel((current) => ({ ...current, page: 0 }));
   }, []);
+
+  const columns = useMemo<GridColDef<EcoSummaryDto>[]>(
+    () => [
+      {
+        field: "id",
+        headerName: "ECO",
+        minWidth: 170,
+        flex: 0.8,
+        sortable: false,
+        renderCell: (params) => (
+          <Stack spacing={0.25} sx={{ minWidth: 0 }}>
+            <Link
+              component={NextLink}
+              href={`/ecos/${params.row.id}`}
+              underline="hover"
+              color="primary"
+              sx={{ fontFamily: "monospace", fontWeight: 700 }}
+            >
+              {formatShortId(params.row.id)}
+            </Link>
+            <Typography variant="caption" color="text.secondary" noWrap>
+              Round {params.row.reviewRound || 0}
+            </Typography>
+          </Stack>
+        ),
+      },
+      {
+        field: "title",
+        headerName: "Title",
+        minWidth: 280,
+        flex: 1.5,
+        sortable: false,
+        renderCell: (params) => (
+          <Link
+            component={NextLink}
+            href={`/ecos/${params.row.id}`}
+            underline="hover"
+            color="inherit"
+            sx={{
+              display: "block",
+              minWidth: 0,
+              overflow: "hidden",
+              textOverflow: "ellipsis",
+              whiteSpace: "nowrap",
+              width: "100%",
+            }}
+          >
+            {params.row.title}
+          </Link>
+        ),
+      },
+      {
+        field: "createdByUserId",
+        headerName: "Requester",
+        minWidth: 210,
+        flex: 1,
+        sortable: false,
+        renderCell: (params) => {
+          const requester = usersById.get(params.row.createdByUserId);
+
+          return (
+            <UserCell
+              fallbackId={params.row.createdByUserId}
+              user={requester}
+            />
+          );
+        },
+      },
+      {
+        field: "review",
+        headerName: "Review",
+        minWidth: 210,
+        flex: 1,
+        sortable: false,
+        renderCell: (params) => (
+          <ReviewerProgressCell
+            approvalCount={params.row.currentRoundApprovalCount}
+            approvers={approvers}
+            minApprovalsRequired={minApprovalsRequired}
+            requestChangesCount={params.row.currentRoundRequestChangesCount}
+            status={params.row.status}
+          />
+        ),
+      },
+      {
+        field: "priority",
+        headerName: "Priority",
+        minWidth: 118,
+        sortable: false,
+        renderCell: (params) => <PriorityChip priority={params.row.priority} />,
+      },
+      {
+        field: "status",
+        headerName: "Status",
+        minWidth: 138,
+        sortable: false,
+        renderCell: (params) => <StatusChip status={params.row.status} />,
+      },
+      {
+        field: "createdAt",
+        headerName: "Created",
+        minWidth: 150,
+        sortable: false,
+        valueFormatter: (value) => formatDate(value as string),
+      },
+    ],
+    [approvers, minApprovalsRequired, usersById],
+  );
 
   return (
     <Stack spacing={2.5}>
       <PageHeader
         title="Engineering Change Orders"
-        description="Review current ECO activity across the workspace."
+        description="Search, review, and triage engineering changes across the workspace."
         actionButton={canCreateEco ? (
           <Button
             component={NextLink}
@@ -110,172 +308,340 @@ function EcoDashboard() {
         ) : undefined}
       />
 
-      {errorMessage ? (
-        <Alert severity="error">
-          {errorMessage}
-        </Alert>
-      ) : null}
+      <Paper elevation={1} sx={{ p: { xs: 1.5, md: 2 } }}>
+        <Stack spacing={2}>
+          <EcoFilterBar
+            filters={filters}
+            onFiltersChange={(nextFilters) => {
+              setFilters(nextFilters);
+              resetToFirstPage();
+            }}
+          />
+          <Box sx={{ width: "100%", overflowX: "auto" }}>
+            <Box sx={{ minWidth: 980, height: 660 }}>
+              <DataGrid
+                rows={rows}
+                columns={columns}
+                getRowId={(row) => row.id}
+                rowCount={rowCount}
+                loading={isLoading}
+                paginationMode="server"
+                paginationModel={paginationModel}
+                onPaginationModelChange={setPaginationModel}
+                pageSizeOptions={[10, 20, 50, 100]}
+                disableRowSelectionOnClick
+                slots={{
+                  noRowsOverlay: EmptyGridOverlay,
+                }}
+                slotProps={{
+                  loadingOverlay: {
+                    variant: "linear-progress",
+                    noRowsVariant: "skeleton",
+                  },
+                }}
+                sx={{
+                  border: 0,
+                  "& .MuiDataGrid-columnHeaders": {
+                    bgcolor: "grey.100",
+                    borderRadius: 0,
+                  },
+                  "& .MuiDataGrid-cell": {
+                    alignItems: "center",
+                  },
+                }}
+              />
+            </Box>
+          </Box>
+          {errorMessage ? (
+            <Typography variant="body2" color="error">
+              {errorMessage}
+            </Typography>
+          ) : null}
+        </Stack>
+      </Paper>
+    </Stack>
+  );
+}
 
-      <TableContainer
-        component={Paper}
-        elevation={1}
-        sx={{ width: "100%", overflowX: "auto" }}
+type EcoFilterBarProps = {
+  filters: EcoListFilters;
+  onFiltersChange: (filters: EcoListFilters) => void;
+};
+
+/**
+ * Renders external MUI controls for server-side ECO filtering.
+ *
+ * @param props - Filter bar props.
+ * @returns Filter controls used by the ECO DataGrid.
+ */
+function EcoFilterBar({ filters, onFiltersChange }: EcoFilterBarProps) {
+  function patchFilters(patch: Partial<EcoListFilters>): void {
+    onFiltersChange({ ...filters, ...patch });
+  }
+
+  return (
+    <Stack spacing={1.5}>
+      <Stack
+        direction={{ xs: "column", lg: "row" }}
+        spacing={1.5}
+        sx={{ alignItems: { xs: "stretch", lg: "center" } }}
       >
-        <Table
+        <TextField
+          label="Search ECOs"
+          value={filters.search}
+          onChange={(event) => patchFilters({ search: event.target.value })}
           size="small"
-          aria-label="Engineering Change Orders"
-          sx={{ minWidth: 760 }}
+          sx={{ minWidth: { xs: "100%", lg: 300 }, flex: 1 }}
+          slotProps={{
+            input: {
+              startAdornment: (
+                <InputAdornment position="start">
+                  <SearchIcon fontSize="small" />
+                </InputAdornment>
+              ),
+            },
+          }}
+        />
+        <FormControl size="small" sx={{ minWidth: 150 }}>
+          <InputLabel id="eco-status-filter-label">Status</InputLabel>
+          <Select
+            labelId="eco-status-filter-label"
+            label="Status"
+            value={filters.status}
+            onChange={(event: SelectChangeEvent) =>
+              patchFilters({ status: event.target.value as EcoListFilters["status"] })
+            }
+          >
+            <MenuItem value="All">All</MenuItem>
+            {statusOptions.map((status) => (
+              <MenuItem key={status} value={status}>
+                {formatStatusLabel(status)}
+              </MenuItem>
+            ))}
+          </Select>
+        </FormControl>
+        <FormControl size="small" sx={{ minWidth: 150 }}>
+          <InputLabel id="eco-priority-filter-label">Priority</InputLabel>
+          <Select
+            labelId="eco-priority-filter-label"
+            label="Priority"
+            value={filters.priority}
+            onChange={(event: SelectChangeEvent) =>
+              patchFilters({ priority: event.target.value as EcoListFilters["priority"] })
+            }
+          >
+            <MenuItem value="All">All</MenuItem>
+            {priorityOptions.map((priority) => (
+              <MenuItem key={priority} value={priority}>
+                {priority}
+              </MenuItem>
+            ))}
+          </Select>
+        </FormControl>
+        <DatePicker
+          label="Created from"
+          value={filters.createdFrom}
+          onChange={(value) => patchFilters({ createdFrom: value })}
+          slotProps={{ textField: { size: "small", sx: { minWidth: 170 } } }}
+        />
+        <DatePicker
+          label="Created to"
+          value={filters.createdTo}
+          onChange={(value) => patchFilters({ createdTo: value })}
+          slotProps={{ textField: { size: "small", sx: { minWidth: 170 } } }}
+        />
+        <Button
+          type="button"
+          variant="outlined"
+          startIcon={<FilterAltOffIcon />}
+          onClick={() => onFiltersChange(initialFilters)}
+          sx={{ minWidth: 128, textTransform: "none" }}
         >
-          <TableHead>
-            <TableRow
-              sx={{
-                bgcolor: "grey.100",
-                "& th": {
-                  fontWeight: 600,
-                  color: "text.primary",
-                  whiteSpace: "nowrap",
-                },
-              }}
-            >
-              <TableCell width="18%">ID</TableCell>
-              <TableCell>Title</TableCell>
-              <TableCell width="16%">Priority</TableCell>
-              <TableCell width="18%">Status</TableCell>
-              <TableCell width="18%">Created Date</TableCell>
-            </TableRow>
-          </TableHead>
-          <TableBody>
-            {isLoading ? <EcoSkeletonRows /> : null}
-            {!isLoading && ecos.length > 0
-              ? ecos.map((eco) => (
-                <TableRow hover key={eco.id}>
-                  <TableCell>
-                      <Link
-                        component={NextLink}
-                        href={`/ecos/${eco.id}`}
-                        underline="hover"
-                        color="inherit"
-                        aria-label={`View ECO ${formatShortId(eco.id)}`}
-                        sx={{ fontFamily: "monospace", fontSize: 14 }}
-                      >
-                        {formatShortId(eco.id)}
-                      </Link>
-                    </TableCell>
-                    <TableCell>
-                      <Link
-                        component={NextLink}
-                        href={`/ecos/${eco.id}`}
-                        underline="hover"
-                        color="inherit"
-                        sx={{
-                          display: "block",
-                          maxWidth: 420,
-                          overflow: "hidden",
-                          textOverflow: "ellipsis",
-                          whiteSpace: "nowrap",
-                          fontSize: 14,
-                        }}
-                      >
-                        {eco.title}
-                      </Link>
-                    </TableCell>
-                    <TableCell>
-                      <PriorityChip priority={eco.priority} />
-                    </TableCell>
-                    <TableCell>
-                      <StatusChip status={eco.status} />
-                    </TableCell>
-                    <TableCell>
-                      <Typography variant="body2" noWrap>
-                        {formatCreatedDate(eco.createdAt)}
-                      </Typography>
-                    </TableCell>
-                  </TableRow>
-                ))
-              : null}
-            {!isLoading && !errorMessage && ecos.length === 0 ? (
-              <EcoEmptyRow />
-            ) : null}
-          </TableBody>
-        </Table>
-      </TableContainer>
+          Clear
+        </Button>
+      </Stack>
+      <Stack direction={{ xs: "column", sm: "row" }} spacing={1}>
+        <FormControlLabel
+          control={
+            <Checkbox
+              checked={filters.createdByMe}
+              onChange={(event) => patchFilters({ createdByMe: event.target.checked })}
+              size="small"
+            />
+          }
+          label="Created by me"
+        />
+        <FormControlLabel
+          control={
+            <Checkbox
+              checked={filters.awaitingMyReview}
+              onChange={(event) =>
+                patchFilters({ awaitingMyReview: event.target.checked })
+              }
+              size="small"
+            />
+          }
+          label="Awaiting my review"
+        />
+      </Stack>
+    </Stack>
+  );
+}
+
+type UserCellProps = {
+  fallbackId: string;
+  user: EcoUserDto | undefined;
+};
+
+/**
+ * Renders a user avatar and display name for DataGrid cells.
+ *
+ * @param props - User cell props.
+ * @returns User identity cell.
+ */
+function UserCell({ fallbackId, user }: UserCellProps) {
+  const name = user?.name ?? formatShortId(fallbackId);
+
+  return (
+    <Stack direction="row" spacing={1} sx={{ alignItems: "center", minWidth: 0 }}>
+      <Avatar sx={{ width: 28, height: 28, fontSize: 12 }}>
+        {getInitials(name)}
+      </Avatar>
+      <Stack sx={{ minWidth: 0 }}>
+        <Typography variant="body2" noWrap>
+          {name}
+        </Typography>
+        <Typography variant="caption" color="text.secondary" noWrap>
+          {user?.role ?? "User"}
+        </Typography>
+      </Stack>
+    </Stack>
+  );
+}
+
+type ReviewerProgressCellProps = {
+  approvalCount: number;
+  approvers: EcoUserDto[];
+  minApprovalsRequired: number;
+  requestChangesCount: number;
+  status: EcoStatus;
+};
+
+/**
+ * Renders current review progress and approver avatars in an ECO list row.
+ *
+ * @param props - Reviewer progress options.
+ * @returns Review progress cell.
+ */
+function ReviewerProgressCell({
+  approvalCount,
+  approvers,
+  minApprovalsRequired,
+  requestChangesCount,
+  status,
+}: ReviewerProgressCellProps) {
+  return (
+    <Stack spacing={0.5} sx={{ minWidth: 0 }}>
+      <Stack direction="row" spacing={0.5} sx={{ alignItems: "center" }}>
+        {approvers.slice(0, 3).map((approver) => (
+          <Avatar
+            key={approver.id}
+            sx={{ width: 24, height: 24, fontSize: 11 }}
+            title={approver.name}
+          >
+            {getInitials(approver.name)}
+          </Avatar>
+        ))}
+        {approvers.length > 3 ? (
+          <Typography variant="caption" color="text.secondary">
+            +{approvers.length - 3}
+          </Typography>
+        ) : null}
+      </Stack>
+      <Typography variant="caption" color="text.secondary" noWrap>
+        {status === "UnderReview"
+          ? `${approvalCount}/${minApprovalsRequired} approved`
+          : formatStatusLabel(status)}
+        {requestChangesCount > 0 ? ` • ${requestChangesCount} changes` : ""}
+      </Typography>
     </Stack>
   );
 }
 
 /**
- * Renders skeleton rows that reserve table space while ECO data is loading.
+ * Renders the empty DataGrid overlay.
  *
- * @returns A fixed set of loading placeholder rows.
+ * @returns Empty grid overlay.
  */
-function EcoSkeletonRows() {
-  return Array.from({ length: skeletonRowCount }, (_, index) => (
-    <TableRow key={`eco-skeleton-${index}`}>
-      <TableCell>
-        <Skeleton variant="text" width={96} />
-      </TableCell>
-      <TableCell>
-        <Skeleton variant="text" width="72%" />
-      </TableCell>
-      <TableCell>
-        <Skeleton variant="rounded" width={78} height={24} />
-      </TableCell>
-      <TableCell>
-        <Skeleton variant="rounded" width={106} height={24} />
-      </TableCell>
-      <TableCell>
-        <Skeleton variant="text" width={112} />
-      </TableCell>
-    </TableRow>
-  ));
-}
-
-/**
- * Renders the table body empty state shown when the API returns no ECO rows.
- *
- * @returns A full-width empty table row.
- */
-function EcoEmptyRow() {
+function EmptyGridOverlay() {
   return (
-    <TableRow>
-      <TableCell colSpan={5}>
-        <Stack
-          spacing={1.5}
-          sx={{
-            minHeight: 220,
-            alignItems: "center",
-            justifyContent: "center",
-            color: "text.secondary",
-            textAlign: "center",
-          }}
-        >
-          <AssignmentOutlinedIcon sx={{ fontSize: 48, color: "grey.500" }} />
-          <Typography variant="body1" color="text.secondary">
-            No Engineering Change Orders found.
-          </Typography>
-        </Stack>
-      </TableCell>
-    </TableRow>
+    <Stack
+      spacing={1.5}
+      sx={{
+        alignItems: "center",
+        justifyContent: "center",
+        minHeight: "100%",
+        p: 3,
+        textAlign: "center",
+      }}
+    >
+      <AssignmentOutlinedIcon sx={{ fontSize: 48, color: "grey.500" }} />
+      <Typography variant="body2" color="text.secondary">
+        No Engineering Change Orders match the current filters.
+      </Typography>
+    </Stack>
   );
 }
 
-/**
- * Formats a full ECO identifier into the short uppercase token used in tables.
- *
- * @param id - ECO identifier returned by the API.
- * @returns The first eight uppercase characters when the identifier is long.
- */
+function buildEcoListPath(
+  paginationModel: GridPaginationModel,
+  filters: EcoListFilters,
+): string {
+  const params = new URLSearchParams({
+    pageNumber: String(paginationModel.page + 1),
+    pageSize: String(paginationModel.pageSize),
+  });
+
+  appendIfPresent(params, "search", filters.search.trim());
+  appendIfPresent(params, "status", filters.status === "All" ? "" : filters.status);
+  appendIfPresent(params, "priority", filters.priority === "All" ? "" : filters.priority);
+  appendIfPresent(
+    params,
+    "createdFrom",
+    filters.createdFrom?.startOf("day").toISOString() ?? "",
+  );
+  appendIfPresent(
+    params,
+    "createdTo",
+    filters.createdTo?.endOf("day").toISOString() ?? "",
+  );
+
+  if (filters.createdByMe) {
+    params.set("createdByMe", "true");
+  }
+
+  if (filters.awaitingMyReview) {
+    params.set("awaitingMyReview", "true");
+  }
+
+  return `/api/ecos?${params.toString()}`;
+}
+
+function appendIfPresent(params: URLSearchParams, key: string, value: string): void {
+  if (value.trim().length > 0) {
+    params.set(key, value);
+  }
+}
+
+function createUserLookup(users: EcoUserDto[]): Map<string, EcoUserDto> {
+  return new Map(users.map((user) => [user.id, user]));
+}
+
 function formatShortId(id: string): string {
   return id.length > 8 ? id.slice(0, 8).toUpperCase() : id.toUpperCase();
 }
 
-/**
- * Formats an API timestamp as a compact U.S. display date.
- *
- * @param value - ISO timestamp returned by the API.
- * @returns A formatted date or a dash when the timestamp cannot be parsed.
- */
-function formatCreatedDate(value: string): string {
+function formatDate(value: string): string {
   const timestamp = Date.parse(value);
 
   if (Number.isNaN(timestamp)) {
@@ -289,12 +655,17 @@ function formatCreatedDate(value: string): string {
   }).format(timestamp);
 }
 
-/**
- * Produces the user-facing ECO list error message for API and network failures.
- *
- * @param error - Unknown error thrown while loading the ECO list.
- * @returns A stable supportable error message for the page alert.
- */
+function formatStatusLabel(value: string): string {
+  return value.replace(/([a-z])([A-Z])/g, "$1 $2");
+}
+
+function getInitials(value: string): string {
+  const parts = value.trim().split(/\s+/).filter(Boolean);
+  const initials = parts.slice(0, 2).map((part) => part[0]?.toUpperCase()).join("");
+
+  return initials || "?";
+}
+
 function getEcoListErrorMessage(error: unknown): string {
   if (error instanceof ApiError) {
     return "Unable to load Engineering Change Orders. Refresh the page or try again later.";
@@ -303,12 +674,6 @@ function getEcoListErrorMessage(error: unknown): string {
   return "Unable to load Engineering Change Orders. Check your connection and try again.";
 }
 
-/**
- * Detects abort errors produced by an AbortController-backed fetch request.
- *
- * @param error - Unknown error thrown by the ECO load operation.
- * @returns True when the error is a browser abort event.
- */
 function isAbortError(error: unknown): boolean {
   return error instanceof DOMException && error.name === "AbortError";
 }

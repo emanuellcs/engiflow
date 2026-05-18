@@ -83,6 +83,38 @@ export function clearStoredAuthToken(): void {
   dispatchAuthStateChanged();
 }
 
+export function updateStoredAuthSessionRoles(roles: string[]): void {
+  if (!isBrowser()) {
+    return;
+  }
+
+  const normalizedRoles = roles
+    .map((role) => role.trim())
+    .filter((role, index, allRoles) => role.length > 0 && allRoles.indexOf(role) === index);
+  const currentSnapshot = getStoredAuthSessionSnapshot();
+  const session = parseStoredAuthSession(currentSnapshot);
+
+  if (!session || normalizedRoles.length === 0) {
+    return;
+  }
+
+  const nextSession: StoredAuthSession = {
+    ...session,
+    roles: normalizedRoles,
+  };
+  const serializedSession = JSON.stringify(nextSession);
+
+  if (readWebStorageItem(window.localStorage, authSessionStorageKey)) {
+    writeWebStorageItem(window.localStorage, authSessionStorageKey, serializedSession);
+  } else if (readWebStorageItem(window.sessionStorage, authSessionStorageKey)) {
+    writeWebStorageItem(window.sessionStorage, authSessionStorageKey, serializedSession);
+  } else {
+    writeWebStorageItem(window.sessionStorage, authSessionStorageKey, serializedSession);
+  }
+
+  dispatchAuthStateChanged();
+}
+
 function readLegacyAuthSessionSnapshot(): string | null {
   const legacyToken =
     readWebStorageItem(window.sessionStorage, legacyAuthTokenStorageKey) ??
@@ -135,6 +167,14 @@ function clearWebStorageItem(storage: Storage, key: string): void {
     storage.removeItem(key);
   } catch {
     // Clearing the cookie below is enough for the request interceptor fallback.
+  }
+}
+
+function writeWebStorageItem(storage: Storage, key: string, value: string): void {
+  try {
+    storage.setItem(key, value);
+  } catch {
+    // The existing token cookie still keeps the proxy authenticated.
   }
 }
 

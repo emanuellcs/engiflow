@@ -2,26 +2,29 @@ using EngiFlow.Application.Abstractions.Cqrs;
 using EngiFlow.Application.Abstractions.Persistence;
 using EngiFlow.Application.Abstractions.Tenancy;
 using EngiFlow.Application.Ecos.Dtos;
+using EngiFlow.Application.Ecos.Notifications;
 using EngiFlow.Application.Exceptions;
+using EngiFlow.Application.Messaging;
+using EngiFlow.Domain.Ecos;
 using EngiFlow.Domain.ValueObjects;
 using FluentValidation;
 
 namespace EngiFlow.Application.Ecos.Commands;
 
 /// <summary>
-/// Command that rejects an ECO currently under review.
+/// Compatibility command that requests changes on an ECO currently under review.
 /// </summary>
-/// <param name="EcoId">The identifier of the ECO to reject.</param>
-/// <param name="Reason">The business justification for rejecting the ECO.</param>
+/// <param name="EcoId">The identifier of the ECO to return to draft.</param>
+/// <param name="Reason">The business justification for returning the ECO to draft.</param>
 public sealed record RejectEcoCommand(Guid EcoId, string Reason) : ICommand<EcoDetailsDto>;
 
 /// <summary>
-/// Validates <see cref="RejectEcoCommand"/> requests before rejection handlers execute.
+/// Validates <see cref="RejectEcoCommand"/> requests before request-changes handlers execute.
 /// </summary>
 public sealed class RejectEcoCommandValidator : AbstractValidator<RejectEcoCommand>
 {
     /// <summary>
-    /// Initializes validation rules for rejecting an ECO.
+    /// Initializes validation rules for requesting changes on an ECO.
     /// </summary>
     public RejectEcoCommandValidator()
     {
@@ -38,11 +41,13 @@ public sealed class RejectEcoCommandValidator : AbstractValidator<RejectEcoComma
 }
 
 /// <summary>
-/// Handles ECO rejection by invoking the aggregate-owned rejection transition.
+/// Handles legacy rejection requests by invoking the aggregate-owned request-changes transition.
 /// </summary>
 public sealed class RejectEcoCommandHandler : ICommandHandler<RejectEcoCommand, EcoDetailsDto>
 {
     private readonly IEngineeringChangeOrderRepository _ecos;
+    private readonly IPostCommitNotificationQueue _notifications;
+    private readonly ICompanySettingsRepository _settings;
     private readonly ITenantProvider _tenantProvider;
     private readonly IUnitOfWork _unitOfWork;
     private readonly IUserRepository _users;
@@ -57,13 +62,17 @@ public sealed class RejectEcoCommandHandler : ICommandHandler<RejectEcoCommand, 
     public RejectEcoCommandHandler(
         IEngineeringChangeOrderRepository ecos,
         IUserRepository users,
+        ICompanySettingsRepository settings,
         IUnitOfWork unitOfWork,
-        ITenantProvider tenantProvider)
+        ITenantProvider tenantProvider,
+        IPostCommitNotificationQueue notifications)
     {
         _ecos = ecos;
         _users = users;
+        _settings = settings;
         _unitOfWork = unitOfWork;
         _tenantProvider = tenantProvider;
+        _notifications = notifications;
     }
 
     /// <inheritdoc />
@@ -82,8 +91,17 @@ public sealed class RejectEcoCommandHandler : ICommandHandler<RejectEcoCommand, 
             throw new EntityNotFoundException("EngineeringChangeOrder", command.EcoId);
         }
 
-        eco.Reject(actorUserId, command.Reason);
+        var minApprovalsRequired = await EcoCommandHandlerSupport
+            .GetMinApprovalsRequiredAsync(_settings, _tenantProvider, cancellationToken)
+            .ConfigureAwait(false);
+
+        eco.SubmitReviewDecision(
+            actorUserId,
+            EcoApprovalDecision.RequestChanges,
+            minApprovalsRequired,
+            command.Reason);
         await _unitOfWork.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+        _notifications.EnqueueEcoChanged(eco);
 
         return eco.ToDetailsDto();
     }

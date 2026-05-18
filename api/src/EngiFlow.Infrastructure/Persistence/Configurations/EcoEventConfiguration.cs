@@ -25,13 +25,13 @@ internal sealed class EcoEventConfiguration : IEntityTypeConfiguration<EcoEvent>
             {
                 table.HasCheckConstraint(
                     "ck_eco_events_event_type",
-                    "\"event_type\" IN ('Created', 'DetailsUpdated', 'SubmittedForReview', 'Approved', 'Rejected', 'Implemented')");
+                    "\"event_type\" IN ('Created', 'DetailsUpdated', 'SubmittedForReview', 'ReviewDecisionSubmitted', 'Approved', 'ChangesRequested', 'AffectedItemAdded', 'AffectedItemRemoved', 'CommentAdded', 'AttachmentAdded', 'Canceled', 'Rejected', 'Implemented')");
                 table.HasCheckConstraint(
                     "ck_eco_events_old_status",
-                    "\"old_status\" IS NULL OR \"old_status\" IN ('Draft', 'UnderReview', 'Approved', 'Rejected', 'Implemented')");
+                    "\"old_status\" IS NULL OR \"old_status\" IN ('Draft', 'UnderReview', 'Approved', 'Canceled', 'Rejected', 'Implemented')");
                 table.HasCheckConstraint(
                     "ck_eco_events_new_status",
-                    "\"new_status\" IS NULL OR \"new_status\" IN ('Draft', 'UnderReview', 'Approved', 'Rejected', 'Implemented')");
+                    "\"new_status\" IS NULL OR \"new_status\" IN ('Draft', 'UnderReview', 'Approved', 'Canceled', 'Rejected', 'Implemented')");
             });
 
         builder.HasKey(ecoEvent => ecoEvent.Id);

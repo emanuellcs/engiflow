@@ -21,17 +21,52 @@ public enum EcoEventType
     SubmittedForReview = 2,
 
     /// <summary>
-    /// The ECO was approved by an authorized actor.
+    /// The ECO received an approval or request-changes decision.
     /// </summary>
-    Approved = 3,
+    ReviewDecisionSubmitted = 3,
 
     /// <summary>
-    /// The ECO was rejected and is no longer eligible for implementation.
+    /// The ECO reached quorum and was approved.
     /// </summary>
-    Rejected = 4,
+    Approved = 4,
 
     /// <summary>
-    /// The approved engineering change was implemented.
+    /// An approver requested changes and returned the ECO to draft.
     /// </summary>
-    Implemented = 5
+    ChangesRequested = 5,
+
+    /// <summary>
+    /// A draft affected item was added.
+    /// </summary>
+    AffectedItemAdded = 6,
+
+    /// <summary>
+    /// A draft affected item was removed.
+    /// </summary>
+    AffectedItemRemoved = 7,
+
+    /// <summary>
+    /// A timeline comment was added.
+    /// </summary>
+    CommentAdded = 8,
+
+    /// <summary>
+    /// An attachment metadata record was added.
+    /// </summary>
+    AttachmentAdded = 9,
+
+    /// <summary>
+    /// The ECO was canceled.
+    /// </summary>
+    Canceled = 10,
+
+    /// <summary>
+    /// Legacy event retained so existing persisted rows can still be materialized.
+    /// </summary>
+    Rejected = 11,
+
+    /// <summary>
+    /// Legacy event retained so existing persisted rows can still be materialized.
+    /// </summary>
+    Implemented = 12
 }

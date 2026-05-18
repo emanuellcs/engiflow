@@ -10,22 +10,27 @@ namespace EngiFlow.Domain.Users;
 public enum UserRole
 {
     /// <summary>
-    /// Can originate an engineering change request.
+    /// Owns the company tenant and can manage administrators.
     /// </summary>
-    Requester = 0,
+    Owner = 0,
 
     /// <summary>
-    /// Can review an ECO before a formal approval decision.
+    /// Can administer company-scoped configuration and users except owners.
     /// </summary>
-    Reviewer = 1,
+    Administrator = 1,
 
     /// <summary>
-    /// Can approve or reject an ECO under review.
+    /// Can approve or request changes on an ECO under review.
     /// </summary>
     Approver = 2,
 
     /// <summary>
-    /// Can administer company-scoped configuration and users.
+    /// Can originate an engineering change request.
     /// </summary>
-    Administrator = 3
+    Requester = 3,
+
+    /// <summary>
+    /// Can read tenant-scoped workflow data without mutating it.
+    /// </summary>
+    Viewer = 4
 }

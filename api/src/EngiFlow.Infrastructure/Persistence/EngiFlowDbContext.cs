@@ -47,6 +47,11 @@ public sealed class EngiFlowDbContext : DbContext
     public DbSet<Company> Companies => Set<Company>();
 
     /// <summary>
+    /// Gets tenant-scoped company workflow settings.
+    /// </summary>
+    public DbSet<CompanySettings> CompanySettings => Set<CompanySettings>();
+
+    /// <summary>
     /// Gets the users table.
     /// </summary>
     public DbSet<User> Users => Set<User>();
@@ -60,6 +65,26 @@ public sealed class EngiFlowDbContext : DbContext
     /// Gets the immutable ECO audit events table.
     /// </summary>
     public DbSet<EcoEvent> EcoEvents => Set<EcoEvent>();
+
+    /// <summary>
+    /// Gets ECO comments.
+    /// </summary>
+    public DbSet<EcoComment> EcoComments => Set<EcoComment>();
+
+    /// <summary>
+    /// Gets ECO affected items.
+    /// </summary>
+    public DbSet<EcoAffectedItem> EcoAffectedItems => Set<EcoAffectedItem>();
+
+    /// <summary>
+    /// Gets ECO approvals.
+    /// </summary>
+    public DbSet<EcoApproval> EcoApprovals => Set<EcoApproval>();
+
+    /// <summary>
+    /// Gets ECO attachment metadata records.
+    /// </summary>
+    public DbSet<EcoAttachment> EcoAttachments => Set<EcoAttachment>();
 
     /// <inheritdoc />
     public override int SaveChanges(bool acceptAllChangesOnSuccess)
@@ -81,9 +106,14 @@ public sealed class EngiFlowDbContext : DbContext
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         modelBuilder.ApplyConfiguration(new CompanyConfiguration());
+        modelBuilder.ApplyConfiguration(new CompanySettingsConfiguration());
         modelBuilder.ApplyConfiguration(new UserConfiguration());
         modelBuilder.ApplyConfiguration(new EngineeringChangeOrderConfiguration());
         modelBuilder.ApplyConfiguration(new EcoEventConfiguration());
+        modelBuilder.ApplyConfiguration(new EcoCommentConfiguration());
+        modelBuilder.ApplyConfiguration(new EcoAffectedItemConfiguration());
+        modelBuilder.ApplyConfiguration(new EcoApprovalConfiguration());
+        modelBuilder.ApplyConfiguration(new EcoAttachmentConfiguration());
 
         ApplyTenantQueryFilters(modelBuilder);
     }
@@ -115,7 +145,20 @@ public sealed class EngiFlowDbContext : DbContext
                 Expression.Constant(nameof(ITenantScoped.CompanyId)));
             var currentCompanyId = Expression.Property(Expression.Constant(this), nameof(CurrentCompanyId));
             var tenantPredicate = Expression.Equal(companyIdProperty, currentCompanyId);
-            var lambda = Expression.Lambda(tenantPredicate, parameter);
+            Expression predicate = tenantPredicate;
+
+            if (entityType.ClrType == typeof(User))
+            {
+                var isActiveProperty = Expression.Call(
+                    typeof(EF),
+                    nameof(EF.Property),
+                    [typeof(bool)],
+                    parameter,
+                    Expression.Constant(nameof(User.IsActive)));
+                predicate = Expression.AndAlso(predicate, isActiveProperty);
+            }
+
+            var lambda = Expression.Lambda(predicate, parameter);
 
             modelBuilder.Entity(entityType.ClrType).HasQueryFilter(lambda);
         }

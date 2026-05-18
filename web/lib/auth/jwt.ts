@@ -45,6 +45,15 @@ export function decodeAuthenticatedUser(token: string): AuthenticatedUser {
   };
 }
 
+/**
+ * Checks if a user role has administrative privileges (Administrator or Owner).
+ * @param role The user's primary role.
+ * @returns True if the role is Administrator or Owner.
+ */
+export function isAdminOrOwner(role: string | undefined): boolean {
+  return role === "Administrator" || role === "Owner";
+}
+
 function decodeJwtPayload(token: string): JwtPayload {
   const segments = token.split(".");
 

@@ -20,17 +20,22 @@ public enum EcoStatus
     UnderReview = 1,
 
     /// <summary>
-    /// The ECO has been accepted and can move to implementation.
+    /// The ECO has enough approval votes to be accepted.
     /// </summary>
     Approved = 2,
 
     /// <summary>
-    /// The ECO has been declined and is terminal.
+    /// The ECO has been canceled and is terminal.
     /// </summary>
-    Rejected = 3,
+    Canceled = 3,
 
     /// <summary>
-    /// The approved change has been applied and the ECO is terminal.
+    /// Legacy status retained so existing persisted rows can still be materialized.
     /// </summary>
-    Implemented = 4
+    Rejected = 4,
+
+    /// <summary>
+    /// Legacy status retained so existing persisted rows can still be materialized.
+    /// </summary>
+    Implemented = 5
 }

@@ -3,41 +3,24 @@ using EngiFlow.Domain.Ecos;
 namespace EngiFlow.Application.Ecos.Dtos;
 
 /// <summary>
-/// Response DTO for an ECO audit timeline entry.
+/// Summarizes an engineering change order for list views.
 /// </summary>
-/// <param name="Id">The audit event identifier.</param>
-/// <param name="CompanyId">The tenant identifier that owns the event.</param>
-/// <param name="EngineeringChangeOrderId">The ECO identifier that produced the event.</param>
-/// <param name="ActorUserId">The user who performed the audited action.</param>
-/// <param name="EventType">The audited action type.</param>
-/// <param name="Description">A concise audit description.</param>
-/// <param name="OldStatus">The ECO status before the event, when applicable.</param>
-/// <param name="NewStatus">The ECO status after the event, when applicable.</param>
-/// <param name="OccurredAt">The UTC timestamp when the audited action occurred.</param>
-public sealed record EcoEventDto(
+public sealed record EcoSummaryDto(
     Guid Id,
     Guid CompanyId,
-    Guid EngineeringChangeOrderId,
-    Guid ActorUserId,
-    EcoEventType EventType,
-    string Description,
-    EcoStatus? OldStatus,
-    EcoStatus? NewStatus,
-    DateTimeOffset OccurredAt);
+    string Title,
+    EcoPriority Priority,
+    EcoStatus Status,
+    Guid CreatedByUserId,
+    DateTimeOffset CreatedAt,
+    DateTimeOffset UpdatedAt,
+    int ReviewRound = 0,
+    int CurrentRoundApprovalCount = 0,
+    int CurrentRoundRequestChangesCount = 0);
 
 /// <summary>
-/// Detailed ECO response DTO including audit history.
+/// Describes one engineering change order with its timeline and review artifacts.
 /// </summary>
-/// <param name="Id">The ECO identifier.</param>
-/// <param name="CompanyId">The tenant identifier that owns the ECO.</param>
-/// <param name="Title">The ECO title.</param>
-/// <param name="Description">The ECO description.</param>
-/// <param name="Priority">The operational priority.</param>
-/// <param name="Status">The current lifecycle status.</param>
-/// <param name="CreatedByUserId">The user who created the ECO.</param>
-/// <param name="CreatedAt">The UTC timestamp when the ECO was created.</param>
-/// <param name="UpdatedAt">The UTC timestamp when the ECO was last changed.</param>
-/// <param name="Events">The chronological audit timeline for the ECO.</param>
 public sealed record EcoDetailsDto(
     Guid Id,
     Guid CompanyId,
@@ -48,25 +31,90 @@ public sealed record EcoDetailsDto(
     Guid CreatedByUserId,
     DateTimeOffset CreatedAt,
     DateTimeOffset UpdatedAt,
-    IReadOnlyList<EcoEventDto> Events);
+    IReadOnlyList<EcoEventDto> Events,
+    int ReviewRound = 0,
+    uint RowVersion = 0,
+    IReadOnlyList<EcoAffectedItemDto>? AffectedItems = null,
+    IReadOnlyList<EcoApprovalDto>? Approvals = null,
+    IReadOnlyList<EcoAttachmentDto>? Attachments = null,
+    IReadOnlyList<EcoCommentDto>? Comments = null);
 
 /// <summary>
-/// Summary ECO response DTO used by paginated list views.
+/// Describes an immutable ECO audit event.
 /// </summary>
-/// <param name="Id">The ECO identifier.</param>
-/// <param name="CompanyId">The tenant identifier that owns the ECO.</param>
-/// <param name="Title">The ECO title.</param>
-/// <param name="Priority">The operational priority.</param>
-/// <param name="Status">The current lifecycle status.</param>
-/// <param name="CreatedByUserId">The user who created the ECO.</param>
-/// <param name="CreatedAt">The UTC timestamp when the ECO was created.</param>
-/// <param name="UpdatedAt">The UTC timestamp when the ECO was last changed.</param>
-public sealed record EcoSummaryDto(
+public sealed record EcoEventDto(
     Guid Id,
-    Guid CompanyId,
-    string Title,
-    EcoPriority Priority,
-    EcoStatus Status,
+    Guid ActorUserId,
+    EcoEventType EventType,
+    string Description,
+    EcoStatus? OldStatus,
+    EcoStatus? NewStatus,
+    DateTimeOffset OccurredAt);
+
+/// <summary>
+/// Describes an ECO affected item diff row.
+/// </summary>
+public sealed record EcoAffectedItemDto(
+    Guid Id,
+    string PartNumber,
+    string Description,
+    string CurrentRevision,
+    string NewRevision,
+    EcoAffectedItemAction Action,
     Guid CreatedByUserId,
+    DateTimeOffset CreatedAt);
+
+/// <summary>
+/// Describes an ECO review decision.
+/// </summary>
+public sealed record EcoApprovalDto(
+    Guid Id,
+    Guid ApproverUserId,
+    EcoApprovalDecision Decision,
+    int ReviewRound,
     DateTimeOffset CreatedAt,
     DateTimeOffset UpdatedAt);
+
+/// <summary>
+/// Describes attachment metadata stored for an ECO.
+/// </summary>
+public sealed record EcoAttachmentDto(
+    Guid Id,
+    string FileName,
+    long FileSize,
+    string ObjectKey,
+    string MimeType,
+    Guid UploadedByUserId,
+    DateTimeOffset UploadedAt);
+
+/// <summary>
+/// Describes a user-authored ECO timeline comment.
+/// </summary>
+public sealed record EcoCommentDto(
+    Guid Id,
+    Guid AuthorUserId,
+    string Body,
+    DateTimeOffset CreatedAt);
+
+/// <summary>
+/// Describes a tenant user needed by ECO review and identity display widgets.
+/// </summary>
+public sealed record EcoUserDto(
+    Guid Id,
+    string Name,
+    string Email,
+    string Role);
+
+/// <summary>
+/// Provides UI context needed to render PR-like ECO review state.
+/// </summary>
+public sealed record EcoReviewContextDto(
+    int MinApprovalsRequired,
+    IReadOnlyList<EcoUserDto> Users);
+
+/// <summary>
+/// Describes a short-lived attachment download link.
+/// </summary>
+public sealed record EcoAttachmentDownloadDto(
+    string Url,
+    DateTimeOffset ExpiresAtUtc);

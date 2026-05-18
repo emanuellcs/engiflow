@@ -2,6 +2,8 @@
 
 import CssBaseline from "@mui/material/CssBaseline";
 import { ThemeProvider } from "@mui/material/styles";
+import { AdapterDayjs } from "@mui/x-date-pickers/AdapterDayjs";
+import { LocalizationProvider } from "@mui/x-date-pickers/LocalizationProvider";
 import type { PropsWithChildren } from "react";
 import { AuthProvider } from "@/lib/auth/AuthContext";
 import theme from "@/lib/theme";
@@ -16,8 +18,10 @@ import theme from "@/lib/theme";
 export default function Providers({ children }: PropsWithChildren) {
   return (
     <ThemeProvider theme={theme}>
-      <CssBaseline />
-      <AuthProvider>{children}</AuthProvider>
+      <LocalizationProvider dateAdapter={AdapterDayjs}>
+        <CssBaseline />
+        <AuthProvider>{children}</AuthProvider>
+      </LocalizationProvider>
     </ThemeProvider>
   );
 }

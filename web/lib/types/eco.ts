@@ -10,6 +10,7 @@ export type EcoStatus =
   | "Draft"
   | "UnderReview"
   | "Approved"
+  | "Canceled"
   | "Rejected"
   | "Implemented";
 
@@ -30,9 +31,26 @@ export type EcoEventType =
   | "Created"
   | "DetailsUpdated"
   | "SubmittedForReview"
+  | "ReviewDecisionSubmitted"
   | "Approved"
+  | "ChangesRequested"
+  | "AffectedItemAdded"
+  | "AffectedItemRemoved"
+  | "CommentAdded"
+  | "AttachmentAdded"
+  | "Canceled"
   | "Rejected"
   | "Implemented";
+
+/**
+ * ECO affected-item action values returned by the API.
+ */
+export type EcoAffectedItemAction = "Add" | "Modify" | "Remove";
+
+/**
+ * ECO approval decision values returned by review decision endpoints.
+ */
+export type EcoApprovalDecision = "Approve" | "RequestChanges";
 
 /**
  * Paginated API response shape used by tenant-scoped ECO list endpoints.
@@ -74,6 +92,12 @@ export interface EcoSummaryDto {
   createdAt: string;
   /** UTC timestamp when the ECO was last updated. */
   updatedAt: string;
+  /** Active review round number. Draft ECOs use zero. */
+  reviewRound: number;
+  /** Count of current-round approval decisions. */
+  currentRoundApprovalCount: number;
+  /** Count of current-round request-changes decisions. */
+  currentRoundRequestChangesCount: number;
 }
 
 /**
@@ -83,9 +107,9 @@ export interface EcoEventDto {
   /** Audit event identifier. */
   id: string;
   /** Tenant identifier that owns the event. */
-  companyId: string;
+  companyId?: string;
   /** ECO identifier that produced the event. */
-  engineeringChangeOrderId: string;
+  engineeringChangeOrderId?: string;
   /** User identifier for the actor who performed the event. */
   actorUserId: string;
   /** Event classification. */
@@ -108,6 +132,16 @@ export interface EcoDetailsDto extends EcoSummaryDto {
   description: string;
   /** Chronological audit event history for the ECO. */
   events: EcoEventDto[];
+  /** PostgreSQL xmin row version surfaced by the API. */
+  rowVersion: number;
+  /** Affected engineering item diff rows. */
+  affectedItems: EcoAffectedItemDto[];
+  /** Review decisions across all review rounds. */
+  approvals: EcoApprovalDto[];
+  /** Attachment metadata stored for this ECO. */
+  attachments: EcoAttachmentDto[];
+  /** User-authored timeline comments. */
+  comments: EcoCommentDto[];
 }
 
 /**
@@ -129,3 +163,161 @@ export type RejectEcoRequest = {
   /** Business justification for rejecting the ECO. */
   reason: string;
 };
+
+/**
+ * Request body used to submit a review decision.
+ */
+export type SubmitReviewDecisionRequest = {
+  /** Approver decision for the active review round. */
+  decision: EcoApprovalDecision;
+  /** Optional markdown comment stored alongside the decision. */
+  comment?: string | null;
+};
+
+/**
+ * Request body used to add a comment to the ECO conversation.
+ */
+export type AddCommentRequest = {
+  /** Markdown comment body. */
+  body: string;
+};
+
+/**
+ * Request body used to add an affected item to a draft ECO.
+ */
+export type AddAffectedItemRequest = {
+  /** Affected part or document number. */
+  partNumber: string;
+  /** Human-readable affected item description. */
+  description: string;
+  /** Current controlled revision. */
+  currentRevision: string;
+  /** Proposed revision. */
+  newRevision: string;
+  /** Engineering diff action. */
+  action: EcoAffectedItemAction;
+};
+
+/**
+ * Affected engineering item diff row.
+ */
+export interface EcoAffectedItemDto {
+  /** Affected item identifier. */
+  id: string;
+  /** Part or document number. */
+  partNumber: string;
+  /** Affected item description. */
+  description: string;
+  /** Current controlled revision. */
+  currentRevision: string;
+  /** Proposed revision. */
+  newRevision: string;
+  /** Engineering diff action. */
+  action: EcoAffectedItemAction;
+  /** User identifier that added the item. */
+  createdByUserId: string;
+  /** UTC timestamp when the item was added. */
+  createdAt: string;
+}
+
+/**
+ * ECO review decision.
+ */
+export interface EcoApprovalDto {
+  /** Approval identifier. */
+  id: string;
+  /** Approver user identifier. */
+  approverUserId: string;
+  /** Approval decision. */
+  decision: EcoApprovalDecision;
+  /** Review round for this decision. */
+  reviewRound: number;
+  /** UTC timestamp when the decision was first created. */
+  createdAt: string;
+  /** UTC timestamp when the decision was last updated. */
+  updatedAt: string;
+}
+
+/**
+ * ECO attachment metadata.
+ */
+export interface EcoAttachmentDto {
+  /** Attachment identifier. */
+  id: string;
+  /** Original file name. */
+  fileName: string;
+  /** File size in bytes. */
+  fileSize: number;
+  /** Object storage key. */
+  objectKey: string;
+  /** Validated MIME type. */
+  mimeType: string;
+  /** Uploader user identifier. */
+  uploadedByUserId: string;
+  /** UTC timestamp when uploaded. */
+  uploadedAt: string;
+}
+
+/**
+ * ECO conversation comment.
+ */
+export interface EcoCommentDto {
+  /** Comment identifier. */
+  id: string;
+  /** Author user identifier. */
+  authorUserId: string;
+  /** Markdown body. */
+  body: string;
+  /** UTC timestamp when authored. */
+  createdAt: string;
+}
+
+/**
+ * Tenant user display information needed by ECO screens.
+ */
+export interface EcoUserDto {
+  /** User identifier. */
+  id: string;
+  /** Display name. */
+  name: string;
+  /** Email address. */
+  email: string;
+  /** Role name. */
+  role: string;
+}
+
+/**
+ * Review context for PR-like ECO screens.
+ */
+export interface EcoReviewContextDto {
+  /** Tenant quorum setting. */
+  minApprovalsRequired: number;
+  /** Active tenant users visible to ECO screens. */
+  users: EcoUserDto[];
+}
+
+/**
+ * Short-lived attachment download response.
+ */
+export interface EcoAttachmentDownloadDto {
+  /** Pre-signed download URL. */
+  url: string;
+  /** UTC expiration timestamp. */
+  expiresAtUtc: string;
+}
+
+/**
+ * SignalR ECO update payload emitted by the API.
+ */
+export interface EcoRealtimeUpdate {
+  /** Tenant identifier. */
+  companyId: string;
+  /** ECO identifier. */
+  ecoId: string;
+  /** Current ECO status. */
+  status: EcoStatus;
+  /** Current review round. */
+  reviewRound: number;
+  /** Current audit event timeline. */
+  events: EcoEventDto[];
+}

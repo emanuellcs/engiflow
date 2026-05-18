@@ -1,6 +1,7 @@
 "use client";
 
 import AddIcon from "@mui/icons-material/Add";
+import MoreVertIcon from "@mui/icons-material/MoreVert";
 import RefreshIcon from "@mui/icons-material/Refresh";
 import SearchIcon from "@mui/icons-material/Search";
 import Alert from "@mui/material/Alert";
@@ -18,44 +19,43 @@ import FormHelperText from "@mui/material/FormHelperText";
 import IconButton from "@mui/material/IconButton";
 import InputAdornment from "@mui/material/InputAdornment";
 import InputLabel from "@mui/material/InputLabel";
+import Menu from "@mui/material/Menu";
 import MenuItem from "@mui/material/MenuItem";
-import Paper from "@mui/material/Paper";
 import Select, { type SelectChangeEvent } from "@mui/material/Select";
 import Stack from "@mui/material/Stack";
-import Table from "@mui/material/Table";
-import TableBody from "@mui/material/TableBody";
-import TableCell from "@mui/material/TableCell";
-import TableContainer from "@mui/material/TableContainer";
-import TableHead from "@mui/material/TableHead";
-import TablePagination from "@mui/material/TablePagination";
-import TableRow from "@mui/material/TableRow";
 import TextField from "@mui/material/TextField";
 import Tooltip from "@mui/material/Tooltip";
 import Typography from "@mui/material/Typography";
-import { type FormEvent, useCallback, useEffect, useMemo, useState } from "react";
+import { DataGrid, type GridColDef, type GridRenderCellParams } from "@mui/x-data-grid";
+import { type FormEvent, type MouseEvent, useCallback, useEffect, useMemo, useState } from "react";
 import PageHeader from "@/components/ui/PageHeader";
 import { ApiError, apiFetch } from "@/lib/api/client";
 import { useAuth } from "@/lib/auth/AuthContext";
+import { isAdminOrOwner } from "@/lib/auth/jwt";
+
+type UserRole = "Owner" | "Administrator" | "Approver" | "Requester" | "Viewer";
+type MutableUserRole = Exclude<UserRole, "Owner">;
+type RoleFilter = "All" | UserRole;
 
 type UserSummary = {
   id: string;
   name: string;
   email: string;
-  role: string;
+  role: UserRole;
+  lastLoginAt: string | null;
 };
 
 type InviteFormState = {
   name: string;
   email: string;
   password: string;
-  role: InviteRole;
+  role: MutableUserRole;
 };
 
-type InviteRole = "Requester" | "Approver";
-type RoleFilter = "All" | "Administrator" | InviteRole;
 type InviteFieldErrors = Partial<Record<keyof InviteFormState, string>>;
 
-const administratorRole = "Administrator";
+const allRoles: UserRole[] = ["Owner", "Administrator", "Approver", "Requester", "Viewer"];
+const mutableRoles: MutableUserRole[] = ["Administrator", "Approver", "Requester", "Viewer"];
 const initialInviteForm: InviteFormState = {
   name: "",
   email: "",
@@ -72,28 +72,12 @@ export default function UserManagementPage() {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [isInviteOpen, setIsInviteOpen] = useState(false);
-  const [page, setPage] = useState(0);
-  const [rowsPerPage, setRowsPerPage] = useState(10);
   const [searchQuery, setSearchQuery] = useState("");
   const [roleFilter, setRoleFilter] = useState<RoleFilter>("All");
-  const isAdministrator = user?.role === administratorRole;
-  const filteredUsers = useMemo(() => {
-    const normalizedQuery = searchQuery.trim().toLowerCase();
-
-    return users.filter((workspaceUser) => {
-      const matchesRole =
-        roleFilter === "All" || workspaceUser.role === roleFilter;
-      const matchesQuery =
-        !normalizedQuery ||
-        workspaceUser.name.toLowerCase().includes(normalizedQuery) ||
-        workspaceUser.email.toLowerCase().includes(normalizedQuery) ||
-        workspaceUser.role.toLowerCase().includes(normalizedQuery);
-
-      return matchesRole && matchesQuery;
-    });
-  }, [roleFilter, searchQuery, users]);
-  const maxPage = Math.max(0, Math.ceil(filteredUsers.length / rowsPerPage) - 1);
-  const currentPage = Math.min(page, maxPage);
+  const [roleUpdatingUserId, setRoleUpdatingUserId] = useState<string | null>(null);
+  const [confirmDeactivateUser, setConfirmDeactivateUser] = useState<UserSummary | null>(null);
+  const [isDeactivationPending, setIsDeactivationPending] = useState(false);
+  const isAdministrator = isAdminOrOwner(user?.role);
 
   const requestUsers = useCallback(async () => {
     return apiFetch<UserSummary[]>("/api/users");
@@ -142,10 +126,128 @@ export default function UserManagementPage() {
     };
   }, [isAdministrator, requestUsers]);
 
-  const visibleUsers = useMemo(() => {
-    const start = currentPage * rowsPerPage;
-    return filteredUsers.slice(start, start + rowsPerPage);
-  }, [currentPage, filteredUsers, rowsPerPage]);
+  const filteredUsers = useMemo(() => {
+    const normalizedQuery = searchQuery.trim().toLowerCase();
+
+    return users.filter((workspaceUser) => {
+      const matchesRole = roleFilter === "All" || workspaceUser.role === roleFilter;
+      const matchesQuery =
+        !normalizedQuery ||
+        workspaceUser.name.toLowerCase().includes(normalizedQuery) ||
+        workspaceUser.email.toLowerCase().includes(normalizedQuery) ||
+        workspaceUser.role.toLowerCase().includes(normalizedQuery);
+
+      return matchesRole && matchesQuery;
+    });
+  }, [roleFilter, searchQuery, users]);
+
+  const handleRoleChange = useCallback(async (workspaceUser: UserSummary, role: MutableUserRole) => {
+    if (workspaceUser.role === role) {
+      return;
+    }
+
+    setRoleUpdatingUserId(workspaceUser.id);
+    setErrorMessage(null);
+    setSuccessMessage(null);
+
+    try {
+      const updatedUser = await apiFetch<UserSummary>(`/api/users/${workspaceUser.id}/role`, {
+        method: "PUT",
+        body: { role },
+      });
+      setUsers((current) =>
+        current.map((item) => (item.id === updatedUser.id ? updatedUser : item)),
+      );
+      setSuccessMessage(`${updatedUser.name}'s role was updated.`);
+    } catch (error) {
+      setErrorMessage(getApiErrorMessage(error, "Unable to update the user's role."));
+    } finally {
+      setRoleUpdatingUserId(null);
+    }
+  }, []);
+
+  const handleDeactivateConfirmed = useCallback(async () => {
+    if (!confirmDeactivateUser) {
+      return;
+    }
+
+    setIsDeactivationPending(true);
+    setErrorMessage(null);
+    setSuccessMessage(null);
+
+    try {
+      await apiFetch<void>(`/api/users/${confirmDeactivateUser.id}/deactivate`, {
+        method: "PUT",
+      });
+      setUsers((current) => current.filter((item) => item.id !== confirmDeactivateUser.id));
+      setSuccessMessage(`${confirmDeactivateUser.name} was deactivated.`);
+      setConfirmDeactivateUser(null);
+    } catch (error) {
+      setErrorMessage(getApiErrorMessage(error, "Unable to deactivate the user."));
+    } finally {
+      setIsDeactivationPending(false);
+    }
+  }, [confirmDeactivateUser]);
+
+  const columns = useMemo<GridColDef<UserSummary>[]>(() => [
+    {
+      field: "name",
+      headerName: "Name",
+      minWidth: 240,
+      flex: 1,
+      renderCell: (params: GridRenderCellParams<UserSummary, string>) => (
+        <Stack direction="row" spacing={1.25} sx={{ alignItems: "center", minWidth: 0 }}>
+          <Avatar sx={{ width: 32, height: 32, bgcolor: "secondary.main" }}>
+            {getInitials(params.row.name)}
+          </Avatar>
+          <Typography variant="body2" sx={{ fontWeight: 500 }} noWrap>
+            {params.row.name}
+          </Typography>
+        </Stack>
+      ),
+    },
+    {
+      field: "email",
+      headerName: "Email",
+      minWidth: 250,
+      flex: 1,
+    },
+    {
+      field: "role",
+      headerName: "Role",
+      minWidth: 220,
+      renderCell: (params: GridRenderCellParams<UserSummary, UserRole>) => (
+        <RoleSelectCell
+          workspaceUser={params.row}
+          currentUserId={user?.id}
+          isPending={roleUpdatingUserId === params.row.id}
+          onRoleChange={handleRoleChange}
+        />
+      ),
+      sortComparator: (left, right) => allRoles.indexOf(left) - allRoles.indexOf(right),
+    },
+    {
+      field: "lastLoginAt",
+      headerName: "Last Active",
+      minWidth: 190,
+      valueFormatter: (value: string | null) => formatLastLogin(value),
+    },
+    {
+      field: "actions",
+      headerName: "",
+      width: 72,
+      sortable: false,
+      filterable: false,
+      disableColumnMenu: true,
+      renderCell: (params: GridRenderCellParams<UserSummary>) => (
+        <UserRowActions
+          workspaceUser={params.row}
+          currentUserId={user?.id}
+          onDeactivate={setConfirmDeactivateUser}
+        />
+      ),
+    },
+  ], [handleRoleChange, roleUpdatingUserId, user?.id]);
 
   if (!isAdministrator) {
     return (
@@ -192,178 +294,92 @@ export default function UserManagementPage() {
         </Alert>
       ) : null}
 
-      <Paper elevation={1}>
-        <Stack
-          direction={{ xs: "column", md: "row" }}
-          spacing={1.5}
-          sx={{
-            alignItems: { xs: "stretch", md: "center" },
-            justifyContent: "space-between",
-            px: 2,
-            py: 1.5,
-            borderBottom: 1,
-            borderColor: "divider",
-          }}
-        >
-          <TextField
-            value={searchQuery}
-            onChange={(event) => {
-              setSearchQuery(event.target.value);
-              setPage(0);
-            }}
-            placeholder="Search by name, email, or role"
-            aria-label="Search team members"
-            size="small"
-            sx={{ width: { xs: "100%", md: 360 } }}
-            slotProps={{
-              input: {
-                startAdornment: (
-                  <InputAdornment position="start">
-                    <SearchIcon fontSize="small" />
-                  </InputAdornment>
-                ),
-              },
-            }}
-          />
-          <Stack
-            direction="row"
-            spacing={1}
-            sx={{ alignItems: "center", justifyContent: "flex-end" }}
-          >
-            <FormControl size="small" sx={{ minWidth: 144 }}>
-              <InputLabel id="role-filter-label">Role</InputLabel>
-              <Select<RoleFilter>
-                labelId="role-filter-label"
-                id="role-filter"
-                value={roleFilter}
-                label="Role"
-                onChange={(event) => {
-                  setRoleFilter(event.target.value as RoleFilter);
-                  setPage(0);
-                }}
-              >
-                <MenuItem value="All">All roles</MenuItem>
-                <MenuItem value="Administrator">Administrator</MenuItem>
-                <MenuItem value="Approver">Approver</MenuItem>
-                <MenuItem value="Requester">Requester</MenuItem>
-              </Select>
-            </FormControl>
-            <Chip
-              label={`${filteredUsers.length} total`}
-              size="small"
-              variant="outlined"
-            />
-            <Tooltip title="Refresh">
-              <span>
-                <IconButton
-                  aria-label="Refresh team members"
-                  size="small"
-                  onClick={loadUsers}
-                  disabled={isLoading}
-                >
-                  <RefreshIcon fontSize="small" />
-                </IconButton>
-              </span>
-            </Tooltip>
-          </Stack>
-        </Stack>
-        <TableContainer sx={{ overflowX: "auto" }}>
-          <Table size="small" aria-label="Workspace team members">
-            <TableHead>
-              <TableRow>
-                <TableCell
-                  sx={{
-                    fontWeight: 500,
-                    minWidth: 260,
-                    bgcolor: "action.hover",
-                  }}
-                >
-                  Name
-                </TableCell>
-                <TableCell
-                  sx={{
-                    fontWeight: 500,
-                    minWidth: 240,
-                    bgcolor: "action.hover",
-                  }}
-                >
-                  Email
-                </TableCell>
-                <TableCell
-                  sx={{
-                    fontWeight: 500,
-                    minWidth: 160,
-                    bgcolor: "action.hover",
-                  }}
-                >
-                  Role
-                </TableCell>
-              </TableRow>
-            </TableHead>
-            <TableBody>
-              {isLoading ? (
-                <TableRow>
-                  <TableCell colSpan={3} sx={{ height: 160, textAlign: "center" }}>
-                    <CircularProgress size={28} thickness={4} />
-                  </TableCell>
-                </TableRow>
-              ) : visibleUsers.length > 0 ? (
-                visibleUsers.map((workspaceUser) => (
-                  <TableRow key={workspaceUser.id} hover>
-                    <TableCell>
-                      <Stack direction="row" spacing={1.25} sx={{ alignItems: "center" }}>
-                        <Avatar sx={{ width: 32, height: 32, bgcolor: "secondary.main" }}>
-                          {getInitials(workspaceUser.name)}
-                        </Avatar>
-                        <Typography variant="body2" sx={{ fontWeight: 500 }}>
-                          {workspaceUser.name}
-                        </Typography>
-                      </Stack>
-                    </TableCell>
-                    <TableCell>
-                      <Typography variant="body2" color="text.secondary">
-                        {workspaceUser.email}
-                      </Typography>
-                    </TableCell>
-                    <TableCell>
-                      <Chip
-                        label={workspaceUser.role}
-                        size="small"
-                        variant="outlined"
-                        sx={{
-                          minWidth: 104,
-                          fontWeight: 500,
-                          ...getRoleChipSx(workspaceUser.role),
-                        }}
-                      />
-                    </TableCell>
-                  </TableRow>
-                ))
-              ) : (
-                <TableRow>
-                  <TableCell colSpan={3} sx={{ height: 120, textAlign: "center" }}>
-                    <Typography variant="body2" color="text.secondary">
-                      No matching team members.
-                    </Typography>
-                  </TableCell>
-                </TableRow>
-              )}
-            </TableBody>
-          </Table>
-        </TableContainer>
-        <TablePagination
-          component="div"
-          count={filteredUsers.length}
-          page={currentPage}
-          rowsPerPage={rowsPerPage}
-          rowsPerPageOptions={[5, 10, 25]}
-          onPageChange={(_, nextPage) => setPage(nextPage)}
-          onRowsPerPageChange={(event) => {
-            setRowsPerPage(Number(event.target.value));
-            setPage(0);
+      <Stack
+        direction={{ xs: "column", lg: "row" }}
+        spacing={1.5}
+        sx={{ alignItems: { xs: "stretch", lg: "center" }, justifyContent: "space-between" }}
+      >
+        <TextField
+          value={searchQuery}
+          onChange={(event) => setSearchQuery(event.target.value)}
+          placeholder="Search by name, email, or role"
+          aria-label="Search team members"
+          size="small"
+          sx={{ width: { xs: "100%", lg: 360 } }}
+          slotProps={{
+            input: {
+              startAdornment: (
+                <InputAdornment position="start">
+                  <SearchIcon fontSize="small" />
+                </InputAdornment>
+              ),
+            },
           }}
         />
-      </Paper>
+        <Stack
+          direction="row"
+          spacing={1}
+          sx={{ alignItems: "center", justifyContent: "flex-end" }}
+        >
+          <FormControl size="small" sx={{ minWidth: 164 }}>
+            <InputLabel id="role-filter-label">Role</InputLabel>
+            <Select<RoleFilter>
+              labelId="role-filter-label"
+              id="role-filter"
+              value={roleFilter}
+              label="Role"
+              onChange={(event) => setRoleFilter(event.target.value as RoleFilter)}
+            >
+              <MenuItem value="All">All roles</MenuItem>
+              {allRoles.map((role) => (
+                <MenuItem key={role} value={role}>{role}</MenuItem>
+              ))}
+            </Select>
+          </FormControl>
+          <Chip label={`${filteredUsers.length} active`} size="small" variant="outlined" />
+          <Tooltip title="Refresh">
+            <span>
+              <IconButton
+                aria-label="Refresh team members"
+                size="small"
+                onClick={loadUsers}
+                disabled={isLoading}
+              >
+                <RefreshIcon fontSize="small" />
+              </IconButton>
+            </span>
+          </Tooltip>
+        </Stack>
+      </Stack>
+
+      <Box sx={{ width: "100%", overflowX: "auto" }}>
+        <DataGrid
+          rows={filteredUsers}
+          columns={columns}
+          getRowId={(row) => row.id}
+          loading={isLoading}
+          autoHeight
+          rowHeight={64}
+          disableRowSelectionOnClick
+          pageSizeOptions={[10, 25, 50]}
+          initialState={{
+            pagination: {
+              paginationModel: { page: 0, pageSize: 10 },
+            },
+          }}
+          localeText={{
+            noRowsLabel: "No matching team members.",
+          }}
+          sx={{
+            minWidth: 920,
+            borderColor: "divider",
+            bgcolor: "background.paper",
+            "& .MuiDataGrid-columnHeaders": {
+              bgcolor: "action.hover",
+            },
+          }}
+        />
+      </Box>
 
       <InviteUserDialog
         open={isInviteOpen}
@@ -374,7 +390,186 @@ export default function UserManagementPage() {
           await loadUsers();
         }}
       />
+
+      <DeactivateUserDialog
+        workspaceUser={confirmDeactivateUser}
+        isPending={isDeactivationPending}
+        onCancel={() => {
+          if (!isDeactivationPending) {
+            setConfirmDeactivateUser(null);
+          }
+        }}
+        onConfirm={handleDeactivateConfirmed}
+      />
     </Stack>
+  );
+}
+
+type RoleSelectCellProps = {
+  workspaceUser: UserSummary;
+  currentUserId: string | undefined;
+  isPending: boolean;
+  onRoleChange: (workspaceUser: UserSummary, role: MutableUserRole) => Promise<void>;
+};
+
+function RoleSelectCell({
+  workspaceUser,
+  currentUserId,
+  isPending,
+  onRoleChange,
+}: RoleSelectCellProps) {
+  const disabledReason = getMutationDisabledReason(workspaceUser, currentUserId);
+  const isDisabled = Boolean(disabledReason) || isPending;
+
+  return (
+    <Tooltip title={disabledReason ?? ""} disableHoverListener={!disabledReason}>
+      <span>
+        <FormControl size="small" disabled={isDisabled} sx={{ minWidth: 176 }}>
+          <Select<UserRole>
+            value={workspaceUser.role}
+            onClick={(event) => event.stopPropagation()}
+            onChange={(event) => {
+              const role = event.target.value as MutableUserRole;
+              void onRoleChange(workspaceUser, role);
+            }}
+            renderValue={(value) => (
+              <Chip
+                label={value}
+                size="small"
+                variant="outlined"
+                sx={{ minWidth: 116, fontWeight: 500, ...getRoleChipSx(value) }}
+              />
+            )}
+          >
+            {allRoles.map((role) => (
+              <MenuItem key={role} value={role} disabled={role === "Owner"}>
+                {role}
+              </MenuItem>
+            ))}
+          </Select>
+        </FormControl>
+      </span>
+    </Tooltip>
+  );
+}
+
+type UserRowActionsProps = {
+  workspaceUser: UserSummary;
+  currentUserId: string | undefined;
+  onDeactivate: (workspaceUser: UserSummary) => void;
+};
+
+function UserRowActions({ workspaceUser, currentUserId, onDeactivate }: UserRowActionsProps) {
+  const [anchorEl, setAnchorEl] = useState<HTMLElement | null>(null);
+  const disabledReason = getMutationDisabledReason(workspaceUser, currentUserId);
+  const isMenuOpen = Boolean(anchorEl);
+
+  function handleOpen(event: MouseEvent<HTMLButtonElement>) {
+    event.stopPropagation();
+    setAnchorEl(event.currentTarget);
+  }
+
+  function handleClose() {
+    setAnchorEl(null);
+  }
+
+  return (
+    <>
+      <Tooltip title={disabledReason ?? "Row actions"}>
+        <span>
+          <IconButton
+            aria-label={`Open actions for ${workspaceUser.name}`}
+            size="small"
+            disabled={Boolean(disabledReason)}
+            onClick={handleOpen}
+          >
+            <MoreVertIcon fontSize="small" />
+          </IconButton>
+        </span>
+      </Tooltip>
+      <Menu
+        anchorEl={anchorEl}
+        open={isMenuOpen}
+        onClose={handleClose}
+        onClick={(event) => event.stopPropagation()}
+      >
+        <MenuItem
+          onClick={() => {
+            handleClose();
+            onDeactivate(workspaceUser);
+          }}
+          sx={{ color: "error.main" }}
+        >
+          Deactivate
+        </MenuItem>
+      </Menu>
+    </>
+  );
+}
+
+type DeactivateUserDialogProps = {
+  workspaceUser: UserSummary | null;
+  isPending: boolean;
+  onCancel: () => void;
+  onConfirm: () => Promise<void>;
+};
+
+function DeactivateUserDialog({
+  workspaceUser,
+  isPending,
+  onCancel,
+  onConfirm,
+}: DeactivateUserDialogProps) {
+  const isAdministratorTarget = workspaceUser?.role === "Administrator";
+
+  return (
+    <Dialog
+      open={Boolean(workspaceUser)}
+      onClose={onCancel}
+      slotProps={{
+        paper: {
+          sx: { width: "100%", maxWidth: 520 },
+        },
+      }}
+    >
+      <DialogTitle>
+        {isAdministratorTarget ? "Deactivate Administrator" : "Deactivate User"}
+      </DialogTitle>
+      <DialogContent>
+        <Stack spacing={2} sx={{ pt: 0.5 }}>
+          {isAdministratorTarget ? (
+            <Alert severity="error">
+              This user has administrative access. Deactivation will immediately revoke their
+              tenant-management permissions and active sessions.
+            </Alert>
+          ) : (
+            <Alert severity="warning">
+              Deactivation immediately prevents this user from authenticating or taking
+              workflow actions.
+            </Alert>
+          )}
+          <Typography variant="body2">
+            {workspaceUser
+              ? `Deactivate ${workspaceUser.name} (${workspaceUser.email})?`
+              : ""}
+          </Typography>
+        </Stack>
+      </DialogContent>
+      <DialogActions sx={{ px: 3, pb: 3 }}>
+        <Button onClick={onCancel} disabled={isPending} sx={{ textTransform: "none" }}>
+          Cancel
+        </Button>
+        <Button
+          onClick={() => void onConfirm()}
+          variant="contained"
+          color="error"
+          disabled={isPending}
+          sx={{ minWidth: 112, textTransform: "none" }}
+        >
+          {isPending ? <CircularProgress color="inherit" size={18} thickness={5} /> : "Deactivate"}
+        </Button>
+      </DialogActions>
+    </Dialog>
   );
 }
 
@@ -454,10 +649,6 @@ function InviteUserDialog({ open, onClose, onCreated }: InviteUserDialogProps) {
     });
   }
 
-  function handleRoleChange(event: SelectChangeEvent<InviteRole>) {
-    handleFieldChange("role", event.target.value as InviteRole);
-  }
-
   return (
     <Dialog
       open={open}
@@ -526,17 +717,20 @@ function InviteUserDialog({ open, onClose, onCreated }: InviteUserDialogProps) {
             />
             <FormControl error={Boolean(fieldErrors.role)} fullWidth size="small">
               <InputLabel id="invite-role-label">Role</InputLabel>
-              <Select<InviteRole>
+              <Select<MutableUserRole>
                 labelId="invite-role-label"
                 id="invite-role"
                 name="role"
                 value={form.role}
                 label="Role"
-                onChange={handleRoleChange}
+                onChange={(event: SelectChangeEvent<MutableUserRole>) =>
+                  handleFieldChange("role", event.target.value)
+                }
                 disabled={isPending}
               >
-                <MenuItem value="Requester">Requester</MenuItem>
-                <MenuItem value="Approver">Approver</MenuItem>
+                {mutableRoles.map((role) => (
+                  <MenuItem key={role} value={role}>{role}</MenuItem>
+                ))}
               </Select>
               <FormHelperText>{fieldErrors.role ?? " "}</FormHelperText>
             </FormControl>
@@ -595,14 +789,51 @@ function validateInviteForm(form: InviteFormState): InviteFieldErrors {
     errors.password = "Password must include at least one symbol.";
   }
 
-  if (form.role !== "Requester" && form.role !== "Approver") {
-    errors.role = "Role must be Requester or Approver.";
+  if (!mutableRoles.includes(form.role)) {
+    errors.role = "Role must be Administrator, Approver, Requester, or Viewer.";
   }
 
   return errors;
 }
 
+function getMutationDisabledReason(workspaceUser: UserSummary, currentUserId: string | undefined): string | null {
+  if (currentUserId && workspaceUser.id.toLowerCase() === currentUserId.toLowerCase()) {
+    return "You cannot modify your own account.";
+  }
+
+  if (workspaceUser.role === "Owner") {
+    return "Owner accounts cannot be modified.";
+  }
+
+  return null;
+}
+
+function formatLastLogin(value: string | null): string {
+  if (!value) {
+    return "Never";
+  }
+
+  const timestamp = new Date(value);
+
+  if (Number.isNaN(timestamp.getTime())) {
+    return "Never";
+  }
+
+  return new Intl.DateTimeFormat(undefined, {
+    dateStyle: "medium",
+    timeStyle: "short",
+  }).format(timestamp);
+}
+
 function getRoleChipSx(role: string): object {
+  if (role === "Owner") {
+    return {
+      borderColor: "warning.main",
+      color: "warning.dark",
+      bgcolor: "rgba(237, 108, 2, 0.08)",
+    };
+  }
+
   if (role === "Administrator") {
     return {
       borderColor: "primary.main",

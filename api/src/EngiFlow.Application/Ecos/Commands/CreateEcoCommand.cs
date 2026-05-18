@@ -2,7 +2,9 @@ using EngiFlow.Application.Abstractions.Cqrs;
 using EngiFlow.Application.Abstractions.Persistence;
 using EngiFlow.Application.Abstractions.Tenancy;
 using EngiFlow.Application.Ecos.Dtos;
+using EngiFlow.Application.Ecos.Notifications;
 using EngiFlow.Application.Exceptions;
+using EngiFlow.Application.Messaging;
 using EngiFlow.Domain.Ecos;
 using EngiFlow.Domain.ValueObjects;
 using FluentValidation;
@@ -54,6 +56,7 @@ public sealed class CreateEcoCommandValidator : AbstractValidator<CreateEcoComma
 public sealed class CreateEcoCommandHandler : ICommandHandler<CreateEcoCommand, EcoDetailsDto>
 {
     private readonly IEngineeringChangeOrderRepository _ecos;
+    private readonly IPostCommitNotificationQueue _notifications;
     private readonly ITenantProvider _tenantProvider;
     private readonly IUnitOfWork _unitOfWork;
     private readonly IUserRepository _users;
@@ -69,12 +72,14 @@ public sealed class CreateEcoCommandHandler : ICommandHandler<CreateEcoCommand, 
         IEngineeringChangeOrderRepository ecos,
         IUserRepository users,
         IUnitOfWork unitOfWork,
-        ITenantProvider tenantProvider)
+        ITenantProvider tenantProvider,
+        IPostCommitNotificationQueue notifications)
     {
         _ecos = ecos;
         _users = users;
         _unitOfWork = unitOfWork;
         _tenantProvider = tenantProvider;
+        _notifications = notifications;
     }
 
     /// <inheritdoc />
@@ -92,6 +97,7 @@ public sealed class CreateEcoCommandHandler : ICommandHandler<CreateEcoCommand, 
 
         await _ecos.AddAsync(eco, cancellationToken).ConfigureAwait(false);
         await _unitOfWork.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+        _notifications.EnqueueEcoChanged(eco);
 
         return eco.ToDetailsDto();
     }

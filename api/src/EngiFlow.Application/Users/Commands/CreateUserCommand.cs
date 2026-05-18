@@ -3,6 +3,7 @@ using EngiFlow.Application.Abstractions.Persistence;
 using EngiFlow.Application.Abstractions.Security;
 using EngiFlow.Application.Abstractions.Tenancy;
 using EngiFlow.Application.Exceptions;
+using EngiFlow.Application.Users;
 using EngiFlow.Application.Users.Dtos;
 using EngiFlow.Domain.Users;
 using FluentValidation;
@@ -65,8 +66,8 @@ public sealed class CreateUserCommandValidator : AbstractValidator<CreateUserCom
             .WithMessage("Password must include at least one symbol.");
 
         RuleFor(command => command.Role)
-            .Must(role => role is UserRole.Requester or UserRole.Approver)
-            .WithMessage("Role must be Requester or Approver.");
+            .Must(role => role is UserRole.Administrator or UserRole.Approver or UserRole.Requester or UserRole.Viewer)
+            .WithMessage("Role must be Administrator, Approver, Requester, or Viewer.");
     }
 }
 
@@ -109,6 +110,13 @@ public sealed class CreateUserCommandHandler : ICommandHandler<CreateUserCommand
         CancellationToken cancellationToken = default)
     {
         var normalizedEmail = command.Email.Trim().ToLowerInvariant();
+        var actor = await UserManagementRules.GetActiveCurrentUserAsync(
+                _users,
+                _tenantProvider,
+                cancellationToken)
+            .ConfigureAwait(false);
+        UserManagementRules.EnsureCanManageUsers(actor);
+
         var existingUser = await _users.GetByEmailForAuthenticationAsync(normalizedEmail, cancellationToken)
             .ConfigureAwait(false);
 

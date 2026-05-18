@@ -22,6 +22,7 @@ import NextLink from "@/components/ui/NextLink";
 import PageHeader from "@/components/ui/PageHeader";
 import { ApiError, apiFetch } from "@/lib/api/client";
 import { useAuth } from "@/lib/auth/AuthContext";
+import { isAdminOrOwner } from "@/lib/auth/jwt";
 import type {
   CreateEcoPriority,
   CreateEcoRequest,
@@ -46,7 +47,6 @@ const titleMaxLength = 200;
 const descriptionMaxLength = 4000;
 const defaultCreateError =
   "Unable to create the Engineering Change Order. Review the details and try again.";
-const administratorRole = "Administrator";
 const requesterRole = "Requester";
 
 /**
@@ -61,8 +61,7 @@ export default function NewEcoPage() {
   const [fieldErrors, setFieldErrors] = useState<CreateEcoFieldErrors>({});
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const canCreateEco =
-    user?.role === administratorRole || user?.role === requesterRole;
+  const canCreateEco = isAdminOrOwner(user?.role) || user?.role === requesterRole;
 
   /**
    * Validates and submits the ECO draft to the API.

@@ -7,8 +7,10 @@ namespace EngiFlow.Application.Users.Dtos;
 /// <param name="Name">The user's display name.</param>
 /// <param name="Email">The user's email address.</param>
 /// <param name="Role">The user's role name.</param>
+/// <param name="LastLoginAt">The last successful login timestamp, when available.</param>
 public sealed record UserSummaryDto(
     Guid Id,
     string Name,
     string Email,
-    string Role);
+    string Role,
+    DateTimeOffset? LastLoginAt = null);

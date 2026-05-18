@@ -54,6 +54,253 @@ namespace EngiFlow.Infrastructure.Persistence.Migrations
                     b.ToTable("companies", (string)null);
                 });
 
+            modelBuilder.Entity("EngiFlow.Domain.Companies.CompanySettings", b =>
+                {
+                    b.Property<Guid>("CompanyId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("company_id");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<int>("MinApprovalsRequired")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(1)
+                        .HasColumnName("min_approvals_required");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.HasKey("CompanyId");
+
+                    b.ToTable("company_settings", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_company_settings_min_approvals_required", "\"min_approvals_required\" >= 1");
+                        });
+                });
+
+            modelBuilder.Entity("EngiFlow.Domain.Ecos.EcoAffectedItem", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<string>("Action")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasColumnName("action");
+
+                    b.Property<Guid>("CompanyId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("company_id");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<Guid>("CreatedByUserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("created_by_user_id");
+
+                    b.Property<string>("CurrentRevision")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("current_revision");
+
+                    b.Property<string>("Description")
+                        .IsRequired()
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)")
+                        .HasColumnName("description");
+
+                    b.Property<Guid>("EngineeringChangeOrderId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("engineering_change_order_id");
+
+                    b.Property<string>("NewRevision")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("new_revision");
+
+                    b.Property<string>("PartNumber")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("part_number");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CreatedByUserId", "CompanyId");
+
+                    b.HasIndex("EngineeringChangeOrderId", "CompanyId");
+
+                    b.HasIndex("CompanyId", "EngineeringChangeOrderId", "PartNumber")
+                        .HasDatabaseName("ix_eco_affected_items_company_id_eco_id_part_number");
+
+                    b.ToTable("eco_affected_items", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_eco_affected_items_action", "\"action\" IN ('Add', 'Modify', 'Remove')");
+                        });
+                });
+
+            modelBuilder.Entity("EngiFlow.Domain.Ecos.EcoApproval", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<Guid>("ApproverUserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("approver_user_id");
+
+                    b.Property<Guid>("CompanyId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("company_id");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<string>("Decision")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasColumnName("decision");
+
+                    b.Property<Guid>("EngineeringChangeOrderId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("engineering_change_order_id");
+
+                    b.Property<int>("ReviewRound")
+                        .HasColumnType("integer")
+                        .HasColumnName("review_round");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ApproverUserId", "CompanyId");
+
+                    b.HasIndex("EngineeringChangeOrderId", "CompanyId");
+
+                    b.HasIndex("CompanyId", "EngineeringChangeOrderId", "ReviewRound", "ApproverUserId")
+                        .IsUnique()
+                        .HasDatabaseName("ux_eco_approvals_company_id_eco_id_round_approver");
+
+                    b.ToTable("eco_approvals", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_eco_approvals_decision", "\"decision\" IN ('Approve', 'RequestChanges')");
+                        });
+                });
+
+            modelBuilder.Entity("EngiFlow.Domain.Ecos.EcoAttachment", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<Guid>("CompanyId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("company_id");
+
+                    b.Property<Guid>("EngineeringChangeOrderId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("engineering_change_order_id");
+
+                    b.Property<string>("FileName")
+                        .IsRequired()
+                        .HasMaxLength(255)
+                        .HasColumnType("character varying(255)")
+                        .HasColumnName("file_name");
+
+                    b.Property<long>("FileSize")
+                        .HasColumnType("bigint")
+                        .HasColumnName("file_size");
+
+                    b.Property<string>("MimeType")
+                        .IsRequired()
+                        .HasMaxLength(255)
+                        .HasColumnType("character varying(255)")
+                        .HasColumnName("mime_type");
+
+                    b.Property<string>("ObjectKey")
+                        .IsRequired()
+                        .HasMaxLength(1024)
+                        .HasColumnType("character varying(1024)")
+                        .HasColumnName("object_key");
+
+                    b.Property<DateTimeOffset>("UploadedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("uploaded_at");
+
+                    b.Property<Guid>("UploadedByUserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("uploaded_by_user_id");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CompanyId", "ObjectKey")
+                        .IsUnique()
+                        .HasDatabaseName("ux_eco_attachments_company_id_object_key");
+
+                    b.HasIndex("EngineeringChangeOrderId", "CompanyId");
+
+                    b.HasIndex("UploadedByUserId", "CompanyId");
+
+                    b.HasIndex("CompanyId", "EngineeringChangeOrderId", "UploadedAt")
+                        .HasDatabaseName("ix_eco_attachments_company_id_eco_id_uploaded_at");
+
+                    b.ToTable("eco_attachments", (string)null);
+                });
+
+            modelBuilder.Entity("EngiFlow.Domain.Ecos.EcoComment", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<Guid>("AuthorUserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("author_user_id");
+
+                    b.Property<string>("Body")
+                        .IsRequired()
+                        .HasMaxLength(4000)
+                        .HasColumnType("character varying(4000)")
+                        .HasColumnName("body");
+
+                    b.Property<Guid>("CompanyId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("company_id");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<Guid>("EngineeringChangeOrderId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("engineering_change_order_id");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("AuthorUserId", "CompanyId");
+
+                    b.HasIndex("EngineeringChangeOrderId", "CompanyId");
+
+                    b.HasIndex("CompanyId", "EngineeringChangeOrderId", "CreatedAt")
+                        .HasDatabaseName("ix_eco_comments_company_id_eco_id_created_at");
+
+                    b.ToTable("eco_comments", (string)null);
+                });
+
             modelBuilder.Entity("EngiFlow.Domain.Ecos.EcoEvent", b =>
                 {
                     b.Property<Guid>("Id")
@@ -109,11 +356,11 @@ namespace EngiFlow.Infrastructure.Persistence.Migrations
 
                     b.ToTable("eco_events", null, t =>
                         {
-                            t.HasCheckConstraint("ck_eco_events_event_type", "\"event_type\" IN ('Created', 'DetailsUpdated', 'SubmittedForReview', 'Approved', 'Rejected', 'Implemented')");
+                            t.HasCheckConstraint("ck_eco_events_event_type", "\"event_type\" IN ('Created', 'DetailsUpdated', 'SubmittedForReview', 'ReviewDecisionSubmitted', 'Approved', 'ChangesRequested', 'AffectedItemAdded', 'AffectedItemRemoved', 'CommentAdded', 'AttachmentAdded', 'Canceled', 'Rejected', 'Implemented')");
 
-                            t.HasCheckConstraint("ck_eco_events_new_status", "\"new_status\" IS NULL OR \"new_status\" IN ('Draft', 'UnderReview', 'Approved', 'Rejected', 'Implemented')");
+                            t.HasCheckConstraint("ck_eco_events_new_status", "\"new_status\" IS NULL OR \"new_status\" IN ('Draft', 'UnderReview', 'Approved', 'Canceled', 'Rejected', 'Implemented')");
 
-                            t.HasCheckConstraint("ck_eco_events_old_status", "\"old_status\" IS NULL OR \"old_status\" IN ('Draft', 'UnderReview', 'Approved', 'Rejected', 'Implemented')");
+                            t.HasCheckConstraint("ck_eco_events_old_status", "\"old_status\" IS NULL OR \"old_status\" IN ('Draft', 'UnderReview', 'Approved', 'Canceled', 'Rejected', 'Implemented')");
                         });
                 });
 
@@ -146,6 +393,16 @@ namespace EngiFlow.Infrastructure.Persistence.Migrations
                         .HasMaxLength(32)
                         .HasColumnType("character varying(32)")
                         .HasColumnName("priority");
+
+                    b.Property<int>("ReviewRound")
+                        .HasColumnType("integer")
+                        .HasColumnName("review_round");
+
+                    b.Property<uint>("RowVersion")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
 
                     b.Property<string>("Status")
                         .IsRequired()
@@ -180,7 +437,7 @@ namespace EngiFlow.Infrastructure.Persistence.Migrations
                         {
                             t.HasCheckConstraint("ck_engineering_change_orders_priority", "\"priority\" IN ('Low', 'Medium', 'High', 'Critical')");
 
-                            t.HasCheckConstraint("ck_engineering_change_orders_status", "\"status\" IN ('Draft', 'UnderReview', 'Approved', 'Rejected', 'Implemented')");
+                            t.HasCheckConstraint("ck_engineering_change_orders_status", "\"status\" IN ('Draft', 'UnderReview', 'Approved', 'Canceled', 'Rejected', 'Implemented')");
                         });
                 });
 
@@ -218,6 +475,10 @@ namespace EngiFlow.Infrastructure.Persistence.Migrations
                         .HasColumnType("boolean")
                         .HasColumnName("is_active");
 
+                    b.Property<DateTimeOffset?>("LastLoginAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("last_login_at");
+
                     b.Property<string>("PasswordHash")
                         .IsRequired()
                         .HasMaxLength(512)
@@ -248,8 +509,85 @@ namespace EngiFlow.Infrastructure.Persistence.Migrations
 
                     b.ToTable("users", null, t =>
                         {
-                            t.HasCheckConstraint("ck_users_role", "\"role\" IN ('Requester', 'Reviewer', 'Approver', 'Administrator')");
+                            t.HasCheckConstraint("ck_users_role", "\"role\" IN ('Owner', 'Administrator', 'Approver', 'Requester', 'Viewer')");
                         });
+                });
+
+            modelBuilder.Entity("EngiFlow.Domain.Companies.CompanySettings", b =>
+                {
+                    b.HasOne("EngiFlow.Domain.Companies.Company", null)
+                        .WithOne()
+                        .HasForeignKey("EngiFlow.Domain.Companies.CompanySettings", "CompanyId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("EngiFlow.Domain.Ecos.EcoAffectedItem", b =>
+                {
+                    b.HasOne("EngiFlow.Domain.Users.User", null)
+                        .WithMany()
+                        .HasForeignKey("CreatedByUserId", "CompanyId")
+                        .HasPrincipalKey("Id", "CompanyId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("EngiFlow.Domain.Ecos.EngineeringChangeOrder", null)
+                        .WithMany("AffectedItems")
+                        .HasForeignKey("EngineeringChangeOrderId", "CompanyId")
+                        .HasPrincipalKey("Id", "CompanyId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("EngiFlow.Domain.Ecos.EcoApproval", b =>
+                {
+                    b.HasOne("EngiFlow.Domain.Users.User", null)
+                        .WithMany()
+                        .HasForeignKey("ApproverUserId", "CompanyId")
+                        .HasPrincipalKey("Id", "CompanyId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("EngiFlow.Domain.Ecos.EngineeringChangeOrder", null)
+                        .WithMany("Approvals")
+                        .HasForeignKey("EngineeringChangeOrderId", "CompanyId")
+                        .HasPrincipalKey("Id", "CompanyId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("EngiFlow.Domain.Ecos.EcoAttachment", b =>
+                {
+                    b.HasOne("EngiFlow.Domain.Ecos.EngineeringChangeOrder", null)
+                        .WithMany("Attachments")
+                        .HasForeignKey("EngineeringChangeOrderId", "CompanyId")
+                        .HasPrincipalKey("Id", "CompanyId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("EngiFlow.Domain.Users.User", null)
+                        .WithMany()
+                        .HasForeignKey("UploadedByUserId", "CompanyId")
+                        .HasPrincipalKey("Id", "CompanyId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("EngiFlow.Domain.Ecos.EcoComment", b =>
+                {
+                    b.HasOne("EngiFlow.Domain.Users.User", null)
+                        .WithMany()
+                        .HasForeignKey("AuthorUserId", "CompanyId")
+                        .HasPrincipalKey("Id", "CompanyId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("EngiFlow.Domain.Ecos.EngineeringChangeOrder", null)
+                        .WithMany("Comments")
+                        .HasForeignKey("EngineeringChangeOrderId", "CompanyId")
+                        .HasPrincipalKey("Id", "CompanyId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
                 });
 
             modelBuilder.Entity("EngiFlow.Domain.Ecos.EcoEvent", b =>
@@ -295,6 +633,14 @@ namespace EngiFlow.Infrastructure.Persistence.Migrations
 
             modelBuilder.Entity("EngiFlow.Domain.Ecos.EngineeringChangeOrder", b =>
                 {
+                    b.Navigation("AffectedItems");
+
+                    b.Navigation("Approvals");
+
+                    b.Navigation("Attachments");
+
+                    b.Navigation("Comments");
+
                     b.Navigation("Events");
                 });
 #pragma warning restore 612, 618

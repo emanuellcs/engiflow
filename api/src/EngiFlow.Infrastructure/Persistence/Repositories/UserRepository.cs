@@ -40,7 +40,32 @@ internal sealed class UserRepository : IUserRepository
     {
         return _dbContext.Users
             .IgnoreQueryFilters()
+            .AsNoTracking()
             .SingleOrDefaultAsync(user => user.Email == normalizedEmail, cancellationToken);
+    }
+
+    /// <inheritdoc />
+    public Task<User?> GetByIdForAuthenticationAsync(UserId id, CancellationToken cancellationToken = default)
+    {
+        return _dbContext.Users
+            .IgnoreQueryFilters()
+            .AsNoTracking()
+            .SingleOrDefaultAsync(user => user.Id == id, cancellationToken);
+    }
+
+    /// <inheritdoc />
+    public async Task RecordSuccessfulLoginAsync(
+        UserId id,
+        DateTimeOffset lastLoginAt,
+        CancellationToken cancellationToken = default)
+    {
+        await _dbContext.Users
+            .IgnoreQueryFilters()
+            .Where(user => user.Id == id && user.IsActive)
+            .ExecuteUpdateAsync(
+                setters => setters.SetProperty(user => user.LastLoginAt, lastLoginAt),
+                cancellationToken)
+            .ConfigureAwait(false);
     }
 
     /// <inheritdoc />

@@ -39,7 +39,7 @@ public sealed class UserTests
             CompanyId.New(),
             "reviewer@engiflow.example",
             "Reviewer",
-            UserRole.Reviewer);
+            UserRole.Viewer);
         user.Deactivate();
 
         Assert.Throws<DomainException>(() => user.ChangeRole(UserRole.Approver));
@@ -57,5 +57,19 @@ public sealed class UserTests
         user.SetPasswordHash("hashed-password");
 
         Assert.Equal("hashed-password", user.PasswordHash);
+    }
+
+    [Fact]
+    public void RecordSuccessfulLogin_WhenActive_StoresUtcTimestamp()
+    {
+        var user = User.Create(
+            CompanyId.New(),
+            "admin@engiflow.example",
+            "Administrator",
+            UserRole.Administrator);
+
+        user.RecordSuccessfulLogin(DateTimeOffset.Parse("2026-05-18T10:00:00-04:00"));
+
+        Assert.Equal(DateTimeOffset.Parse("2026-05-18T14:00:00+00:00"), user.LastLoginAt);
     }
 }

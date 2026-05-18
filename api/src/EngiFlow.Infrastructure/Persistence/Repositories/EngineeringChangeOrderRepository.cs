@@ -43,6 +43,10 @@ internal sealed class EngineeringChangeOrderRepository : IEngineeringChangeOrder
     {
         return _dbContext.EngineeringChangeOrders
             .Include(eco => eco.Events)
+            .Include(eco => eco.Comments)
+            .Include(eco => eco.AffectedItems)
+            .Include(eco => eco.Approvals)
+            .Include(eco => eco.Attachments)
             .SingleOrDefaultAsync(eco => eco.Id == id, cancellationToken);
     }
 
@@ -50,10 +54,12 @@ internal sealed class EngineeringChangeOrderRepository : IEngineeringChangeOrder
     public async Task<IReadOnlyList<EngineeringChangeOrder>> ListAsync(
         int pageNumber,
         int pageSize,
+        EcoListFilter? filter = null,
         CancellationToken cancellationToken = default)
     {
-        return await _dbContext.EngineeringChangeOrders
+        return await ApplyFilter(_dbContext.EngineeringChangeOrders.AsNoTracking(), filter)
             .AsNoTracking()
+            .Include(eco => eco.Approvals)
             .OrderByDescending(eco => eco.CreatedAt)
             .Skip((pageNumber - 1) * pageSize)
             .Take(pageSize)
@@ -62,8 +68,66 @@ internal sealed class EngineeringChangeOrderRepository : IEngineeringChangeOrder
     }
 
     /// <inheritdoc />
-    public Task<int> CountAsync(CancellationToken cancellationToken = default)
+    public Task<int> CountAsync(EcoListFilter? filter = null, CancellationToken cancellationToken = default)
     {
-        return _dbContext.EngineeringChangeOrders.CountAsync(cancellationToken);
+        return ApplyFilter(_dbContext.EngineeringChangeOrders.AsNoTracking(), filter)
+            .CountAsync(cancellationToken);
+    }
+
+    private static IQueryable<EngineeringChangeOrder> ApplyFilter(
+        IQueryable<EngineeringChangeOrder> query,
+        EcoListFilter? filter)
+    {
+        if (filter is null)
+        {
+            return query;
+        }
+
+        var normalizedSearch = filter.Search?.Trim();
+        if (!string.IsNullOrWhiteSpace(normalizedSearch))
+        {
+            var pattern = $"%{normalizedSearch}%";
+            query = query.Where(eco =>
+                EF.Functions.ILike(eco.Title, pattern) ||
+                EF.Functions.ILike(eco.Description, pattern));
+        }
+
+        if (filter.Status is not null)
+        {
+            query = query.Where(eco => eco.Status == filter.Status);
+        }
+
+        if (filter.Priority is not null)
+        {
+            query = query.Where(eco => eco.Priority == filter.Priority);
+        }
+
+        if (filter.CreatedFrom is not null)
+        {
+            query = query.Where(eco => eco.CreatedAt >= filter.CreatedFrom);
+        }
+
+        if (filter.CreatedTo is not null)
+        {
+            query = query.Where(eco => eco.CreatedAt <= filter.CreatedTo);
+        }
+
+        if (filter.CreatedByUserId is not null)
+        {
+            var createdByUserId = filter.CreatedByUserId.Value;
+            query = query.Where(eco => eco.CreatedByUserId == createdByUserId);
+        }
+
+        if (filter.AwaitingReviewByUserId is not null)
+        {
+            var awaitingReviewByUserId = filter.AwaitingReviewByUserId.Value;
+            query = query.Where(eco =>
+                eco.Status == EcoStatus.UnderReview &&
+                !eco.Approvals.Any(approval =>
+                    approval.ApproverUserId == awaitingReviewByUserId &&
+                    approval.ReviewRound == eco.ReviewRound));
+        }
+
+        return query;
     }
 }

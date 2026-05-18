@@ -22,7 +22,7 @@ internal sealed class UserConfiguration : IEntityTypeConfiguration<User>
             "users",
             table => table.HasCheckConstraint(
                 "ck_users_role",
-                "\"role\" IN ('Requester', 'Reviewer', 'Approver', 'Administrator')"));
+                "\"role\" IN ('Owner', 'Administrator', 'Approver', 'Requester', 'Viewer')"));
 
         builder.HasKey(user => user.Id);
 
@@ -68,6 +68,10 @@ internal sealed class UserConfiguration : IEntityTypeConfiguration<User>
             .HasColumnName("created_at")
             .HasColumnType("timestamp with time zone")
             .IsRequired();
+
+        builder.Property(user => user.LastLoginAt)
+            .HasColumnName("last_login_at")
+            .HasColumnType("timestamp with time zone");
 
         builder.Property(user => user.DeactivatedAt)
             .HasColumnName("deactivated_at")

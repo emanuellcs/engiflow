@@ -3,17 +3,25 @@ using System.Text;
 using System.Text.Json.Serialization;
 using EngiFlow.Api.Auth;
 using EngiFlow.Api.ExceptionHandling;
+using EngiFlow.Api.Hubs;
 using EngiFlow.Api.Initialization;
 using EngiFlow.Api.Tenancy;
 using EngiFlow.Application;
+using EngiFlow.Application.Abstractions.Persistence;
+using EngiFlow.Application.Ecos.Notifications;
 using EngiFlow.Application.Abstractions.Security;
 using EngiFlow.Application.Abstractions.Tenancy;
+using EngiFlow.Application.Users.Notifications;
 using EngiFlow.Domain.Ecos;
 using EngiFlow.Domain.Users;
+using EngiFlow.Domain.ValueObjects;
 using EngiFlow.Infrastructure;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.SignalR;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi;
+using EngiFlow.Application.Mediation;
+using System.Security.Claims;
 
 var builder = WebApplication.CreateBuilder(args);
 var jwtOptions = builder.Configuration.GetSection(JwtOptions.SectionName).Get<JwtOptions>()
@@ -28,8 +36,20 @@ builder.Services
         options.JsonSerializerOptions.Converters.Add(new JsonStringEnumConverter<EcoPriority>(allowIntegerValues: false));
         options.JsonSerializerOptions.Converters.Add(new JsonStringEnumConverter<EcoStatus>(allowIntegerValues: false));
         options.JsonSerializerOptions.Converters.Add(new JsonStringEnumConverter<EcoEventType>(allowIntegerValues: false));
+        options.JsonSerializerOptions.Converters.Add(new JsonStringEnumConverter<EcoAffectedItemAction>(allowIntegerValues: false));
+        options.JsonSerializerOptions.Converters.Add(new JsonStringEnumConverter<EcoApprovalDecision>(allowIntegerValues: false));
         options.JsonSerializerOptions.Converters.Add(new JsonStringEnumConverter<UserRole>(allowIntegerValues: false));
     });
+builder.Services.AddCors(options =>
+{
+    options.AddDefaultPolicy(policy =>
+    {
+        policy.SetIsOriginAllowed(_ => true)
+            .AllowAnyHeader()
+            .AllowAnyMethod()
+            .AllowCredentials();
+    });
+});
 builder.Services.AddProblemDetails(options =>
 {
     options.CustomizeProblemDetails = context =>
@@ -45,7 +65,20 @@ builder.Services.AddOptions<DevelopmentSeedOptions>()
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddScoped<ITenantProvider, HttpContextTenantProvider>();
 builder.Services.AddScoped<IJwtTokenService, JwtTokenService>();
+builder.Services.AddScoped<INotificationHandler<EcoChangedNotification>, EcoDomainEventHandler>();
+builder.Services.AddScoped<INotificationHandler<UserPermissionsChangedNotification>, UserSecurityNotificationHandler>();
+builder.Services.AddScoped<INotificationHandler<UserDeactivatedNotification>, UserSecurityNotificationHandler>();
 builder.Services.AddSingleton<EngiFlowDatabaseInitializer>();
+builder.Services.AddSingleton<IUserIdProvider, SubjectUserIdProvider>();
+builder.Services.AddSignalR()
+    .AddJsonProtocol(options =>
+    {
+        options.PayloadSerializerOptions.Converters.Add(new JsonStringEnumConverter<EcoPriority>(allowIntegerValues: false));
+        options.PayloadSerializerOptions.Converters.Add(new JsonStringEnumConverter<EcoStatus>(allowIntegerValues: false));
+        options.PayloadSerializerOptions.Converters.Add(new JsonStringEnumConverter<EcoEventType>(allowIntegerValues: false));
+        options.PayloadSerializerOptions.Converters.Add(new JsonStringEnumConverter<EcoAffectedItemAction>(allowIntegerValues: false));
+        options.PayloadSerializerOptions.Converters.Add(new JsonStringEnumConverter<EcoApprovalDecision>(allowIntegerValues: false));
+    });
 builder.Services
     .AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     .AddJwtBearer(options =>
@@ -64,17 +97,69 @@ builder.Services
             NameClaimType = EngiFlowClaimTypes.Subject,
             RoleClaimType = EngiFlowClaimTypes.Role
         };
+
+        options.Events = new JwtBearerEvents
+        {
+            OnTokenValidated = async context =>
+            {
+                var subjectClaim = context.Principal?.FindFirst(EngiFlowClaimTypes.Subject)?.Value;
+                var tenantClaim = context.Principal?.FindFirst(EngiFlowClaimTypes.Tenant)?.Value;
+
+                if (!Guid.TryParse(subjectClaim, out var userId)
+                    || userId == Guid.Empty
+                    || !Guid.TryParse(tenantClaim, out var companyId)
+                    || companyId == Guid.Empty)
+                {
+                    context.Fail("The authentication token is missing required identity claims.");
+                    return;
+                }
+
+                var users = context.HttpContext.RequestServices.GetRequiredService<IUserRepository>();
+                var user = await users.GetByIdForAuthenticationAsync(
+                        UserId.From(userId),
+                        context.HttpContext.RequestAborted)
+                    .ConfigureAwait(false);
+
+                if (user is null || !user.IsActive || user.CompanyId.Value != companyId)
+                {
+                    context.Fail("The authenticated user is inactive or invalid.");
+                    return;
+                }
+
+                if (context.Principal?.Identity is ClaimsIdentity identity)
+                {
+                    ReplaceClaim(identity, EngiFlowClaimTypes.Role, user.Role.ToString());
+                    ReplaceClaim(identity, EngiFlowClaimTypes.UserName, user.DisplayName);
+                }
+            },
+            OnMessageReceived = context =>
+            {
+                var accessToken = context.Request.Query["access_token"];
+                var path = context.HttpContext.Request.Path;
+
+                if (!string.IsNullOrEmpty(accessToken) && path.StartsWithSegments("/hubs"))
+                {
+                    context.Token = accessToken;
+                }
+
+                return Task.CompletedTask;
+            }
+        };
     });
 builder.Services.AddAuthorization(options =>
 {
     options.AddPolicy(
         EngiFlowAuthorizationPolicies.EcoAuthoring,
         policy => policy.RequireAuthenticatedUser()
-            .RequireRole(nameof(UserRole.Requester), nameof(UserRole.Administrator)));
+            .RequireRole(nameof(UserRole.Owner), nameof(UserRole.Administrator), nameof(UserRole.Requester)));
     options.AddPolicy(
         EngiFlowAuthorizationPolicies.EcoApproval,
         policy => policy.RequireAuthenticatedUser()
-            .RequireRole(nameof(UserRole.Approver), nameof(UserRole.Administrator)));
+            .RequireRole(nameof(UserRole.Owner), nameof(UserRole.Administrator), nameof(UserRole.Approver)));
+    options.AddPolicy(
+        EngiFlowAuthorizationPolicies.UserManagement,
+        policy => policy.RequireAuthenticatedUser()
+            .RequireRole(nameof(UserRole.Owner), nameof(UserRole.Administrator)));
 });
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(options =>
@@ -113,7 +198,7 @@ var connectionString = builder.Configuration.GetConnectionString("DefaultConnect
     ?? throw new InvalidOperationException("Connection string 'DefaultConnection' is required.");
 
 builder.Services.AddApplication();
-builder.Services.AddInfrastructure(connectionString);
+builder.Services.AddInfrastructure(connectionString, builder.Configuration);
 
 var app = builder.Build();
 
@@ -137,9 +222,23 @@ if (app.Environment.IsDevelopment())
 
 app.UseHttpsRedirection();
 
+app.UseCors();
+
 app.UseAuthentication();
 app.UseAuthorization();
 
 app.MapControllers();
+app.MapHub<EcoHub>("/hubs/ecos");
+app.MapHub<SecurityHub>("/hubs/security");
 
 app.Run();
+
+static void ReplaceClaim(ClaimsIdentity identity, string claimType, string claimValue)
+{
+    foreach (var claim in identity.FindAll(claimType).ToArray())
+    {
+        identity.RemoveClaim(claim);
+    }
+
+    identity.AddClaim(new Claim(claimType, claimValue));
+}
