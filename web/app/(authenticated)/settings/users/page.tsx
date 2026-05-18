@@ -4,6 +4,7 @@ import AddIcon from "@mui/icons-material/Add";
 import MoreVertIcon from "@mui/icons-material/MoreVert";
 import RefreshIcon from "@mui/icons-material/Refresh";
 import SearchIcon from "@mui/icons-material/Search";
+import GroupIcon from "@mui/icons-material/Group";
 import Alert from "@mui/material/Alert";
 import Avatar from "@mui/material/Avatar";
 import Box from "@mui/material/Box";
@@ -26,8 +27,10 @@ import Stack from "@mui/material/Stack";
 import TextField from "@mui/material/TextField";
 import Tooltip from "@mui/material/Tooltip";
 import Typography from "@mui/material/Typography";
-import { DataGrid, type GridColDef, type GridRenderCellParams } from "@mui/x-data-grid";
+import { DataGrid, type GridColDef, type GridRenderCellParams, type GridToolbarProps } from "@mui/x-data-grid";
 import { type FormEvent, type MouseEvent, useCallback, useEffect, useMemo, useState } from "react";
+import DataGridCustomToolbar from "@/components/ui/DataGridCustomToolbar";
+import DataGridEmptyState from "@/components/ui/DataGridEmptyState";
 import PageHeader from "@/components/ui/PageHeader";
 import { ApiError, apiFetch } from "@/lib/api/client";
 import { useAuth } from "@/lib/auth/AuthContext";
@@ -96,6 +99,18 @@ export default function UserManagementPage() {
       setIsLoading(false);
     }
   }, [requestUsers]);
+
+  const CustomToolbar = useMemo(() => {
+    return function UserCustomToolbar(props: GridToolbarProps) {
+      return (
+        <DataGridCustomToolbar
+          {...props}
+          isLoading={isLoading}
+          onRefresh={() => void loadUsers()}
+        />
+      );
+    };
+  }, [isLoading, loadUsers]);
 
   useEffect(() => {
     if (!isAdministrator) {
@@ -195,6 +210,8 @@ export default function UserManagementPage() {
       headerName: "Name",
       minWidth: 240,
       flex: 1,
+      headerAlign: "left",
+      align: "left",
       renderCell: (params: GridRenderCellParams<UserSummary, string>) => (
         <Stack direction="row" spacing={1.25} sx={{ alignItems: "center", height: "100%", minWidth: 0 }}>
           <Avatar sx={{ width: 32, height: 32, bgcolor: "secondary.main", fontSize: "0.8125rem", fontWeight: 600 }}>
@@ -211,6 +228,8 @@ export default function UserManagementPage() {
       headerName: "Email",
       minWidth: 250,
       flex: 1,
+      headerAlign: "left",
+      align: "left",
       renderCell: (params) => (
         <Box sx={{ display: "flex", alignItems: "center", height: "100%" }}>
           <Typography variant="body2" color="text.secondary" noWrap>
@@ -223,8 +242,10 @@ export default function UserManagementPage() {
       field: "role",
       headerName: "Role",
       minWidth: 220,
+      headerAlign: "left",
+      align: "left",
       renderCell: (params: GridRenderCellParams<UserSummary, UserRole>) => (
-        <Box sx={{ display: "flex", alignItems: "center", height: "100%" }}>
+        <Box sx={{ display: "flex", alignItems: "center", height: "100%", width: "100%" }}>
           <RoleSelectCell
             workspaceUser={params.row}
             currentUserId={user?.id}
@@ -239,6 +260,8 @@ export default function UserManagementPage() {
       field: "lastLoginAt",
       headerName: "Last Active",
       minWidth: 190,
+      headerAlign: "left",
+      align: "left",
       renderCell: (params) => (
         <Box sx={{ display: "flex", alignItems: "center", height: "100%" }}>
           <Typography variant="body2" color="text.secondary">
@@ -254,6 +277,8 @@ export default function UserManagementPage() {
       sortable: false,
       filterable: false,
       disableColumnMenu: true,
+      headerAlign: "center",
+      align: "center",
       renderCell: (params: GridRenderCellParams<UserSummary>) => (
         <Box sx={{ display: "flex", alignItems: "center", justifyContent: "center", height: "100%" }}>
           <UserRowActions
@@ -286,17 +311,48 @@ export default function UserManagementPage() {
         title="Team Management"
         description="Manage workspace users, roles, and access policies."
         actionButton={
-          <Button
-            variant="contained"
-            startIcon={<AddIcon />}
-            onClick={() => {
-              setSuccessMessage(null);
-              setIsInviteOpen(true);
-            }}
-            sx={{ textTransform: "none", fontWeight: 600 }}
-          >
-            Invite User
-          </Button>
+          <Stack direction="row" spacing={1} sx={{ width: { xs: "100%", sm: "auto" }, alignItems: "center" }}>
+            <Tooltip title="Refresh data">
+              <span>
+                <IconButton
+                  onClick={() => void loadUsers()}
+                  disabled={isLoading}
+                  color="primary"
+                  size="small"
+                  sx={{
+                    border: 1,
+                    borderColor: "divider",
+                    bgcolor: "background.paper",
+                    width: 36,
+                    height: 36,
+                  }}
+                >
+                  {isLoading ? (
+                    <CircularProgress size={20} color="inherit" thickness={5} />
+                  ) : (
+                    <RefreshIcon fontSize="small" />
+                  )}
+                </IconButton>
+              </span>
+            </Tooltip>
+            <Button
+              variant="contained"
+              startIcon={<AddIcon />}
+              onClick={() => {
+                setSuccessMessage(null);
+                setIsInviteOpen(true);
+              }}
+              sx={{
+                flexGrow: { xs: 1, sm: 0 },
+                minWidth: 128,
+                textTransform: "none",
+                fontWeight: 600,
+                height: 36,
+              }}
+            >
+              Invite User
+            </Button>
+          </Stack>
         }
       />
 
@@ -359,18 +415,6 @@ export default function UserManagementPage() {
             variant="outlined"
             sx={{ fontWeight: 500 }}
           />
-          <Tooltip title="Refresh">
-            <span>
-              <IconButton
-                aria-label="Refresh team members"
-                size="small"
-                onClick={loadUsers}
-                disabled={isLoading}
-              >
-                <RefreshIcon fontSize="small" />
-              </IconButton>
-            </span>
-          </Tooltip>
         </Stack>
       </Stack>
 
@@ -388,6 +432,16 @@ export default function UserManagementPage() {
               paginationModel: { page: 0, pageSize: 10 },
             },
           }}
+          slots={{
+            toolbar: CustomToolbar,
+            noRowsOverlay: () => (
+              <DataGridEmptyState
+                icon={<GroupIcon sx={{ fontSize: 48, color: "grey.400" }} />}
+                message="No users found"
+                description="No matching team members were found in the workspace."
+              />
+            ),
+          }}
           localeText={{
             noRowsLabel: "No matching team members.",
           }}
@@ -402,6 +456,8 @@ export default function UserManagementPage() {
             },
             "& .MuiDataGrid-cell": {
               borderColor: "divider",
+              display: "flex !important",
+              alignItems: "center !important",
             },
           }}
         />
@@ -449,7 +505,7 @@ function RoleSelectCell({
 
   return (
     <Tooltip title={disabledReason ?? ""} disableHoverListener={!disabledReason}>
-      <span>
+      <Box sx={{ display: "flex", alignItems: "center", height: "100%" }}>
         <FormControl size="small" disabled={isDisabled} sx={{ minWidth: 150 }}>
           <Select<UserRole>
             value={workspaceUser.role}
@@ -472,7 +528,7 @@ function RoleSelectCell({
             ))}
           </Select>
         </FormControl>
-      </span>
+      </Box>
     </Tooltip>
   );
 }

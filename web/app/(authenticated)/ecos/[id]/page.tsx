@@ -12,6 +12,7 @@ import DownloadIcon from "@mui/icons-material/Download";
 import ErrorOutlineIcon from "@mui/icons-material/ErrorOutlined";
 import HourglassEmptyIcon from "@mui/icons-material/HourglassEmpty";
 import InsertDriveFileIcon from "@mui/icons-material/InsertDriveFile";
+import RefreshIcon from "@mui/icons-material/Refresh";
 import SendIcon from "@mui/icons-material/Send";
 import TimelineIcon from "@mui/icons-material/Timeline";
 import Avatar from "@mui/material/Avatar";
@@ -47,7 +48,9 @@ import Tabs from "@mui/material/Tabs";
 import TextField from "@mui/material/TextField";
 import Tooltip from "@mui/material/Tooltip";
 import Typography from "@mui/material/Typography";
-import { DataGrid, type GridColDef } from "@mui/x-data-grid";
+import { DataGrid, type GridColDef, type GridToolbarProps } from "@mui/x-data-grid";
+import DataGridCustomToolbar from "@/components/ui/DataGridCustomToolbar";
+import DataGridEmptyState from "@/components/ui/DataGridEmptyState";
 import { useParams } from "next/navigation";
 import {
   type ChangeEvent,
@@ -351,9 +354,32 @@ export default function EcoDetailsPage() {
               {formatDateTime(eco.createdAt)}
             </Typography>
           </Stack>
-          <Stack direction="row" spacing={1} sx={{ flexWrap: "wrap" }}>
+          <Stack direction="row" spacing={1} sx={{ flexWrap: "wrap", alignItems: "center" }}>
+            <Tooltip title="Refresh data">
+              <span>
+                <IconButton
+                  onClick={() => void loadEcoDetails()}
+                  disabled={isLoading}
+                  color="primary"
+                  size="small"
+                  sx={{
+                    border: 1,
+                    borderColor: "divider",
+                    bgcolor: "background.paper",
+                    width: 34,
+                    height: 34,
+                  }}
+                >
+                  {isLoading ? (
+                    <CircularProgress size={18} color="inherit" thickness={5} />
+                  ) : (
+                    <RefreshIcon fontSize="small" />
+                  )}
+                </IconButton>
+              </span>
+            </Tooltip>
             <PriorityChip priority={eco.priority} />
-            <Chip size="small" label={`ECO ${formatShortId(eco.id)}`} variant="outlined" />
+            <Chip size="small" label={`ECO ${formatShortId(eco.id)}`} variant="outlined" sx={{ height: 34 }} />
           </Stack>
         </Stack>
       </Stack>
@@ -461,11 +487,14 @@ export default function EcoDetailsPage() {
             />
           ) : null}
           {activeTab === "items" ? (
-            <AffectedItemsTab
-              canEdit={eco.status === "Draft" && canAuthor}
-              eco={eco}
-              isBlocked={Boolean(pendingAction) || isConflictRefreshing}
-              onAddItem={(item) =>
+           <AffectedItemsTab
+             canEdit={eco.status === "Draft" && canAuthor}
+             eco={eco}
+             isBlocked={Boolean(pendingAction) || isConflictRefreshing}
+             isLoading={isLoading}
+             loadEcoDetails={loadEcoDetails}
+             onAddItem={(item) =>
+
                 runEcoAction("addItem", () =>
                   apiFetch<EcoDetailsDto>(
                     `/api/ecos/${encodeURIComponent(eco.id)}/affected-items`,
@@ -1113,6 +1142,8 @@ type AffectedItemsTabProps = {
   canEdit: boolean;
   eco: EcoDetailsDto;
   isBlocked: boolean;
+  isLoading: boolean;
+  loadEcoDetails: () => Promise<void>;
   onAddItem: (item: AddAffectedItemRequest) => Promise<void> | void;
   onRemoveItem: (itemId: string) => Promise<void> | void;
   pendingAction: PendingAction | null;
@@ -1122,11 +1153,26 @@ function AffectedItemsTab({
   canEdit,
   eco,
   isBlocked,
+  isLoading,
+  loadEcoDetails,
   onAddItem,
   onRemoveItem,
   pendingAction,
 }: AffectedItemsTabProps) {
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
+
+  const CustomToolbar = useMemo(() => {
+    return function AffectedItemsCustomToolbar(props: GridToolbarProps) {
+      return (
+        <DataGridCustomToolbar
+          {...props}
+          isLoading={isLoading}
+          onRefresh={() => void loadEcoDetails()}
+        />
+      );
+    };
+  }, [isLoading, loadEcoDetails]);
+
   const columns = useMemo<GridColDef<EcoAffectedItemDto>[]>(
     () => [
       {
@@ -1134,6 +1180,8 @@ function AffectedItemsTab({
         headerName: "Part Number",
         minWidth: 160,
         flex: 1,
+        headerAlign: "left",
+        align: "left",
         renderCell: (params) => (
           <Box sx={{ display: "flex", alignItems: "center", height: "100%" }}>
             <Typography variant="body2" sx={{ fontWeight: 600, fontFamily: "monospace" }}>
@@ -1147,6 +1195,8 @@ function AffectedItemsTab({
         headerName: "Description",
         minWidth: 240,
         flex: 1.5,
+        headerAlign: "left",
+        align: "left",
         renderCell: (params) => (
           <Box sx={{ display: "flex", alignItems: "center", height: "100%", width: "100%" }}>
             <Typography variant="body2" noWrap sx={{ width: "100%" }}>
@@ -1159,6 +1209,8 @@ function AffectedItemsTab({
         field: "currentRevision",
         headerName: "Current Rev",
         minWidth: 130,
+        headerAlign: "center",
+        align: "center",
         renderCell: (params) => (
           <Box sx={{ display: "flex", alignItems: "center", height: "100%" }}>
             <Typography variant="body2" color="text.secondary">
@@ -1172,6 +1224,8 @@ function AffectedItemsTab({
         headerName: "",
         width: 72,
         sortable: false,
+        headerAlign: "center",
+        align: "center",
         renderCell: () => (
           <Box sx={{ display: "flex", alignItems: "center", justifyContent: "center", height: "100%", width: "100%" }}>
             <Typography variant="body2" color="text.secondary">
@@ -1184,6 +1238,8 @@ function AffectedItemsTab({
         field: "newRevision",
         headerName: "New Rev",
         minWidth: 120,
+        headerAlign: "center",
+        align: "center",
         renderCell: (params) => (
           <Box sx={{ display: "flex", alignItems: "center", height: "100%" }}>
             <Typography variant="body2" sx={{ fontWeight: 600 }}>
@@ -1196,6 +1252,8 @@ function AffectedItemsTab({
         field: "action",
         headerName: "Action",
         minWidth: 130,
+        headerAlign: "center",
+        align: "center",
         renderCell: (params) => (
           <Box sx={{ display: "flex", alignItems: "center", height: "100%" }}>
             <AffectedItemActionChip action={params.row.action} />
@@ -1207,6 +1265,8 @@ function AffectedItemsTab({
         headerName: "",
         width: 76,
         sortable: false,
+        headerAlign: "center",
+        align: "center",
         renderCell: (params) => (
           <Box sx={{ display: "flex", alignItems: "center", justifyContent: "center", height: "100%", width: "100%" }}>
             {canEdit ? (
@@ -1254,6 +1314,15 @@ function AffectedItemsTab({
           getRowClassName={(params) =>
             params.row.action === "Remove" ? "affected-item-obsolete" : ""
           }
+          slots={{
+            toolbar: CustomToolbar,
+            noRowsOverlay: () => (
+              <DataGridEmptyState
+                message="No affected items"
+                description="There are currently no items associated with this ECO."
+              />
+            ),
+          }}
           sx={{
             borderColor: "divider",
             bgcolor: "background.paper",
@@ -1265,6 +1334,8 @@ function AffectedItemsTab({
             },
             "& .MuiDataGrid-cell": {
               borderColor: "divider",
+              display: "flex !important",
+              alignItems: "center !important",
             },
             "& .affected-item-obsolete .MuiDataGrid-cell": {
               color: "text.secondary",

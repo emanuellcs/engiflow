@@ -3,11 +3,13 @@
 import AddIcon from "@mui/icons-material/Add";
 import AssignmentOutlinedIcon from "@mui/icons-material/AssignmentOutlined";
 import FilterAltOffIcon from "@mui/icons-material/FilterAltOff";
+import RefreshIcon from "@mui/icons-material/Refresh";
 import SearchIcon from "@mui/icons-material/Search";
 import Avatar from "@mui/material/Avatar";
 import Box from "@mui/material/Box";
 import Button from "@mui/material/Button";
 import Checkbox from "@mui/material/Checkbox";
+import CircularProgress from "@mui/material/CircularProgress";
 import FormControl from "@mui/material/FormControl";
 import FormControlLabel from "@mui/material/FormControlLabel";
 import InputAdornment from "@mui/material/InputAdornment";
@@ -18,11 +20,15 @@ import Paper from "@mui/material/Paper";
 import Select, { type SelectChangeEvent } from "@mui/material/Select";
 import Stack from "@mui/material/Stack";
 import TextField from "@mui/material/TextField";
+import Tooltip from "@mui/material/Tooltip";
+import IconButton from "@mui/material/IconButton";
 import Typography from "@mui/material/Typography";
-import { DataGrid, type GridColDef, type GridPaginationModel } from "@mui/x-data-grid";
+import { DataGrid, type GridColDef, type GridPaginationModel, type GridToolbarProps } from "@mui/x-data-grid";
 import { DatePicker } from "@mui/x-date-pickers/DatePicker";
 import type { Dayjs } from "dayjs";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import DataGridCustomToolbar from "@/components/ui/DataGridCustomToolbar";
+import DataGridEmptyState from "@/components/ui/DataGridEmptyState";
 import NextLink from "@/components/ui/NextLink";
 import PageHeader from "@/components/ui/PageHeader";
 import PriorityChip from "@/components/ui/PriorityChip";
@@ -134,44 +140,44 @@ function EcoDashboard() {
     };
   }, []);
 
+  const loadEcos = useCallback(async (signal?: AbortSignal) => {
+    setIsLoading(true);
+    setErrorMessage(null);
+
+    try {
+      const result = await apiFetch<PagedResult<EcoSummaryDto>>(
+        buildEcoListPath(paginationModel, filters),
+        { signal },
+      );
+
+      setRows(Array.isArray(result.items) ? result.items : []);
+      setRowCount(Number.isFinite(result.totalCount) ? result.totalCount : 0);
+    } catch (error) {
+      if (isAbortError(error)) {
+        return;
+      }
+
+      setRows([]);
+      setRowCount(0);
+      setErrorMessage(getEcoListErrorMessage(error));
+    } finally {
+      if (!signal?.aborted) {
+        setIsLoading(false);
+      }
+    }
+  }, [paginationModel, filters]);
+
   useEffect(() => {
     const controller = new AbortController();
     const searchDebounce = window.setTimeout(() => {
-      void loadEcos();
+      void loadEcos(controller.signal);
     }, 250);
-
-    async function loadEcos(): Promise<void> {
-      setIsLoading(true);
-      setErrorMessage(null);
-
-      try {
-        const result = await apiFetch<PagedResult<EcoSummaryDto>>(
-          buildEcoListPath(paginationModel, filters),
-          { signal: controller.signal },
-        );
-
-        setRows(Array.isArray(result.items) ? result.items : []);
-        setRowCount(Number.isFinite(result.totalCount) ? result.totalCount : 0);
-      } catch (error) {
-        if (isAbortError(error)) {
-          return;
-        }
-
-        setRows([]);
-        setRowCount(0);
-        setErrorMessage(getEcoListErrorMessage(error));
-      } finally {
-        if (!controller.signal.aborted) {
-          setIsLoading(false);
-        }
-      }
-    }
 
     return () => {
       window.clearTimeout(searchDebounce);
       controller.abort();
     };
-  }, [filters, paginationModel]);
+  }, [loadEcos]);
 
   const resetToFirstPage = useCallback(() => {
     setPaginationModel((current) => ({ ...current, page: 0 }));
@@ -181,26 +187,39 @@ function EcoDashboard() {
     () => [
       {
         field: "id",
-        headerName: "ECO",
-        minWidth: 170,
-        flex: 0.8,
+        headerName: "ID",
+        minWidth: 100,
+        flex: 0.5,
         sortable: false,
+        headerAlign: "left",
+        align: "left",
         renderCell: (params) => (
-          <Box sx={{ display: "flex", alignItems: "center", height: "100%", width: "100%" }}>
-            <Stack spacing={0} sx={{ minWidth: 0 }}>
-              <Link
-                component={NextLink}
-                href={`/ecos/${params.row.id}`}
-                underline="hover"
-                color="primary"
-                sx={{ fontFamily: "monospace", fontWeight: 700, fontSize: "0.875rem" }}
-              >
-                {formatShortId(params.row.id)}
-              </Link>
-              <Typography variant="caption" color="text.secondary" noWrap sx={{ fontSize: "0.75rem" }}>
-                Round {params.row.reviewRound || 0}
-              </Typography>
-            </Stack>
+          <Box sx={{ display: "flex", alignItems: "center", height: "100%" }}>
+            <Link
+              component={NextLink}
+              href={`/ecos/${params.row.id}`}
+              underline="hover"
+              color="primary"
+              sx={{ fontFamily: "monospace", fontWeight: 700, fontSize: "0.875rem" }}
+            >
+              {formatShortId(params.row.id)}
+            </Link>
+          </Box>
+        ),
+      },
+      {
+        field: "reviewRound",
+        headerName: "Round",
+        minWidth: 90,
+        flex: 0.4,
+        sortable: false,
+        headerAlign: "center",
+        align: "center",
+        renderCell: (params) => (
+          <Box sx={{ display: "flex", alignItems: "center", height: "100%", justifyContent: "center" }}>
+            <Typography variant="body2" color="text.secondary" sx={{ fontWeight: 500 }}>
+              {params.row.reviewRound || 0}
+            </Typography>
           </Box>
         ),
       },
@@ -210,6 +229,8 @@ function EcoDashboard() {
         minWidth: 280,
         flex: 1.5,
         sortable: false,
+        headerAlign: "left",
+        align: "left",
         renderCell: (params) => (
           <Box sx={{ display: "flex", alignItems: "center", height: "100%", width: "100%" }}>
             <Link
@@ -239,6 +260,8 @@ function EcoDashboard() {
         minWidth: 210,
         flex: 1,
         sortable: false,
+        headerAlign: "left",
+        align: "left",
         renderCell: (params) => {
           const requester = usersById.get(params.row.createdByUserId);
 
@@ -254,10 +277,12 @@ function EcoDashboard() {
       },
       {
         field: "review",
-        headerName: "Review",
+        headerName: "Review Progress",
         minWidth: 210,
         flex: 1,
         sortable: false,
+        headerAlign: "left",
+        align: "left",
         renderCell: (params) => (
           <Box sx={{ display: "flex", alignItems: "center", height: "100%", width: "100%" }}>
             <ReviewerProgressCell
@@ -275,8 +300,10 @@ function EcoDashboard() {
         headerName: "Priority",
         minWidth: 118,
         sortable: false,
+        headerAlign: "center",
+        align: "center",
         renderCell: (params) => (
-          <Box sx={{ display: "flex", alignItems: "center", height: "100%" }}>
+          <Box sx={{ display: "flex", alignItems: "center", height: "100%", justifyContent: "center" }}>
             <PriorityChip priority={params.row.priority} />
           </Box>
         ),
@@ -286,8 +313,10 @@ function EcoDashboard() {
         headerName: "Status",
         minWidth: 138,
         sortable: false,
+        headerAlign: "center",
+        align: "center",
         renderCell: (params) => (
-          <Box sx={{ display: "flex", alignItems: "center", height: "100%" }}>
+          <Box sx={{ display: "flex", alignItems: "center", height: "100%", justifyContent: "center" }}>
             <StatusChip status={params.row.status} />
           </Box>
         ),
@@ -297,8 +326,10 @@ function EcoDashboard() {
         headerName: "Created",
         minWidth: 150,
         sortable: false,
+        headerAlign: "center",
+        align: "center",
         renderCell: (params) => (
-          <Box sx={{ display: "flex", alignItems: "center", height: "100%" }}>
+          <Box sx={{ display: "flex", alignItems: "center", height: "100%", justifyContent: "center" }}>
             <Typography variant="body2" color="text.secondary">
               {formatDate(params.value as string)}
             </Typography>
@@ -314,23 +345,51 @@ function EcoDashboard() {
       <PageHeader
         title="Engineering Change Orders"
         description="Search, review, and triage engineering changes across the workspace."
-        actionButton={canCreateEco ? (
-          <Button
-            component={NextLink}
-            href="/ecos/new"
-            type="button"
-            variant="contained"
-            startIcon={<AddIcon />}
-            sx={{
-              width: { xs: "100%", sm: "auto" },
-              minWidth: 128,
-              textTransform: "none",
-              fontWeight: 600,
-            }}
-          >
-            Create ECO
-          </Button>
-        ) : undefined}
+        actionButton={
+          <Stack direction="row" spacing={1} sx={{ width: { xs: "100%", sm: "auto" }, alignItems: "center" }}>
+            <Tooltip title="Refresh data">
+              <span>
+                <IconButton
+                  onClick={() => void loadEcos()}
+                  disabled={isLoading}
+                  color="primary"
+                  size="small"
+                  sx={{
+                    border: 1,
+                    borderColor: "divider",
+                    bgcolor: "background.paper",
+                    width: 36,
+                    height: 36,
+                  }}
+                >
+                  {isLoading ? (
+                    <CircularProgress size={20} color="inherit" thickness={5} />
+                  ) : (
+                    <RefreshIcon fontSize="small" />
+                  )}
+                </IconButton>
+              </span>
+            </Tooltip>
+            {canCreateEco ? (
+              <Button
+                component={NextLink}
+                href="/ecos/new"
+                type="button"
+                variant="contained"
+                startIcon={<AddIcon />}
+                sx={{
+                  flexGrow: { xs: 1, sm: 0 },
+                  minWidth: 128,
+                  textTransform: "none",
+                  fontWeight: 600,
+                  height: 36,
+                }}
+              >
+                Create ECO
+              </Button>
+            ) : null}
+          </Stack>
+        }
       />
 
       <Paper
@@ -370,7 +429,14 @@ function EcoDashboard() {
               pageSizeOptions={[10, 20, 50, 100]}
               disableRowSelectionOnClick
               slots={{
-                noRowsOverlay: EmptyGridOverlay,
+                toolbar: DataGridCustomToolbar,
+                noRowsOverlay: () => (
+                  <DataGridEmptyState
+                    icon={<AssignmentOutlinedIcon sx={{ fontSize: 48, color: "grey.400" }} />}
+                    message="No ECOs found"
+                    description="There are currently no engineering change orders to display."
+                  />
+                ),
               }}
               slotProps={{
                 loadingOverlay: {
@@ -388,6 +454,8 @@ function EcoDashboard() {
                 },
                 "& .MuiDataGrid-cell": {
                   borderColor: "divider",
+                  display: "flex !important",
+                  alignItems: "center !important",
                 },
                 "& .MuiDataGrid-footerContainer": {
                   borderTop: 1,
@@ -611,31 +679,6 @@ function ReviewerProgressCell({
           ? `${approvalCount}/${minApprovalsRequired} approved`
           : formatStatusLabel(status)}
         {requestChangesCount > 0 ? ` • ${requestChangesCount} changes` : ""}
-      </Typography>
-    </Stack>
-  );
-}
-
-/**
- * Renders the empty DataGrid overlay.
- *
- * @returns Empty grid overlay.
- */
-function EmptyGridOverlay() {
-  return (
-    <Stack
-      spacing={1.5}
-      sx={{
-        alignItems: "center",
-        justifyContent: "center",
-        minHeight: "100%",
-        p: 3,
-        textAlign: "center",
-      }}
-    >
-      <AssignmentOutlinedIcon sx={{ fontSize: 48, color: "grey.500" }} />
-      <Typography variant="body2" color="text.secondary">
-        No Engineering Change Orders match the current filters.
       </Typography>
     </Stack>
   );

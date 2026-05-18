@@ -153,18 +153,31 @@ export default function WorkflowPoliciesPage() {
         title="Workflow Policies"
         description="Control approval quorum rules for engineering change orders."
         actionButton={
-          <Tooltip title="Refresh">
-            <span>
-              <IconButton
-                aria-label="Refresh workflow policies"
-                size="small"
-                onClick={loadPolicyData}
-                disabled={isLoading || isSaving}
-              >
-                <RefreshIcon fontSize="small" />
-              </IconButton>
-            </span>
-          </Tooltip>
+          <Stack direction="row" spacing={1} sx={{ width: { xs: "100%", sm: "auto" }, alignItems: "center" }}>
+            <Tooltip title="Refresh data">
+              <span>
+                <IconButton
+                  onClick={() => void loadPolicyData()}
+                  disabled={isLoading || isSaving}
+                  color="primary"
+                  size="small"
+                  sx={{
+                    border: 1,
+                    borderColor: "divider",
+                    bgcolor: "background.paper",
+                    width: 36,
+                    height: 36,
+                  }}
+                >
+                  {isLoading ? (
+                    <CircularProgress size={20} color="inherit" thickness={5} />
+                  ) : (
+                    <RefreshIcon fontSize="small" />
+                  )}
+                </IconButton>
+              </span>
+            </Tooltip>
+          </Stack>
         }
       />
 
