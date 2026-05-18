@@ -28,7 +28,7 @@ public static class DependencyInjection
         services.AddScoped<IExternalOperationCompensation, ExternalOperationCompensation>();
 
         services.AddValidatorsFromAssembly(typeof(DependencyInjection).Assembly, includeInternalTypes: false);
-        services.AddMediatR(configuration =>
+        services.AddEngiFlowMediation(configuration =>
         {
             configuration.RegisterServicesFromAssembly(typeof(DependencyInjection).Assembly);
             configuration.AddOpenBehavior(typeof(ValidationBehavior<,>));
