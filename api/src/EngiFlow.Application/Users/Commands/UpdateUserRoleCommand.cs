@@ -3,6 +3,8 @@ using EngiFlow.Application.Abstractions.Persistence;
 using EngiFlow.Application.Abstractions.Tenancy;
 using EngiFlow.Application.Exceptions;
 using EngiFlow.Application.Users.Dtos;
+using EngiFlow.Application.Messaging;
+using EngiFlow.Application.Users.Notifications;
 using EngiFlow.Domain.Users;
 using EngiFlow.Domain.ValueObjects;
 using FluentValidation;
@@ -43,6 +45,7 @@ public sealed class UpdateUserRoleCommandHandler : ICommandHandler<UpdateUserRol
 {
     private readonly ITenantProvider _tenantProvider;
     private readonly IUnitOfWork _unitOfWork;
+    private readonly IPostCommitNotificationQueue _notifications;
     private readonly IUserRepository _users;
 
     /// <summary>
@@ -51,11 +54,13 @@ public sealed class UpdateUserRoleCommandHandler : ICommandHandler<UpdateUserRol
     public UpdateUserRoleCommandHandler(
         IUserRepository users,
         IUnitOfWork unitOfWork,
-        ITenantProvider tenantProvider)
+        ITenantProvider tenantProvider,
+        IPostCommitNotificationQueue notifications)
     {
         _users = users;
         _unitOfWork = unitOfWork;
         _tenantProvider = tenantProvider;
+        _notifications = notifications;
     }
 
     /// <inheritdoc />
@@ -79,6 +84,7 @@ public sealed class UpdateUserRoleCommandHandler : ICommandHandler<UpdateUserRol
         UserManagementRules.EnsureCanChangeTargetRole(actor, target, command.Role);
         target.ChangeRole(command.Role);
         await _unitOfWork.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+        _notifications.EnqueueUserPermissionsChanged(target);
 
         return target.ToSummaryDto();
     }

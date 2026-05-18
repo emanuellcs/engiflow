@@ -73,6 +73,22 @@ public sealed class EngineeringChangeOrderTests
     }
 
     [Fact]
+    public void SubmitReviewDecision_ByEcoAuthor_ThrowsComplianceException()
+    {
+        var eco = CreateEco();
+        eco.SubmitForReview(RequesterId);
+
+        var exception = Assert.Throws<DomainException>(() =>
+            eco.SubmitReviewDecision(RequesterId, EcoApprovalDecision.Approve, 1));
+
+        Assert.Equal(
+            "Compliance Rule: The author of the ECO cannot participate in its approval quorum",
+            exception.Message);
+        Assert.Equal(EcoStatus.UnderReview, eco.Status);
+        Assert.Empty(eco.Approvals);
+    }
+
+    [Fact]
     public void Reject_FromUnderReview_ReturnsEcoToDraftForRevision()
     {
         var eco = CreateEco();

@@ -105,7 +105,7 @@ public sealed class UsersController : ControllerBase
     /// <response code="404">The target user was not found.</response>
     /// <response code="409">A role immutability rule rejected the request.</response>
     /// <response code="500">An unexpected server error occurred.</response>
-    [HttpPatch("{id:guid}/role")]
+    [HttpPut("{id:guid}/role")]
     [ProducesResponseType(typeof(UserSummaryDto), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ValidationProblemDetails), StatusCodes.Status400BadRequest)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status401Unauthorized)]
@@ -130,9 +130,8 @@ public sealed class UsersController : ControllerBase
     /// Deactivates a tenant user without deleting their database row.
     /// </summary>
     /// <remarks>
-    /// This endpoint is exposed as HTTP DELETE for client ergonomics, but the command performs
-    /// a soft delete by setting the user inactive. Inactive users are hidden by the EF Core
-    /// global query filter and cannot authenticate.
+    /// The command performs a soft delete by setting the user inactive. Inactive users are
+    /// hidden by the EF Core global query filter and cannot authenticate.
     /// </remarks>
     /// <param name="id">The target user identifier.</param>
     /// <param name="cancellationToken">A token that can cancel the request.</param>
@@ -144,7 +143,7 @@ public sealed class UsersController : ControllerBase
     /// <response code="404">The target user was not found.</response>
     /// <response code="409">A user immutability rule rejected the request.</response>
     /// <response code="500">An unexpected server error occurred.</response>
-    [HttpDelete("{id:guid}")]
+    [HttpPut("{id:guid}/deactivate")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(typeof(ValidationProblemDetails), StatusCodes.Status400BadRequest)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status401Unauthorized)]

@@ -34,6 +34,25 @@ public interface IUserRepository
         CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// Finds a user by identifier for authentication middleware, independent of active-user filters.
+    /// </summary>
+    /// <param name="id">The user identifier.</param>
+    /// <param name="cancellationToken">A token that can cancel the persistence operation.</param>
+    /// <returns>The user when found; otherwise, <see langword="null"/>.</returns>
+    Task<User?> GetByIdForAuthenticationAsync(UserId id, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Records successful login activity during anonymous authentication.
+    /// </summary>
+    /// <param name="id">The authenticated user identifier.</param>
+    /// <param name="lastLoginAt">The UTC login timestamp to store.</param>
+    /// <param name="cancellationToken">A token that can cancel the persistence operation.</param>
+    Task RecordSuccessfulLoginAsync(
+        UserId id,
+        DateTimeOffset lastLoginAt,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// Lists active users within the current tenant.
     /// </summary>
     /// <param name="cancellationToken">A token that can cancel the persistence operation.</param>

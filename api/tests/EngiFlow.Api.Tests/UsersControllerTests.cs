@@ -111,6 +111,22 @@ public sealed class UsersControllerTests
     }
 
     [Fact]
+    public void RoleAndDeactivateEndpoints_UseCanonicalPutRoutes()
+    {
+        var roleRoute = Assert.Single(typeof(UsersController)
+            .GetMethod(nameof(UsersController.UpdateRoleAsync))!
+            .GetCustomAttributes(typeof(HttpPutAttribute), inherit: true)
+            .Cast<HttpPutAttribute>());
+        var deactivateRoute = Assert.Single(typeof(UsersController)
+            .GetMethod(nameof(UsersController.DeactivateAsync))!
+            .GetCustomAttributes(typeof(HttpPutAttribute), inherit: true)
+            .Cast<HttpPutAttribute>());
+
+        Assert.Equal("{id:guid}/role", roleRoute.Template);
+        Assert.Equal("{id:guid}/deactivate", deactivateRoute.Template);
+    }
+
+    [Fact]
     public async Task Owner_CanManageUsers()
     {
         // This test verifies that the application logic allows Owners to list users.

@@ -93,6 +93,11 @@ public sealed class User : ITenantScoped
     public DateTimeOffset CreatedAt { get; private set; }
 
     /// <summary>
+    /// Gets the UTC timestamp when the user last authenticated successfully.
+    /// </summary>
+    public DateTimeOffset? LastLoginAt { get; private set; }
+
+    /// <summary>
     /// Gets the UTC timestamp when the user was deactivated, when applicable.
     /// </summary>
     public DateTimeOffset? DeactivatedAt { get; private set; }
@@ -163,6 +168,16 @@ public sealed class User : ITenantScoped
     public void SetPasswordHash(string passwordHash)
     {
         PasswordHash = DomainGuard.Required(passwordHash, nameof(passwordHash), 512);
+    }
+
+    /// <summary>
+    /// Records a successful authentication timestamp.
+    /// </summary>
+    /// <param name="loggedInAt">Optional timestamp used for deterministic tests.</param>
+    public void RecordSuccessfulLogin(DateTimeOffset? loggedInAt = null)
+    {
+        EnsureActive();
+        LastLoginAt = DomainGuard.UtcTimestamp(loggedInAt);
     }
 
     /// <summary>

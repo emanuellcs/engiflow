@@ -386,6 +386,11 @@ public sealed class EngineeringChangeOrder : ITenantScoped
             throw new DomainException("Review decisions can only be submitted while an ECO is under review.");
         }
 
+        if (approverUserId == CreatedByUserId)
+        {
+            throw new DomainException("Compliance Rule: The author of the ECO cannot participate in its approval quorum");
+        }
+
         if (minApprovalsRequired < 1)
         {
             throw new DomainException("Minimum approvals required must be at least one.");

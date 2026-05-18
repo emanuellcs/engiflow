@@ -2,6 +2,8 @@ using EngiFlow.Application.Abstractions.Cqrs;
 using EngiFlow.Application.Abstractions.Persistence;
 using EngiFlow.Application.Abstractions.Tenancy;
 using EngiFlow.Application.Exceptions;
+using EngiFlow.Application.Messaging;
+using EngiFlow.Application.Users.Notifications;
 using EngiFlow.Domain.ValueObjects;
 using FluentValidation;
 
@@ -36,6 +38,7 @@ public sealed class DeactivateUserCommandHandler : ICommandHandler<DeactivateUse
 {
     private readonly ITenantProvider _tenantProvider;
     private readonly IUnitOfWork _unitOfWork;
+    private readonly IPostCommitNotificationQueue _notifications;
     private readonly IUserRepository _users;
 
     /// <summary>
@@ -44,11 +47,13 @@ public sealed class DeactivateUserCommandHandler : ICommandHandler<DeactivateUse
     public DeactivateUserCommandHandler(
         IUserRepository users,
         IUnitOfWork unitOfWork,
-        ITenantProvider tenantProvider)
+        ITenantProvider tenantProvider,
+        IPostCommitNotificationQueue notifications)
     {
         _users = users;
         _unitOfWork = unitOfWork;
         _tenantProvider = tenantProvider;
+        _notifications = notifications;
     }
 
     /// <inheritdoc />
@@ -69,9 +74,10 @@ public sealed class DeactivateUserCommandHandler : ICommandHandler<DeactivateUse
             throw new EntityNotFoundException("User", command.UserId);
         }
 
-        UserManagementRules.EnsureCanManageTarget(actor, target);
+        UserManagementRules.EnsureCanDeactivateTarget(actor, target);
         target.Deactivate();
         await _unitOfWork.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+        _notifications.EnqueueUserDeactivated(target);
 
         return true;
     }

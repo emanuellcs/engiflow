@@ -11,11 +11,15 @@ using EngiFlow.Application.Ecos.Dtos;
 using EngiFlow.Application.Ecos.Queries;
 using EngiFlow.Application.Exceptions;
 using EngiFlow.Application.Messaging;
+using EngiFlow.Application.Settings.Commands;
+using EngiFlow.Application.Settings.Queries;
 using EngiFlow.Application.Users.Commands;
 using EngiFlow.Application.Users.Dtos;
+using EngiFlow.Application.Users.Notifications;
 using EngiFlow.Application.Users.Queries;
 using EngiFlow.Domain.Companies;
 using EngiFlow.Domain.Ecos;
+using EngiFlow.Domain.Exceptions;
 using EngiFlow.Domain.Users;
 using EngiFlow.Domain.ValueObjects;
 using FluentValidation;
@@ -92,9 +96,10 @@ public sealed class EcoApplicationTests
             UserRole.Administrator);
         user.SetPasswordHash(passwordHashService.HashPassword(user, "EngiFlow_Admin_123!"));
         var jwtTokenService = new FakeJwtTokenService();
+        var users = new FakeUserRepository(user);
         var handler = new LoginQueryHandler(
             new FakeCompanyRepository(company),
-            new FakeUserRepository(user),
+            users,
             passwordHashService,
             jwtTokenService);
 
@@ -102,12 +107,15 @@ public sealed class EcoApplicationTests
             " ADMIN@ENGIFLOW.LOCAL ",
             "EngiFlow_Admin_123!"));
 
+        Assert.NotNull(user.LastLoginAt);
         Assert.Equal("Bearer", result.TokenType);
         Assert.Equal($"token:{user.Id.Value}", result.AccessToken);
         Assert.Equal(jwtTokenService.ExpiresAtUtc, result.ExpiresAtUtc);
         Assert.Equal("Administrator", result.UserName);
         Assert.Equal("EngiFlow Demo Company", result.CompanyName);
         Assert.Equal(new[] { nameof(UserRole.Administrator) }, result.Roles);
+        Assert.Equal(user.Id, users.LastSuccessfulLoginUserId);
+        Assert.Equal(user.LastLoginAt, users.LastSuccessfulLoginAt);
     }
 
     [Fact]
@@ -472,6 +480,130 @@ public sealed class EcoApplicationTests
     }
 
     [Fact]
+    public async Task SubmitReviewDecisionCommandHandler_WhenActorCreatedEco_RejectsForCompliance()
+    {
+        var companyId = CompanyId.New();
+        var author = User.Create(
+            companyId,
+            "author@engiflow.example",
+            "Author",
+            UserRole.Approver);
+        var eco = EngineeringChangeOrder.Create(
+            companyId,
+            "Use aluminum bracket",
+            "Update load-bearing bracket material from steel to aluminum.",
+            EcoPriority.Medium,
+            author.Id);
+        eco.SubmitForReview(author.Id);
+        var unitOfWork = new FakeUnitOfWork();
+        var handler = new SubmitReviewDecisionCommandHandler(
+            new FakeEcoRepository(eco),
+            new FakeUserRepository(author),
+            new FakeCompanySettingsRepository(CompanySettings.CreateDefault(companyId)),
+            unitOfWork,
+            new FakeTenantProvider(companyId, author.Id),
+            new FakePostCommitNotificationQueue());
+
+        var exception = await Assert.ThrowsAsync<DomainException>(() =>
+            handler.HandleAsync(new SubmitReviewDecisionCommand(
+                eco.Id.Value,
+                EcoApprovalDecision.Approve,
+                null)));
+
+        Assert.Equal(
+            "Compliance Rule: The author of the ECO cannot participate in its approval quorum",
+            exception.Message);
+        Assert.Equal(0, unitOfWork.SaveCount);
+    }
+
+    [Fact]
+    public async Task SettingsHandlers_MaterializeDefaultsAndUpdateQuorum()
+    {
+        var companyId = CompanyId.New();
+        var repository = new FakeCompanySettingsRepository();
+        var unitOfWork = new FakeUnitOfWork();
+        var tenantProvider = new FakeTenantProvider(companyId, UserId.New());
+        var queryHandler = new GetCompanySettingsQueryHandler(repository, tenantProvider, unitOfWork);
+
+        var defaults = await queryHandler.HandleAsync(new GetCompanySettingsQuery());
+
+        Assert.Equal(1, defaults.MinApprovalsRequired);
+        Assert.Single(repository.Settings);
+        Assert.Equal(1, unitOfWork.SaveCount);
+
+        var updateHandler = new UpdateCompanySettingsCommandHandler(repository, tenantProvider, unitOfWork);
+        var updated = await updateHandler.HandleAsync(new UpdateCompanySettingsCommand(3));
+
+        Assert.Equal(3, updated.MinApprovalsRequired);
+        Assert.Equal(2, unitOfWork.SaveCount);
+    }
+
+    [Fact]
+    public async Task UpdateUserRoleCommandHandler_UpdatesRoleAndQueuesPermissionNotification()
+    {
+        var companyId = CompanyId.New();
+        var admin = User.Create(companyId, "admin@acme.example", "Admin", UserRole.Administrator);
+        var target = User.Create(companyId, "approver@acme.example", "Approver", UserRole.Approver);
+        var notifications = new FakePostCommitNotificationQueue();
+        var handler = new UpdateUserRoleCommandHandler(
+            new FakeUserRepository(admin, target),
+            new FakeUnitOfWork(),
+            new FakeTenantProvider(companyId, admin.Id),
+            notifications);
+
+        var updated = await handler.HandleAsync(new UpdateUserRoleCommand(target.Id.Value, UserRole.Viewer));
+
+        Assert.Equal(nameof(UserRole.Viewer), updated.Role);
+        var notification = Assert.IsType<UserPermissionsChangedNotification>(
+            Assert.Single(notifications.Notifications));
+        Assert.Equal(target.Id.Value, notification.UserId);
+        Assert.Equal(UserRole.Viewer, notification.NewRole);
+    }
+
+    [Fact]
+    public async Task DeactivateUserCommandHandler_WhenActorTargetsSelf_ThrowsDomainException()
+    {
+        var companyId = CompanyId.New();
+        var admin = User.Create(companyId, "admin@acme.example", "Admin", UserRole.Administrator);
+        var unitOfWork = new FakeUnitOfWork();
+        var notifications = new FakePostCommitNotificationQueue();
+        var handler = new DeactivateUserCommandHandler(
+            new FakeUserRepository(admin),
+            unitOfWork,
+            new FakeTenantProvider(companyId, admin.Id),
+            notifications);
+
+        var exception = await Assert.ThrowsAsync<DomainException>(() =>
+            handler.HandleAsync(new DeactivateUserCommand(admin.Id.Value)));
+
+        Assert.Equal("A user cannot deactivate themselves.", exception.Message);
+        Assert.True(admin.IsActive);
+        Assert.Equal(0, unitOfWork.SaveCount);
+        Assert.Empty(notifications.Notifications);
+    }
+
+    [Fact]
+    public async Task DeactivateUserCommandHandler_DeactivatesUserAndQueuesNotification()
+    {
+        var companyId = CompanyId.New();
+        var admin = User.Create(companyId, "admin@acme.example", "Admin", UserRole.Administrator);
+        var target = User.Create(companyId, "viewer@acme.example", "Viewer", UserRole.Viewer);
+        var notifications = new FakePostCommitNotificationQueue();
+        var handler = new DeactivateUserCommandHandler(
+            new FakeUserRepository(admin, target),
+            new FakeUnitOfWork(),
+            new FakeTenantProvider(companyId, admin.Id),
+            notifications);
+
+        await handler.HandleAsync(new DeactivateUserCommand(target.Id.Value));
+
+        Assert.False(target.IsActive);
+        var notification = Assert.IsType<UserDeactivatedNotification>(
+            Assert.Single(notifications.Notifications));
+        Assert.Equal(target.Id.Value, notification.UserId);
+    }
+
+    [Fact]
     public async Task RejectEcoCommandHandler_ReturnsUnderReviewEcoToDraftWithReason()
     {
         var fixture = CreateFixtureWithEco();
@@ -721,14 +853,19 @@ public sealed class EcoApplicationTests
             "actor@engiflow.example",
             "Actor",
             UserRole.Approver);
+        var requester = User.Create(
+            companyId,
+            "requester@engiflow.example",
+            "Requester",
+            UserRole.Requester);
         var eco = EngineeringChangeOrder.Create(
             companyId,
             "Use aluminum bracket",
             "Update load-bearing bracket material from steel to aluminum.",
             EcoPriority.Medium,
-            currentUser.Id);
+            requester.Id);
         var ecos = new FakeEcoRepository(eco);
-        var users = new FakeUserRepository(currentUser);
+        var users = new FakeUserRepository(currentUser, requester);
         var unitOfWork = new FakeUnitOfWork();
         var tenantProvider = new FakeTenantProvider(companyId, currentUser.Id);
         var settings = new FakeCompanySettingsRepository(CompanySettings.CreateDefault(companyId));
@@ -862,6 +999,10 @@ public sealed class EcoApplicationTests
             _users = users;
         }
 
+        public UserId? LastSuccessfulLoginUserId { get; private set; }
+
+        public DateTimeOffset? LastSuccessfulLoginAt { get; private set; }
+
         public Task AddAsync(User user, CancellationToken cancellationToken = default)
         {
             throw new NotSupportedException("Use Company.RegisterUser in application tests.");
@@ -877,6 +1018,21 @@ public sealed class EcoApplicationTests
             CancellationToken cancellationToken = default)
         {
             return Task.FromResult(_users.SingleOrDefault(user => user.Email == normalizedEmail));
+        }
+
+        public Task<User?> GetByIdForAuthenticationAsync(UserId id, CancellationToken cancellationToken = default)
+        {
+            return GetByIdAsync(id, cancellationToken);
+        }
+
+        public Task RecordSuccessfulLoginAsync(
+            UserId id,
+            DateTimeOffset lastLoginAt,
+            CancellationToken cancellationToken = default)
+        {
+            LastSuccessfulLoginUserId = id;
+            LastSuccessfulLoginAt = lastLoginAt;
+            return Task.CompletedTask;
         }
 
         public Task<IReadOnlyList<User>> ListActiveAsync(CancellationToken cancellationToken = default)

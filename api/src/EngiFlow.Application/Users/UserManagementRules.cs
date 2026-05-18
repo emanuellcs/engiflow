@@ -61,4 +61,14 @@ internal static class UserManagementRules
             throw new DomainException("Users cannot be promoted to Owner.");
         }
     }
+
+    public static void EnsureCanDeactivateTarget(User actor, User target)
+    {
+        EnsureCanManageTarget(actor, target);
+
+        if (actor.Id == target.Id)
+        {
+            throw new DomainException("A user cannot deactivate themselves.");
+        }
+    }
 }

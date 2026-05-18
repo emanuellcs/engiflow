@@ -111,10 +111,10 @@ function resolveEcoHubUrl(): string {
   const baseUrl = (
     process.env.NEXT_PUBLIC_API_URL ||
     process.env.NEXT_PUBLIC_API_BASE_URL ||
-    ""
+    "http://localhost:8080"
   ).replace(/\/+$/, "");
 
-  return baseUrl ? `${baseUrl}/hubs/ecos` : "/api/hubs/ecos";
+  return `${baseUrl}/hubs/ecos`;
 }
 
 function getSignalRErrorMessage(error: unknown): string | null {

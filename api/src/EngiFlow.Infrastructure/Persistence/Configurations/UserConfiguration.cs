@@ -69,6 +69,10 @@ internal sealed class UserConfiguration : IEntityTypeConfiguration<User>
             .HasColumnType("timestamp with time zone")
             .IsRequired();
 
+        builder.Property(user => user.LastLoginAt)
+            .HasColumnName("last_login_at")
+            .HasColumnType("timestamp with time zone");
+
         builder.Property(user => user.DeactivatedAt)
             .HasColumnName("deactivated_at")
             .HasColumnType("timestamp with time zone");

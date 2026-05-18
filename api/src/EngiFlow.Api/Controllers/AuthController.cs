@@ -47,7 +47,7 @@ public sealed class AuthController : ControllerBase
         [FromBody] LoginRequest request,
         CancellationToken cancellationToken)
     {
-        var result = await _mediator.SendQueryAsync<LoginQuery, LoginResultDto>(
+        var result = await _mediator.SendCommandAsync<LoginQuery, LoginResultDto>(
                 new LoginQuery(request.Email, request.Password),
                 cancellationToken)
             .ConfigureAwait(false);

@@ -29,6 +29,7 @@ import Typography from "@mui/material/Typography";
 import { usePathname } from "next/navigation";
 import type { PropsWithChildren, ReactNode } from "react";
 import { useState } from "react";
+import { useSecurityHub } from "@/components/security/useSecurityHub";
 import NextLink from "@/components/ui/NextLink";
 import { useAuth } from "@/lib/auth/AuthContext";
 import { isAdminOrOwner } from "@/lib/auth/jwt";
@@ -74,7 +75,7 @@ const navigationItems: NavigationItem[] = [
 
 export default function AppShell({ children }: PropsWithChildren) {
   const pathname = usePathname() ?? "/";
-  const { logout, user } = useAuth();
+  const { logout, token, user } = useAuth();
   const [isMobileDrawerOpen, setIsMobileDrawerOpen] = useState(false);
   const isAdministrator = isAdminOrOwner(user?.role);
   const companyName = user?.companyName ?? "Workspace";
@@ -85,6 +86,8 @@ export default function AppShell({ children }: PropsWithChildren) {
   const showEcosAction = !pathname.startsWith("/ecos");
   const showNewEcoAction = canCreateEco && !pathname.startsWith("/ecos/new");
   const showTeamAction = isAdministrator && !pathname.startsWith("/settings/users");
+
+  useSecurityHub({ token, currentUserId: user?.id });
 
   function handleDrawerOpen(): void {
     setIsMobileDrawerOpen(true);
