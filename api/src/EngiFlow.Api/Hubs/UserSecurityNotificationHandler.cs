@@ -1,5 +1,5 @@
 using EngiFlow.Application.Users.Notifications;
-using MediatR;
+using EngiFlow.Application.Mediation;
 using Microsoft.AspNetCore.SignalR;
 
 namespace EngiFlow.Api.Hubs;

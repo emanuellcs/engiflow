@@ -1,6 +1,6 @@
 using EngiFlow.Application.Ecos.Dtos;
 using EngiFlow.Domain.Ecos;
-using MediatR;
+using EngiFlow.Application.Mediation;
 
 namespace EngiFlow.Application.Ecos.Notifications;
 

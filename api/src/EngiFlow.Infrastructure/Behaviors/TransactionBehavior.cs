@@ -1,7 +1,7 @@
 using EngiFlow.Application.Abstractions.Cqrs;
 using EngiFlow.Application.Messaging;
 using EngiFlow.Infrastructure.Persistence;
-using MediatR;
+using EngiFlow.Application.Mediation;
 using Microsoft.EntityFrameworkCore.Storage;
 using Microsoft.Extensions.Logging;
 
@@ -12,7 +12,7 @@ namespace EngiFlow.Infrastructure.Behaviors;
 /// </summary>
 /// <typeparam name="TRequest">The MediatR request type.</typeparam>
 /// <typeparam name="TResponse">The MediatR response type.</typeparam>
-internal sealed class TransactionBehavior<TRequest, TResponse> : MediatR.IPipelineBehavior<TRequest, TResponse>
+internal sealed class TransactionBehavior<TRequest, TResponse> : IPipelineBehavior<TRequest, TResponse>
     where TRequest : notnull
 {
     private readonly IExternalOperationCompensation _compensation;
@@ -46,7 +46,7 @@ internal sealed class TransactionBehavior<TRequest, TResponse> : MediatR.IPipeli
     /// <inheritdoc />
     public async Task<TResponse> Handle(
         TRequest request,
-        MediatR.RequestHandlerDelegate<TResponse> next,
+        RequestHandlerDelegate<TResponse> next,
         CancellationToken cancellationToken)
     {
         if (request is not ICommandBase)

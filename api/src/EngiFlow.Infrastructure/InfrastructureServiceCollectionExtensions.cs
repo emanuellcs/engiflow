@@ -7,7 +7,7 @@ using EngiFlow.Infrastructure.Persistence.Interceptors;
 using EngiFlow.Infrastructure.Persistence.Repositories;
 using EngiFlow.Infrastructure.Security;
 using EngiFlow.Infrastructure.Storage;
-using MediatR;
+using EngiFlow.Application.Mediation;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;

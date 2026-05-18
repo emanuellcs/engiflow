@@ -20,7 +20,7 @@ using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.SignalR;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi;
-using MediatR;
+using EngiFlow.Application.Mediation;
 using System.Security.Claims;
 
 var builder = WebApplication.CreateBuilder(args);

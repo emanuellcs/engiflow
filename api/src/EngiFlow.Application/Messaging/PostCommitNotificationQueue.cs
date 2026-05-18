@@ -1,4 +1,4 @@
-using MediatR;
+using EngiFlow.Application.Mediation;
 
 namespace EngiFlow.Application.Messaging;
 

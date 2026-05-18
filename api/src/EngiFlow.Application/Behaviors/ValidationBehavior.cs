@@ -1,5 +1,5 @@
 using FluentValidation;
-using MediatR;
+using EngiFlow.Application.Mediation;
 using AppValidationException = EngiFlow.Application.Exceptions.ValidationException;
 
 namespace EngiFlow.Application.Behaviors;

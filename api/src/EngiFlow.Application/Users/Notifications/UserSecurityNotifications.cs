@@ -1,6 +1,6 @@
 using EngiFlow.Domain.Users;
 using EngiFlow.Application.Messaging;
-using MediatR;
+using EngiFlow.Application.Mediation;
 
 namespace EngiFlow.Application.Users.Notifications;
 

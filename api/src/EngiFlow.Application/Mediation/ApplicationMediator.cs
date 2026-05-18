@@ -1,5 +1,5 @@
 using EngiFlow.Application.Abstractions.Cqrs;
-using MediatR;
+using EngiFlow.Application.Mediation;
 
 namespace EngiFlow.Application.Mediation;
 
