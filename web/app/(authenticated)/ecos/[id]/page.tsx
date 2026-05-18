@@ -1129,46 +1129,101 @@ function AffectedItemsTab({
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
   const columns = useMemo<GridColDef<EcoAffectedItemDto>[]>(
     () => [
-      { field: "partNumber", headerName: "Part Number", minWidth: 160, flex: 1 },
-      { field: "description", headerName: "Description", minWidth: 240, flex: 1.5 },
-      { field: "currentRevision", headerName: "Current Rev", minWidth: 130 },
+      {
+        field: "partNumber",
+        headerName: "Part Number",
+        minWidth: 160,
+        flex: 1,
+        renderCell: (params) => (
+          <Box sx={{ display: "flex", alignItems: "center", height: "100%" }}>
+            <Typography variant="body2" sx={{ fontWeight: 600, fontFamily: "monospace" }}>
+              {params.value}
+            </Typography>
+          </Box>
+        ),
+      },
+      {
+        field: "description",
+        headerName: "Description",
+        minWidth: 240,
+        flex: 1.5,
+        renderCell: (params) => (
+          <Box sx={{ display: "flex", alignItems: "center", height: "100%", width: "100%" }}>
+            <Typography variant="body2" noWrap sx={{ width: "100%" }}>
+              {params.value}
+            </Typography>
+          </Box>
+        ),
+      },
+      {
+        field: "currentRevision",
+        headerName: "Current Rev",
+        minWidth: 130,
+        renderCell: (params) => (
+          <Box sx={{ display: "flex", alignItems: "center", height: "100%" }}>
+            <Typography variant="body2" color="text.secondary">
+              {params.value}
+            </Typography>
+          </Box>
+        ),
+      },
       {
         field: "arrow",
         headerName: "",
         width: 72,
         sortable: false,
         renderCell: () => (
-          <Typography variant="body2" color="text.secondary">
-            {"->"}
-          </Typography>
+          <Box sx={{ display: "flex", alignItems: "center", justifyContent: "center", height: "100%", width: "100%" }}>
+            <Typography variant="body2" color="text.secondary">
+              {"->"}
+            </Typography>
+          </Box>
         ),
       },
-      { field: "newRevision", headerName: "New Rev", minWidth: 120 },
+      {
+        field: "newRevision",
+        headerName: "New Rev",
+        minWidth: 120,
+        renderCell: (params) => (
+          <Box sx={{ display: "flex", alignItems: "center", height: "100%" }}>
+            <Typography variant="body2" sx={{ fontWeight: 600 }}>
+              {params.value}
+            </Typography>
+          </Box>
+        ),
+      },
       {
         field: "action",
         headerName: "Action",
         minWidth: 130,
-        renderCell: (params) => <AffectedItemActionChip action={params.row.action} />,
+        renderCell: (params) => (
+          <Box sx={{ display: "flex", alignItems: "center", height: "100%" }}>
+            <AffectedItemActionChip action={params.row.action} />
+          </Box>
+        ),
       },
       {
         field: "remove",
         headerName: "",
         width: 76,
         sortable: false,
-        renderCell: (params) =>
-          canEdit ? (
-            <Tooltip title="Remove item">
-              <span>
-                <IconButton
-                  size="small"
-                  disabled={isBlocked || pendingAction === "removeItem"}
-                  onClick={() => onRemoveItem(params.row.id)}
-                >
-                  <DeleteIcon fontSize="small" />
-                </IconButton>
-              </span>
-            </Tooltip>
-          ) : null,
+        renderCell: (params) => (
+          <Box sx={{ display: "flex", alignItems: "center", justifyContent: "center", height: "100%", width: "100%" }}>
+            {canEdit ? (
+              <Tooltip title="Remove item">
+                <span>
+                  <IconButton
+                    size="small"
+                    disabled={isBlocked || pendingAction === "removeItem"}
+                    onClick={() => onRemoveItem(params.row.id)}
+                  >
+                    <DeleteIcon fontSize="small" />
+                  </IconButton>
+                </span>
+              </Tooltip>
+            ) : null}
+          </Box>
+        ),
       },
     ],
     [canEdit, isBlocked, onRemoveItem, pendingAction],
@@ -1183,32 +1238,40 @@ function AffectedItemsTab({
           startIcon={<AddIcon />}
           disabled={isBlocked}
           onClick={() => setIsAddDialogOpen(true)}
-          sx={{ alignSelf: "flex-start", textTransform: "none" }}
+          sx={{ alignSelf: "flex-start", textTransform: "none", fontWeight: 600 }}
         >
           Add Item
         </Button>
       ) : null}
-      <Box sx={{ width: "100%", overflowX: "auto" }}>
-        <Box sx={{ minWidth: 900, height: 460 }}>
-          <DataGrid
-            rows={eco.affectedItems}
-            columns={columns}
-            getRowId={(row) => row.id}
-            disableRowSelectionOnClick
-            pageSizeOptions={[10, 25, 50]}
-            initialState={{ pagination: { paginationModel: { pageSize: 10 } } }}
-            getRowClassName={(params) =>
-              params.row.action === "Remove" ? "affected-item-obsolete" : ""
-            }
-            sx={{
-              border: 0,
-              "& .affected-item-obsolete .MuiDataGrid-cell": {
-                color: "text.secondary",
-                textDecoration: "line-through",
-              },
-            }}
-          />
-        </Box>
+      <Box sx={{ width: "100%", minHeight: 300 }}>
+        <DataGrid
+          rows={eco.affectedItems}
+          columns={columns}
+          getRowId={(row) => row.id}
+          disableRowSelectionOnClick
+          pageSizeOptions={[10, 25, 50]}
+          initialState={{ pagination: { paginationModel: { pageSize: 10 } } }}
+          getRowClassName={(params) =>
+            params.row.action === "Remove" ? "affected-item-obsolete" : ""
+          }
+          sx={{
+            borderColor: "divider",
+            bgcolor: "background.paper",
+            borderRadius: 2,
+            "& .MuiDataGrid-columnHeaders": {
+              bgcolor: "action.hover",
+              borderBottom: 1,
+              borderColor: "divider",
+            },
+            "& .MuiDataGrid-cell": {
+              borderColor: "divider",
+            },
+            "& .affected-item-obsolete .MuiDataGrid-cell": {
+              color: "text.secondary",
+              textDecoration: "line-through",
+            },
+          }}
+        />
       </Box>
       {isAddDialogOpen ? (
         <AddAffectedItemDialog

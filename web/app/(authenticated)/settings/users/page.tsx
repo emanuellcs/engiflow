@@ -196,8 +196,8 @@ export default function UserManagementPage() {
       minWidth: 240,
       flex: 1,
       renderCell: (params: GridRenderCellParams<UserSummary, string>) => (
-        <Stack direction="row" spacing={1.25} sx={{ alignItems: "center", minWidth: 0 }}>
-          <Avatar sx={{ width: 32, height: 32, bgcolor: "secondary.main" }}>
+        <Stack direction="row" spacing={1.25} sx={{ alignItems: "center", height: "100%", minWidth: 0 }}>
+          <Avatar sx={{ width: 32, height: 32, bgcolor: "secondary.main", fontSize: "0.8125rem", fontWeight: 600 }}>
             {getInitials(params.row.name)}
           </Avatar>
           <Typography variant="body2" sx={{ fontWeight: 500 }} noWrap>
@@ -211,18 +211,27 @@ export default function UserManagementPage() {
       headerName: "Email",
       minWidth: 250,
       flex: 1,
+      renderCell: (params) => (
+        <Box sx={{ display: "flex", alignItems: "center", height: "100%" }}>
+          <Typography variant="body2" color="text.secondary" noWrap>
+            {params.value}
+          </Typography>
+        </Box>
+      ),
     },
     {
       field: "role",
       headerName: "Role",
       minWidth: 220,
       renderCell: (params: GridRenderCellParams<UserSummary, UserRole>) => (
-        <RoleSelectCell
-          workspaceUser={params.row}
-          currentUserId={user?.id}
-          isPending={roleUpdatingUserId === params.row.id}
-          onRoleChange={handleRoleChange}
-        />
+        <Box sx={{ display: "flex", alignItems: "center", height: "100%" }}>
+          <RoleSelectCell
+            workspaceUser={params.row}
+            currentUserId={user?.id}
+            isPending={roleUpdatingUserId === params.row.id}
+            onRoleChange={handleRoleChange}
+          />
+        </Box>
       ),
       sortComparator: (left, right) => allRoles.indexOf(left) - allRoles.indexOf(right),
     },
@@ -230,7 +239,13 @@ export default function UserManagementPage() {
       field: "lastLoginAt",
       headerName: "Last Active",
       minWidth: 190,
-      valueFormatter: (value: string | null) => formatLastLogin(value),
+      renderCell: (params) => (
+        <Box sx={{ display: "flex", alignItems: "center", height: "100%" }}>
+          <Typography variant="body2" color="text.secondary">
+            {formatLastLogin(params.value)}
+          </Typography>
+        </Box>
+      ),
     },
     {
       field: "actions",
@@ -240,18 +255,20 @@ export default function UserManagementPage() {
       filterable: false,
       disableColumnMenu: true,
       renderCell: (params: GridRenderCellParams<UserSummary>) => (
-        <UserRowActions
-          workspaceUser={params.row}
-          currentUserId={user?.id}
-          onDeactivate={setConfirmDeactivateUser}
-        />
+        <Box sx={{ display: "flex", alignItems: "center", justifyContent: "center", height: "100%" }}>
+          <UserRowActions
+            workspaceUser={params.row}
+            currentUserId={user?.id}
+            onDeactivate={setConfirmDeactivateUser}
+          />
+        </Box>
       ),
     },
   ], [handleRoleChange, roleUpdatingUserId, user?.id]);
 
   if (!isAdministrator) {
     return (
-      <Stack spacing={2.5}>
+      <Box sx={{ flexGrow: 1, display: "flex", flexDirection: "column", gap: 2.5 }}>
         <PageHeader
           title="Team Management"
           description="Manage workspace users, roles, and access policies."
@@ -259,12 +276,12 @@ export default function UserManagementPage() {
         <Alert severity="warning">
           Administrator access is required to manage workspace users.
         </Alert>
-      </Stack>
+      </Box>
     );
   }
 
   return (
-    <Stack spacing={2.5}>
+    <Box sx={{ flexGrow: 1, display: "flex", flexDirection: "column", gap: 2.5, minHeight: 0 }}>
       <PageHeader
         title="Team Management"
         description="Manage workspace users, roles, and access policies."
@@ -276,7 +293,7 @@ export default function UserManagementPage() {
               setSuccessMessage(null);
               setIsInviteOpen(true);
             }}
-            sx={{ textTransform: "none" }}
+            sx={{ textTransform: "none", fontWeight: 600 }}
           >
             Invite User
           </Button>
@@ -336,7 +353,12 @@ export default function UserManagementPage() {
               ))}
             </Select>
           </FormControl>
-          <Chip label={`${filteredUsers.length} active`} size="small" variant="outlined" />
+          <Chip
+            label={`${filteredUsers.length} active`}
+            size="small"
+            variant="outlined"
+            sx={{ fontWeight: 500 }}
+          />
           <Tooltip title="Refresh">
             <span>
               <IconButton
@@ -352,13 +374,12 @@ export default function UserManagementPage() {
         </Stack>
       </Stack>
 
-      <Box sx={{ width: "100%", overflowX: "auto" }}>
+      <Box sx={{ flexGrow: 1, width: "100%", minHeight: 400 }}>
         <DataGrid
           rows={filteredUsers}
           columns={columns}
           getRowId={(row) => row.id}
           loading={isLoading}
-          autoHeight
           rowHeight={64}
           disableRowSelectionOnClick
           pageSizeOptions={[10, 25, 50]}
@@ -371,11 +392,16 @@ export default function UserManagementPage() {
             noRowsLabel: "No matching team members.",
           }}
           sx={{
-            minWidth: 920,
             borderColor: "divider",
             bgcolor: "background.paper",
+            borderRadius: 2,
             "& .MuiDataGrid-columnHeaders": {
               bgcolor: "action.hover",
+              borderBottom: 1,
+              borderColor: "divider",
+            },
+            "& .MuiDataGrid-cell": {
+              borderColor: "divider",
             },
           }}
         />
@@ -401,7 +427,7 @@ export default function UserManagementPage() {
         }}
         onConfirm={handleDeactivateConfirmed}
       />
-    </Stack>
+    </Box>
   );
 }
 
@@ -424,7 +450,7 @@ function RoleSelectCell({
   return (
     <Tooltip title={disabledReason ?? ""} disableHoverListener={!disabledReason}>
       <span>
-        <FormControl size="small" disabled={isDisabled} sx={{ minWidth: 176 }}>
+        <FormControl size="small" disabled={isDisabled} sx={{ minWidth: 150 }}>
           <Select<UserRole>
             value={workspaceUser.role}
             onClick={(event) => event.stopPropagation()}
@@ -432,14 +458,12 @@ function RoleSelectCell({
               const role = event.target.value as MutableUserRole;
               void onRoleChange(workspaceUser, role);
             }}
-            renderValue={(value) => (
-              <Chip
-                label={value}
-                size="small"
-                variant="outlined"
-                sx={{ minWidth: 116, fontWeight: 500, ...getRoleChipSx(value) }}
-              />
-            )}
+            sx={{
+              fontSize: "0.875rem",
+              "& .MuiSelect-select": {
+                py: 0.75,
+              },
+            }}
           >
             {allRoles.map((role) => (
               <MenuItem key={role} value={role} disabled={role === "Owner"}>
@@ -452,6 +476,7 @@ function RoleSelectCell({
     </Tooltip>
   );
 }
+
 
 type UserRowActionsProps = {
   workspaceUser: UserSummary;
@@ -823,46 +848,6 @@ function formatLastLogin(value: string | null): string {
     dateStyle: "medium",
     timeStyle: "short",
   }).format(timestamp);
-}
-
-function getRoleChipSx(role: string): object {
-  if (role === "Owner") {
-    return {
-      borderColor: "warning.main",
-      color: "warning.dark",
-      bgcolor: "rgba(237, 108, 2, 0.08)",
-    };
-  }
-
-  if (role === "Administrator") {
-    return {
-      borderColor: "primary.main",
-      color: "primary.dark",
-      bgcolor: "rgba(21, 101, 192, 0.08)",
-    };
-  }
-
-  if (role === "Approver") {
-    return {
-      borderColor: "success.main",
-      color: "success.dark",
-      bgcolor: "rgba(46, 125, 50, 0.08)",
-    };
-  }
-
-  if (role === "Requester") {
-    return {
-      borderColor: "info.main",
-      color: "info.dark",
-      bgcolor: "rgba(2, 136, 209, 0.08)",
-    };
-  }
-
-  return {
-    borderColor: "grey.400",
-    color: "text.secondary",
-    bgcolor: "grey.50",
-  };
 }
 
 function getInitials(name: string): string {

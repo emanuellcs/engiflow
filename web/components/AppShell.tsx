@@ -5,15 +5,19 @@ import AddIcon from "@mui/icons-material/Add";
 import AssignmentIcon from "@mui/icons-material/Assignment";
 import BusinessIcon from "@mui/icons-material/Business";
 import DashboardIcon from "@mui/icons-material/Dashboard";
+import ExpandLess from "@mui/icons-material/ExpandLess";
+import ExpandMore from "@mui/icons-material/ExpandMore";
 import GroupIcon from "@mui/icons-material/Group";
 import LogoutIcon from "@mui/icons-material/Logout";
 import ManageAccountsIcon from "@mui/icons-material/ManageAccounts";
 import MenuIcon from "@mui/icons-material/Menu";
+import SettingsIcon from "@mui/icons-material/Settings";
 import AppBar from "@mui/material/AppBar";
 import Avatar from "@mui/material/Avatar";
 import Box from "@mui/material/Box";
 import Button from "@mui/material/Button";
 import Chip from "@mui/material/Chip";
+import Collapse from "@mui/material/Collapse";
 import Divider from "@mui/material/Divider";
 import Drawer from "@mui/material/Drawer";
 import IconButton from "@mui/material/IconButton";
@@ -42,6 +46,7 @@ type NavigationItem = {
   href: string;
   icon: ReactNode;
   administratorOnly?: boolean;
+  subItems?: NavigationItem[];
 };
 
 type NavigationDrawerContentProps = {
@@ -66,10 +71,22 @@ const navigationItems: NavigationItem[] = [
     icon: <AssignmentIcon fontSize="small" />,
   },
   {
-    label: "Team Management",
-    href: "/settings/users",
-    icon: <ManageAccountsIcon fontSize="small" />,
+    label: "Settings",
+    href: "/settings",
+    icon: <SettingsIcon fontSize="small" />,
     administratorOnly: true,
+    subItems: [
+      {
+        label: "Team Management",
+        href: "/settings/users",
+        icon: <ManageAccountsIcon fontSize="small" />,
+      },
+      {
+        label: "Workflow Policies",
+        href: "/settings/workflow-policies",
+        icon: <GroupIcon fontSize="small" />,
+      },
+    ],
   },
 ];
 
@@ -108,7 +125,11 @@ export default function AppShell({ children }: PropsWithChildren) {
           ml: { md: `${drawerWidth}px` },
           borderBottom: 1,
           borderColor: "divider",
-          zIndex: (theme) => theme.zIndex.drawer + 1,
+          // Only higher than drawer on desktop where drawer is permanent
+          zIndex: (theme) => ({
+            xs: theme.zIndex.drawer - 1,
+            md: theme.zIndex.drawer + 1,
+          }),
         }}
       >
         <Toolbar
@@ -267,17 +288,24 @@ export default function AppShell({ children }: PropsWithChildren) {
         sx={{
           flexGrow: 1,
           minWidth: 0,
+          display: "flex",
+          flexDirection: "column",
+          minHeight: "100vh",
           width: { xs: "100%", md: `calc(100% - ${drawerWidth}px)` },
         }}
       >
         <Toolbar variant="dense" sx={{ minHeight: { xs: 56, md: 52 } }} />
         <Box
           sx={{
+            flexGrow: 1,
             width: "100%",
             maxWidth: 1600,
             mx: "auto",
             px: { xs: 2, sm: 3, lg: 4 },
             py: { xs: 2, sm: 3 },
+            display: "flex",
+            flexDirection: "column",
+            minHeight: 0, // Critical for nested flexbox scrolling
           }}
         >
           {children}
@@ -296,6 +324,14 @@ function NavigationDrawerContent({
   onNavigate,
   onLogout,
 }: NavigationDrawerContentProps) {
+  const [isSettingsOpen, setIsSettingsOpen] = useState(() =>
+    pathname.startsWith("/settings"),
+  );
+
+  const toggleSettings = () => {
+    setIsSettingsOpen((prev) => !prev);
+  };
+
   return (
     <Box
       sx={{
@@ -315,7 +351,7 @@ function NavigationDrawerContent({
           justifyContent: "center",
         }}
       >
-        <Typography variant="h6" component="p" noWrap>
+        <Typography variant="h6" component="p" noWrap sx={{ fontWeight: 700, letterSpacing: "-0.01em" }}>
           EngiFlow
         </Typography>
         <Typography variant="caption" color="text.secondary" noWrap>
@@ -324,15 +360,93 @@ function NavigationDrawerContent({
       </Box>
       <Divider />
 
-      <Box sx={{ flex: 1, minHeight: 0, overflowY: "auto", py: 1 }}>
-        <List dense disablePadding>
+      <Box sx={{ flex: 1, minHeight: 0, overflowY: "auto", py: 1.5 }}>
+        <List dense disablePadding sx={{ px: 1 }}>
           {navigationItems
             .filter((item) => !item.administratorOnly || isAdministrator)
             .map((item) => {
               const isSelected = isNavigationItemSelected(pathname, item.href);
+              const hasSubItems = Boolean(item.subItems?.length);
+
+              if (hasSubItems) {
+                return (
+                  <Box key={item.label} sx={{ mb: 0.5 }}>
+                    <ListItem disablePadding>
+                      <ListItemButton
+                        onClick={toggleSettings}
+                        sx={{
+                          minHeight: 40,
+                          px: 2,
+                          borderRadius: 1,
+                          color: isSelected ? "primary.main" : "text.primary",
+                        }}
+                      >
+                        <ListItemIcon
+                          sx={{
+                            minWidth: 36,
+                            color: isSelected ? "primary.main" : "text.secondary",
+                          }}
+                        >
+                          {item.icon}
+                        </ListItemIcon>
+                        <ListItemText
+                          primary={item.label}
+                          slotProps={{
+                            primary: {
+                              variant: "body2",
+                              sx: { fontWeight: isSelected ? 600 : 500 },
+                            },
+                          }}
+                        />
+                        {isSettingsOpen ? <ExpandLess fontSize="small" /> : <ExpandMore fontSize="small" />}
+                      </ListItemButton>
+                    </ListItem>
+                    <Collapse in={isSettingsOpen} timeout="auto" unmountOnExit>
+                      <List component="div" disablePadding sx={{ mt: 0.5 }}>
+                        {item.subItems?.map((subItem) => {
+                          const isSubSelected = pathname.startsWith(subItem.href);
+                          return (
+                            <ListItem key={subItem.href} disablePadding sx={{ mb: 0.5 }}>
+                              <ListItemButton
+                                component={NextLink}
+                                href={subItem.href}
+                                selected={isSubSelected}
+                                onClick={onNavigate}
+                                sx={{
+                                  minHeight: 36,
+                                  pl: 6.5,
+                                  pr: 2,
+                                  borderRadius: 1,
+                                  "&.Mui-selected": {
+                                    bgcolor: "action.selected",
+                                    "&:hover": { bgcolor: "action.hover" },
+                                  },
+                                }}
+                              >
+                                <ListItemText
+                                  primary={subItem.label}
+                                  slotProps={{
+                                    primary: {
+                                      variant: "body2",
+                                      sx: {
+                                        fontWeight: isSubSelected ? 600 : 400,
+                                        fontSize: "0.8125rem",
+                                      },
+                                    },
+                                  }}
+                                />
+                              </ListItemButton>
+                            </ListItem>
+                          );
+                        })}
+                      </List>
+                    </Collapse>
+                  </Box>
+                );
+              }
 
               return (
-                <ListItem key={item.href} disablePadding>
+                <ListItem key={item.href} disablePadding sx={{ mb: 0.5 }}>
                   <ListItemButton
                     component={NextLink}
                     href={item.href}
@@ -341,10 +455,10 @@ function NavigationDrawerContent({
                     sx={{
                       minHeight: 40,
                       px: 2,
-                      mx: 1,
                       borderRadius: 1,
                       "&.Mui-selected": {
                         bgcolor: "action.selected",
+                        "&:hover": { bgcolor: "action.hover" },
                       },
                     }}
                   >
@@ -361,7 +475,7 @@ function NavigationDrawerContent({
                       slotProps={{
                         primary: {
                           variant: "body2",
-                          sx: { fontWeight: isSelected ? 500 : 400 },
+                          sx: { fontWeight: isSelected ? 600 : 500 },
                         },
                       }}
                     />
@@ -382,11 +496,11 @@ function NavigationDrawerContent({
           minWidth: 0,
         }}
       >
-        <Avatar sx={{ width: 36, height: 36, bgcolor: "secondary.main" }}>
+        <Avatar sx={{ width: 36, height: 36, bgcolor: "secondary.main", fontSize: "0.875rem", fontWeight: 600 }}>
           {getInitials(userName)}
         </Avatar>
         <Box sx={{ minWidth: 0, flex: 1 }}>
-          <Typography variant="body2" noWrap sx={{ fontWeight: 500 }}>
+          <Typography variant="body2" noWrap sx={{ fontWeight: 600, fontSize: "0.875rem" }}>
             {userName}
           </Typography>
           <Stack direction="row" spacing={0.5} sx={{ alignItems: "center" }}>
@@ -409,6 +523,11 @@ function NavigationDrawerContent({
 function isNavigationItemSelected(pathname: string, href: string): boolean {
   if (href === "/") {
     return pathname === "/";
+  }
+
+  // Handle nested routes like /ecos/[id]
+  if (href === "/ecos") {
+    return pathname.startsWith("/ecos");
   }
 
   return pathname === href || pathname.startsWith(`${href}/`);

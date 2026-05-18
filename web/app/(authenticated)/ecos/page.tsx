@@ -186,20 +186,22 @@ function EcoDashboard() {
         flex: 0.8,
         sortable: false,
         renderCell: (params) => (
-          <Stack spacing={0.25} sx={{ minWidth: 0 }}>
-            <Link
-              component={NextLink}
-              href={`/ecos/${params.row.id}`}
-              underline="hover"
-              color="primary"
-              sx={{ fontFamily: "monospace", fontWeight: 700 }}
-            >
-              {formatShortId(params.row.id)}
-            </Link>
-            <Typography variant="caption" color="text.secondary" noWrap>
-              Round {params.row.reviewRound || 0}
-            </Typography>
-          </Stack>
+          <Box sx={{ display: "flex", alignItems: "center", height: "100%", width: "100%" }}>
+            <Stack spacing={0} sx={{ minWidth: 0 }}>
+              <Link
+                component={NextLink}
+                href={`/ecos/${params.row.id}`}
+                underline="hover"
+                color="primary"
+                sx={{ fontFamily: "monospace", fontWeight: 700, fontSize: "0.875rem" }}
+              >
+                {formatShortId(params.row.id)}
+              </Link>
+              <Typography variant="caption" color="text.secondary" noWrap sx={{ fontSize: "0.75rem" }}>
+                Round {params.row.reviewRound || 0}
+              </Typography>
+            </Stack>
+          </Box>
         ),
       },
       {
@@ -209,22 +211,26 @@ function EcoDashboard() {
         flex: 1.5,
         sortable: false,
         renderCell: (params) => (
-          <Link
-            component={NextLink}
-            href={`/ecos/${params.row.id}`}
-            underline="hover"
-            color="inherit"
-            sx={{
-              display: "block",
-              minWidth: 0,
-              overflow: "hidden",
-              textOverflow: "ellipsis",
-              whiteSpace: "nowrap",
-              width: "100%",
-            }}
-          >
-            {params.row.title}
-          </Link>
+          <Box sx={{ display: "flex", alignItems: "center", height: "100%", width: "100%" }}>
+            <Link
+              component={NextLink}
+              href={`/ecos/${params.row.id}`}
+              underline="hover"
+              color="inherit"
+              sx={{
+                display: "block",
+                minWidth: 0,
+                overflow: "hidden",
+                textOverflow: "ellipsis",
+                whiteSpace: "nowrap",
+                width: "100%",
+                fontWeight: 500,
+                fontSize: "0.875rem",
+              }}
+            >
+              {params.row.title}
+            </Link>
+          </Box>
         ),
       },
       {
@@ -237,10 +243,12 @@ function EcoDashboard() {
           const requester = usersById.get(params.row.createdByUserId);
 
           return (
-            <UserCell
-              fallbackId={params.row.createdByUserId}
-              user={requester}
-            />
+            <Box sx={{ display: "flex", alignItems: "center", height: "100%", width: "100%" }}>
+              <UserCell
+                fallbackId={params.row.createdByUserId}
+                user={requester}
+              />
+            </Box>
           );
         },
       },
@@ -251,13 +259,15 @@ function EcoDashboard() {
         flex: 1,
         sortable: false,
         renderCell: (params) => (
-          <ReviewerProgressCell
-            approvalCount={params.row.currentRoundApprovalCount}
-            approvers={approvers}
-            minApprovalsRequired={minApprovalsRequired}
-            requestChangesCount={params.row.currentRoundRequestChangesCount}
-            status={params.row.status}
-          />
+          <Box sx={{ display: "flex", alignItems: "center", height: "100%", width: "100%" }}>
+            <ReviewerProgressCell
+              approvalCount={params.row.currentRoundApprovalCount}
+              approvers={approvers}
+              minApprovalsRequired={minApprovalsRequired}
+              requestChangesCount={params.row.currentRoundRequestChangesCount}
+              status={params.row.status}
+            />
+          </Box>
         ),
       },
       {
@@ -265,28 +275,42 @@ function EcoDashboard() {
         headerName: "Priority",
         minWidth: 118,
         sortable: false,
-        renderCell: (params) => <PriorityChip priority={params.row.priority} />,
+        renderCell: (params) => (
+          <Box sx={{ display: "flex", alignItems: "center", height: "100%" }}>
+            <PriorityChip priority={params.row.priority} />
+          </Box>
+        ),
       },
       {
         field: "status",
         headerName: "Status",
         minWidth: 138,
         sortable: false,
-        renderCell: (params) => <StatusChip status={params.row.status} />,
+        renderCell: (params) => (
+          <Box sx={{ display: "flex", alignItems: "center", height: "100%" }}>
+            <StatusChip status={params.row.status} />
+          </Box>
+        ),
       },
       {
         field: "createdAt",
         headerName: "Created",
         minWidth: 150,
         sortable: false,
-        valueFormatter: (value) => formatDate(value as string),
+        renderCell: (params) => (
+          <Box sx={{ display: "flex", alignItems: "center", height: "100%" }}>
+            <Typography variant="body2" color="text.secondary">
+              {formatDate(params.value as string)}
+            </Typography>
+          </Box>
+        ),
       },
     ],
     [approvers, minApprovalsRequired, usersById],
   );
 
   return (
-    <Stack spacing={2.5}>
+    <Box sx={{ flexGrow: 1, display: "flex", flexDirection: "column", minHeight: 0, gap: 2.5 }}>
       <PageHeader
         title="Engineering Change Orders"
         description="Search, review, and triage engineering changes across the workspace."
@@ -301,6 +325,7 @@ function EcoDashboard() {
               width: { xs: "100%", sm: "auto" },
               minWidth: 128,
               textTransform: "none",
+              fontWeight: 600,
             }}
           >
             Create ECO
@@ -308,60 +333,83 @@ function EcoDashboard() {
         ) : undefined}
       />
 
-      <Paper elevation={1} sx={{ p: { xs: 1.5, md: 2 } }}>
-        <Stack spacing={2}>
-          <EcoFilterBar
-            filters={filters}
-            onFiltersChange={(nextFilters) => {
-              setFilters(nextFilters);
-              resetToFirstPage();
-            }}
-          />
-          <Box sx={{ width: "100%", overflowX: "auto" }}>
-            <Box sx={{ minWidth: 980, height: 660 }}>
-              <DataGrid
-                rows={rows}
-                columns={columns}
-                getRowId={(row) => row.id}
-                rowCount={rowCount}
-                loading={isLoading}
-                paginationMode="server"
-                paginationModel={paginationModel}
-                onPaginationModelChange={setPaginationModel}
-                pageSizeOptions={[10, 20, 50, 100]}
-                disableRowSelectionOnClick
-                slots={{
-                  noRowsOverlay: EmptyGridOverlay,
-                }}
-                slotProps={{
-                  loadingOverlay: {
-                    variant: "linear-progress",
-                    noRowsVariant: "skeleton",
-                  },
-                }}
-                sx={{
-                  border: 0,
-                  "& .MuiDataGrid-columnHeaders": {
-                    bgcolor: "grey.100",
-                    borderRadius: 0,
-                  },
-                  "& .MuiDataGrid-cell": {
-                    alignItems: "center",
-                  },
-                }}
-              />
-            </Box>
+      <Paper
+        elevation={0}
+        sx={{
+          flexGrow: 1,
+          display: "flex",
+          flexDirection: "column",
+          minHeight: 0,
+          border: 1,
+          borderColor: "divider",
+          borderRadius: 2,
+          overflow: "hidden",
+        }}
+      >
+        <Stack spacing={0} sx={{ flexGrow: 1, minHeight: 0 }}>
+          <Box sx={{ p: { xs: 1.5, md: 2 }, borderBottom: 1, borderColor: "divider", bgcolor: "background.paper" }}>
+            <EcoFilterBar
+              filters={filters}
+              onFiltersChange={(nextFilters) => {
+                setFilters(nextFilters);
+                resetToFirstPage();
+              }}
+            />
           </Box>
+
+          <Box sx={{ flexGrow: 1, width: "100%", minHeight: 0 }}>
+            <DataGrid
+              rows={rows}
+              columns={columns}
+              getRowId={(row) => row.id}
+              rowCount={rowCount}
+              loading={isLoading}
+              paginationMode="server"
+              paginationModel={paginationModel}
+              onPaginationModelChange={setPaginationModel}
+              pageSizeOptions={[10, 20, 50, 100]}
+              disableRowSelectionOnClick
+              slots={{
+                noRowsOverlay: EmptyGridOverlay,
+              }}
+              slotProps={{
+                loadingOverlay: {
+                  variant: "linear-progress",
+                  noRowsVariant: "skeleton",
+                },
+              }}
+              sx={{
+                border: 0,
+                borderRadius: 0,
+                "& .MuiDataGrid-columnHeaders": {
+                  bgcolor: "action.hover",
+                  borderBottom: 1,
+                  borderColor: "divider",
+                },
+                "& .MuiDataGrid-cell": {
+                  borderColor: "divider",
+                },
+                "& .MuiDataGrid-footerContainer": {
+                  borderTop: 1,
+                  borderColor: "divider",
+                },
+              }}
+            />
+          </Box>
+
           {errorMessage ? (
-            <Typography variant="body2" color="error">
-              {errorMessage}
-            </Typography>
+            <Box sx={{ p: 2, borderTop: 1, borderColor: "divider" }}>
+              <Typography variant="body2" color="error">
+                {errorMessage}
+              </Typography>
+            </Box>
           ) : null}
         </Stack>
       </Paper>
-    </Stack>
+    </Box>
   );
 }
+
 
 type EcoFilterBarProps = {
   filters: EcoListFilters;
