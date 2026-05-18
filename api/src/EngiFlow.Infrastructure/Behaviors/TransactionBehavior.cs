@@ -12,7 +12,7 @@ namespace EngiFlow.Infrastructure.Behaviors;
 /// </summary>
 /// <typeparam name="TRequest">The MediatR request type.</typeparam>
 /// <typeparam name="TResponse">The MediatR response type.</typeparam>
-internal sealed class TransactionBehavior<TRequest, TResponse> : IPipelineBehavior<TRequest, TResponse>
+internal sealed class TransactionBehavior<TRequest, TResponse> : EngiFlow.Application.Mediation.IPipelineBehavior<TRequest, TResponse>
     where TRequest : notnull
 {
     private readonly IExternalOperationCompensation _compensation;
@@ -46,7 +46,7 @@ internal sealed class TransactionBehavior<TRequest, TResponse> : IPipelineBehavi
     /// <inheritdoc />
     public async Task<TResponse> Handle(
         TRequest request,
-        RequestHandlerDelegate<TResponse> next,
+        EngiFlow.Application.Mediation.RequestHandlerDelegate<TResponse> next,
         CancellationToken cancellationToken)
     {
         if (request is not ICommandBase)

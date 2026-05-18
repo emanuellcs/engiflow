@@ -46,7 +46,7 @@ public sealed class ValidationBehavior<TRequest, TResponse> : IPipelineBehavior<
     /// <returns>The response DTO produced by the next handler.</returns>
     public async Task<TResponse> HandleAsync(
         TRequest request,
-        EngiFlow.Application.Abstractions.Cqrs.RequestHandlerDelegate<TResponse> next,
+        RequestHandlerDelegate<TResponse> next,
         CancellationToken cancellationToken = default)
     {
         return await HandleCoreAsync(request, () => next(), cancellationToken).ConfigureAwait(false);
