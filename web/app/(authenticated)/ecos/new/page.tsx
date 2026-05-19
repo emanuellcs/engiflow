@@ -4,22 +4,26 @@ import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import SaveIcon from "@mui/icons-material/Save";
 import Alert from "@mui/material/Alert";
 import Box from "@mui/material/Box";
+import Breadcrumbs from "@mui/material/Breadcrumbs";
 import Button from "@mui/material/Button";
 import CircularProgress from "@mui/material/CircularProgress";
-import FormControl from "@mui/material/FormControl";
-import FormHelperText from "@mui/material/FormHelperText";
+import Container from "@mui/material/Container";
+import Dialog from "@mui/material/Dialog";
+import DialogActions from "@mui/material/DialogActions";
+import DialogContent from "@mui/material/DialogContent";
+import DialogContentText from "@mui/material/DialogContentText";
+import DialogTitle from "@mui/material/DialogTitle";
 import Grid from "@mui/material/Grid";
-import InputLabel from "@mui/material/InputLabel";
-import MenuItem from "@mui/material/MenuItem";
-import Paper from "@mui/material/Paper";
-import Select, { type SelectChangeEvent } from "@mui/material/Select";
+import Link from "@mui/material/Link";
 import Stack from "@mui/material/Stack";
 import TextField from "@mui/material/TextField";
+import ToggleButton from "@mui/material/ToggleButton";
+import ToggleButtonGroup from "@mui/material/ToggleButtonGroup";
 import Typography from "@mui/material/Typography";
 import { useRouter } from "next/navigation";
-import { type FormEvent, useState } from "react";
+import { type FormEvent, useEffect, useState } from "react";
+import EcoComposer from "@/components/ecos/EcoComposer";
 import NextLink from "@/components/ui/NextLink";
-import PageHeader from "@/components/ui/PageHeader";
 import { ApiError, apiFetch } from "@/lib/api/client";
 import { useAuth } from "@/lib/auth/AuthContext";
 import { isAdminOrOwner } from "@/lib/auth/jwt";
@@ -57,11 +61,45 @@ const requesterRole = "Requester";
 export default function NewEcoPage() {
   const router = useRouter();
   const { user } = useAuth();
-  const [form, setForm] = useState<CreateEcoFormState>(initialFormState);
+  const storageKey = user ? `new-eco-draft-${user.id}` : null;
+
+  const [form, setForm] = useState<CreateEcoFormState>(() => {
+    if (typeof window !== "undefined" && storageKey) {
+      const saved = localStorage.getItem(storageKey);
+      if (saved) {
+        try {
+          return { ...initialFormState, ...JSON.parse(saved) };
+        } catch (e) {
+          console.error("Failed to parse ECO draft", e);
+        }
+      }
+    }
+    return initialFormState;
+  });
+
   const [fieldErrors, setFieldErrors] = useState<CreateEcoFieldErrors>({});
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isDiscardDialogOpen, setIsDiscardDialogOpen] = useState(false);
+  const [lastSaved, setLastSaved] = useState<Date | null>(null);
+
   const canCreateEco = isAdminOrOwner(user?.role) || user?.role === requesterRole;
+  const isDirty =
+    form.title !== initialFormState.title ||
+    form.description !== initialFormState.description ||
+    form.priority !== initialFormState.priority;
+
+  // Debounced Auto-save
+  useEffect(() => {
+    if (!storageKey || !isDirty) return;
+
+    const timeoutId = setTimeout(() => {
+      localStorage.setItem(storageKey, JSON.stringify(form));
+      setLastSaved(new Date());
+    }, 2000);
+
+    return () => clearTimeout(timeoutId);
+  }, [form, storageKey, isDirty]);
 
   /**
    * Validates and submits the ECO draft to the API.
@@ -80,6 +118,8 @@ export default function NewEcoPage() {
 
     if (hasFieldErrors(nextErrors)) {
       setFieldErrors(nextErrors);
+      // Scroll to top to see error alerts
+      window.scrollTo({ top: 0, behavior: "smooth" });
       return;
     }
 
@@ -96,42 +136,35 @@ export default function NewEcoPage() {
         method: "POST",
         body: request,
       });
-      const createdId = readCreatedEcoId(createdEco);
 
+      // Clear draft on success
+      if (storageKey) {
+        localStorage.removeItem(storageKey);
+      }
+
+      const createdId = readCreatedEcoId(createdEco);
       router.push(createdId ? `/ecos/${createdId}` : "/ecos");
     } catch (error) {
       setErrorMessage(getCreateEcoErrorMessage(error));
+      window.scrollTo({ top: 0, behavior: "smooth" });
     } finally {
       setIsSubmitting(false);
     }
   }
 
   /**
-   * Updates a text form field and clears its current validation message.
+   * Updates a form field and clears its current validation message.
    *
    * @param field - Form field to update.
-   * @param value - New text field value.
+   * @param value - New field value.
    * @returns Nothing.
    */
-  function handleTextFieldChange(
-    field: "title" | "description",
-    value: string,
+  function handleFieldChange(
+    field: keyof CreateEcoFormState,
+    value: string | CreateEcoPriority,
   ): void {
     setForm((current) => ({ ...current, [field]: value }));
     clearFieldError(field);
-  }
-
-  /**
-   * Updates the selected priority and clears its current validation message.
-   *
-   * @param event - Material UI select change event.
-   * @returns Nothing.
-   */
-  function handlePriorityChange(event: SelectChangeEvent<CreateEcoPriority>): void {
-    const nextPriority = event.target.value as CreateEcoPriority;
-
-    setForm((current) => ({ ...current, priority: nextPriority }));
-    clearFieldError("priority");
   }
 
   /**
@@ -148,199 +181,292 @@ export default function NewEcoPage() {
     });
   }
 
+  const handleCancelClick = () => {
+    if (isDirty) {
+      setIsDiscardDialogOpen(true);
+    } else {
+      router.push("/ecos");
+    }
+  };
+
+  const handleConfirmDiscard = () => {
+    if (storageKey) {
+      localStorage.removeItem(storageKey);
+    }
+    router.push("/ecos");
+  };
+
   if (!canCreateEco) {
     return (
-      <Stack spacing={2.5}>
-        <PageHeader
-          title="New Engineering Change Order"
-          description="Create a draft ECO for review by the engineering approval team."
-          actionButton={
-            <Button
-              component={NextLink}
-              href="/ecos"
-              type="button"
-              variant="outlined"
-              startIcon={<ArrowBackIcon />}
-              sx={{
-                width: { xs: "100%", sm: "auto" },
-                textTransform: "none",
-              }}
-            >
-              Back to ECOs
-            </Button>
-          }
-        />
-        <Alert severity="warning">
-          Requester or Administrator access is required to create ECOs.
-        </Alert>
-      </Stack>
+      <Container maxWidth="md" sx={{ py: 4 }}>
+        <Stack spacing={3}>
+          <Breadcrumbs aria-label="breadcrumb">
+            <Link underline="hover" color="inherit" component={NextLink} href="/ecos">
+              ECOs
+            </Link>
+            <Typography color="text.primary">New ECO</Typography>
+          </Breadcrumbs>
+          <Alert severity="warning">
+            Requester or Administrator access is required to create ECOs.
+          </Alert>
+          <Button
+            component={NextLink}
+            href="/ecos"
+            variant="outlined"
+            startIcon={<ArrowBackIcon />}
+            sx={{ alignSelf: "flex-start", textTransform: "none" }}
+          >
+            Back to ECOs
+          </Button>
+        </Stack>
+      </Container>
     );
   }
 
   return (
-    <Stack spacing={2.5}>
-      <PageHeader
-        title="New Engineering Change Order"
-        description="Create a draft ECO for review by the engineering approval team."
-        actionButton={
-          <Button
-            component={NextLink}
-            href="/ecos"
-            type="button"
-            variant="outlined"
-            startIcon={<ArrowBackIcon />}
-            sx={{
-              width: { xs: "100%", sm: "auto" },
-              textTransform: "none",
-            }}
-          >
-            Back to ECOs
-          </Button>
-        }
-      />
+    <Box sx={{ display: "flex", flexDirection: "column", minHeight: "100vh" }}>
+      <Container maxWidth="md" sx={{ pt: 3, pb: 10 }}>
+        <Stack spacing={4}>
+          <Breadcrumbs aria-label="breadcrumb">
+            <Link underline="hover" color="inherit" component={NextLink} href="/ecos">
+              ECOs
+            </Link>
+            <Typography color="text.primary">New Engineering Change Order</Typography>
+          </Breadcrumbs>
 
-      <Paper
-        component="section"
-        elevation={1}
-        sx={{
-          p: { xs: 2, sm: 3 },
-          maxWidth: 960,
-        }}
-      >
-        <Box component="form" noValidate onSubmit={handleSubmit}>
-          <Stack spacing={2.5}>
-            {errorMessage ? (
-              <Alert severity="error">
-                {errorMessage}
-              </Alert>
-            ) : null}
+          <Box component="form" id="create-eco-form" noValidate onSubmit={handleSubmit}>
+            <Stack spacing={4}>
+              {errorMessage ? (
+                <Alert severity="error" variant="filled">
+                  {errorMessage}
+                </Alert>
+              ) : null}
 
-            <Grid container spacing={2}>
-              <Grid size={{ xs: 12, md: 8 }}>
-                <TextField
-                  id="title"
-                  name="title"
-                  label="Title"
-                  value={form.title}
-                  onChange={(event) =>
-                    handleTextFieldChange("title", event.target.value)
-                  }
-                  disabled={isSubmitting}
-                  error={Boolean(fieldErrors.title)}
-                  helperText={
-                    fieldErrors.title ?? `${form.title.length}/${titleMaxLength}`
-                  }
-                  slotProps={{
-                    htmlInput: {
-                      maxLength: titleMaxLength,
-                    },
-                  }}
-                  required
-                  fullWidth
-                  size="small"
-                />
-              </Grid>
-              <Grid size={{ xs: 12, md: 4 }}>
-                <FormControl
-                  fullWidth
-                  required
-                  size="small"
-                  disabled={isSubmitting}
-                  error={Boolean(fieldErrors.priority)}
-                >
-                  <InputLabel id="priority-label">Priority</InputLabel>
-                  <Select
-                    labelId="priority-label"
-                    id="priority"
-                    name="priority"
-                    value={form.priority}
-                    label="Priority"
-                    onChange={handlePriorityChange}
-                  >
-                    {createEcoPriorityOptions.map((priority) => (
-                      <MenuItem key={priority} value={priority}>
-                        {priority}
-                      </MenuItem>
-                    ))}
-                  </Select>
-                  <FormHelperText>
-                    {fieldErrors.priority ?? "Required for review triage."}
-                  </FormHelperText>
-                </FormControl>
-              </Grid>
-              <Grid size={12}>
-                <TextField
-                  id="description"
-                  name="description"
-                  label="Description"
-                  value={form.description}
-                  onChange={(event) =>
-                    handleTextFieldChange("description", event.target.value)
-                  }
-                  disabled={isSubmitting}
-                  error={Boolean(fieldErrors.description)}
-                  helperText={
-                    fieldErrors.description ??
-                    `${form.description.length}/${descriptionMaxLength}`
-                  }
-                  multiline
-                  minRows={4}
-                  slotProps={{
-                    htmlInput: {
-                      maxLength: descriptionMaxLength,
-                    },
-                  }}
-                  required
-                  fullWidth
-                  size="small"
-                />
-              </Grid>
-            </Grid>
+              <Stack spacing={1}>
+                <Typography variant="h4" component="h1" sx={{ fontWeight: 700 }}>
+                  Create New ECO
+                </Typography>
+                <Typography variant="body1" color="text.secondary">
+                  Author a technical change request. Use the description to provide
+                  detailed justification and impact analysis.
+                </Typography>
+              </Stack>
 
-            <Stack
-              direction={{ xs: "column-reverse", sm: "row" }}
-              spacing={1.5}
-              sx={{ justifyContent: "flex-end" }}
-            >
-              <Button
-                component={NextLink}
-                href="/ecos"
-                type="button"
-                variant="outlined"
-                disabled={isSubmitting}
-                sx={{ textTransform: "none" }}
-              >
-                Cancel
-              </Button>
-              <Button
-                type="submit"
-                variant="contained"
-                disabled={isSubmitting}
-                startIcon={
-                  isSubmitting ? undefined : <SaveIcon fontSize="small" />
-                }
+              <Grid container spacing={3}>
+                <Grid size={12}>
+                  <TextField
+                    id="title"
+                    name="title"
+                    placeholder="Engineering Change Order Title"
+                    value={form.title}
+                    onChange={(event) =>
+                      handleFieldChange("title", event.target.value)
+                    }
+                    disabled={isSubmitting}
+                    error={Boolean(fieldErrors.title)}
+                    helperText={fieldErrors.title}
+                    autoFocus
+                    required
+                    fullWidth
+                    slotProps={{
+                      htmlInput: {
+                        maxLength: titleMaxLength,
+                        style: {
+                          fontSize: "1.5rem",
+                          fontWeight: 600,
+                          padding: "12px 16px",
+                        },
+                      },
+                    }}
+                    sx={{
+                      "& .MuiOutlinedInput-root": {
+                        bgcolor: "background.paper",
+                      },
+                    }}
+                  />
+                </Grid>
+
+                <Grid size={12}>
+                  <Stack spacing={1.5}>
+                    <Typography
+                      variant="subtitle2"
+                      color="text.secondary"
+                      sx={{ fontWeight: 600 }}
+                    >
+                      Priority Level
+                    </Typography>
+                    <ToggleButtonGroup
+                      value={form.priority}
+                      exclusive
+                      onChange={(_, value) => {
+                        if (value) handleFieldChange("priority", value);
+                      }}
+                      disabled={isSubmitting}
+                      fullWidth
+                      size="small"
+                      sx={{
+                        "& .MuiToggleButton-root": {
+                          flex: 1,
+                          textTransform: "none",
+                          fontWeight: 600,
+                          transition: "all 0.2s ease-in-out",
+                        },
+                      }}
+                    >
+                      <ToggleButton
+                        value="Low"
+                        sx={{
+                          borderColor: "success.main",
+                          color: "success.main",
+                          "&.Mui-selected": {
+                            bgcolor: "success.main",
+                            color: "white",
+                            "&:hover": { bgcolor: "success.dark" },
+                          },
+                        }}
+                      >
+                        Low
+                      </ToggleButton>
+                      <ToggleButton
+                        value="Medium"
+                        sx={{
+                          borderColor: "info.main",
+                          color: "info.main",
+                          "&.Mui-selected": {
+                            bgcolor: "info.main",
+                            color: "white",
+                            "&:hover": { bgcolor: "info.dark" },
+                          },
+                        }}
+                      >
+                        Medium
+                      </ToggleButton>
+                      <ToggleButton
+                        value="High"
+                        sx={{
+                          borderColor: "warning.main",
+                          color: "warning.main",
+                          "&.Mui-selected": {
+                            bgcolor: "warning.main",
+                            color: "white",
+                            "&:hover": { bgcolor: "warning.dark" },
+                          },
+                        }}
+                      >
+                        High
+                      </ToggleButton>
+                    </ToggleButtonGroup>
+                    {fieldErrors.priority && (
+                      <Typography variant="caption" color="error">
+                        {fieldErrors.priority}
+                      </Typography>
+                    )}
+                  </Stack>
+                </Grid>
+
+                <Grid size={12}>
+                  <Stack spacing={1.5}>
+                    <Typography
+                      variant="subtitle2"
+                      color="text.secondary"
+                      sx={{ fontWeight: 600 }}
+                    >
+                      Change Description
+                    </Typography>
+                    <EcoComposer
+                      value={form.description}
+                      onChange={(value) => handleFieldChange("description", value)}
+                      disabled={isSubmitting}
+                      maxLength={descriptionMaxLength}
+                      error={fieldErrors.description}
+                    />
+                  </Stack>
+                </Grid>
+              </Grid>
+
+              {/* Action Area (Normal Flow) */}
+              <Stack
+                direction="row"
                 sx={{
-                  minHeight: 40,
-                  minWidth: 132,
-                  textTransform: "none",
+                  justifyContent: "space-between",
+                  alignItems: "center",
+                  pt: 2,
                 }}
               >
-                {isSubmitting ? (
-                  <CircularProgress color="inherit" size={20} thickness={5} />
-                ) : (
-                  "Create ECO"
-                )}
-              </Button>
+                <Box>
+                  {lastSaved && (
+                    <Typography variant="caption" color="text.secondary">
+                      Draft auto-saved at {lastSaved.toLocaleTimeString()}
+                    </Typography>
+                  )}
+                </Box>
+                <Stack direction="row" spacing={2}>
+                  <Button
+                    variant="outlined"
+                    onClick={handleCancelClick}
+                    disabled={isSubmitting}
+                    sx={{
+                      textTransform: "none",
+                      minWidth: 100,
+                    }}
+                  >
+                    Cancel
+                  </Button>
+                  <Button
+                    type="submit"
+                    variant="contained"
+                    disabled={isSubmitting}
+                    startIcon={
+                      isSubmitting ? undefined : <SaveIcon fontSize="small" />
+                    }
+                    sx={{
+                      minHeight: 40,
+                      minWidth: 140,
+                      textTransform: "none",
+                      fontWeight: 600,
+                    }}
+                  >
+                    {isSubmitting ? (
+                      <CircularProgress color="inherit" size={20} thickness={5} />
+                    ) : (
+                      "Create ECO"
+                    )}
+                  </Button>
+                </Stack>
+              </Stack>
             </Stack>
+          </Box>
+        </Stack>
+      </Container>
 
-            <Typography variant="caption" color="text.secondary">
-              New ECOs are created in Draft status and can be submitted for
-              review from the detail page.
-            </Typography>
-          </Stack>
-        </Box>
-      </Paper>
-    </Stack>
+      {/* Discard Changes Dialog */}
+      <Dialog
+        open={isDiscardDialogOpen}
+        onClose={() => setIsDiscardDialogOpen(false)}
+        aria-labelledby="discard-dialog-title"
+      >
+        <DialogTitle id="discard-dialog-title">Discard unsaved changes?</DialogTitle>
+        <DialogContent>
+          <DialogContentText>
+            You have unsaved changes in your ECO draft. Are you sure you want to
+            cancel? This will also clear your local draft.
+          </DialogContentText>
+        </DialogContent>
+        <DialogActions sx={{ p: 2, pt: 0 }}>
+          <Button onClick={() => setIsDiscardDialogOpen(false)} sx={{ textTransform: "none" }}>
+            Keep Editing
+          </Button>
+          <Button
+            onClick={handleConfirmDiscard}
+            color="error"
+            variant="contained"
+            sx={{ textTransform: "none" }}
+          >
+            Discard Changes
+          </Button>
+        </DialogActions>
+      </Dialog>
+    </Box>
   );
 }
 
