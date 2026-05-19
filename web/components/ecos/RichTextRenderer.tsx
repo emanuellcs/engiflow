@@ -27,7 +27,79 @@ let isMermaidInitialized = false;
  */
 export default function RichTextRenderer({ value }: RichTextRendererProps) {
   return (
-    <Box className="rich-text-renderer">
+    <Box
+      className="rich-text-renderer"
+      sx={{
+        "& table": {
+          borderCollapse: "collapse",
+          width: "100%",
+          mb: 2,
+          mt: 1,
+          display: "block",
+          overflowX: "auto",
+        },
+        "& th, & td": {
+          border: 1,
+          borderColor: "divider",
+          p: 1.5,
+          textAlign: "left",
+          minWidth: 120,
+        },
+        "& th": {
+          bgcolor: "action.hover",
+          fontWeight: 600,
+          color: "text.primary",
+        },
+        "& td": {
+          color: "text.secondary",
+          verticalAlign: "top",
+        },
+        "& pre": {
+          bgcolor: "action.hover",
+          p: 2,
+          borderRadius: 1,
+          overflowX: "auto",
+          border: 1,
+          borderColor: "divider",
+          my: 2,
+        },
+        "& code": {
+          fontFamily: "monospace",
+          fontSize: "0.875rem",
+          bgcolor: "action.hover",
+          px: 0.75,
+          py: 0.25,
+          borderRadius: 0.5,
+          color: "text.primary",
+        },
+        "& pre > code": {
+          bgcolor: "transparent",
+          p: 0,
+          px: 0,
+          py: 0,
+          borderRadius: 0,
+          display: "block",
+          fontSize: "0.8125rem",
+        },
+        "& .katex-display": {
+          my: 2,
+          p: 1.5,
+          overflowX: "auto",
+          overflowY: "hidden",
+        },
+        "& p": {
+          mb: 1.5,
+          "&:last-child": { mb: 0 },
+        },
+        "& ul, & ol": {
+          mb: 1.5,
+          pl: 3,
+        },
+        "& li": {
+          mb: 0.5,
+        },
+      }}
+    >
       <ReactMarkdown
         remarkPlugins={[remarkGfm, remarkMath]}
         rehypePlugins={[rehypeKatex]}

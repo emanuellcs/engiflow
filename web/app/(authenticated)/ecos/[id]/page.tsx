@@ -101,7 +101,6 @@ type TimelineEntry =
   | { type: "comment"; occurredAt: string; comment: EcoCommentDto };
 type AffectedItemFormState = AddAffectedItemRequest;
 
-const authorRoles = ["Owner", "Administrator", "Requester"] as const;
 const reviewerRoles = ["Owner", "Administrator", "Approver"] as const;
 const approverRoles = new Set<string>(reviewerRoles);
 const minimumRequestChangesLength = 10;
@@ -130,7 +129,7 @@ const eventLabelByType: Record<EcoEventType, string> = {
 };
 
 /**
- * Renders the authenticated ECO detail route.
+ * Renders the authenticated ECO detail route with a GitHub-style PR experience.
  *
  * @returns The PR-like ECO detail shell.
  */
@@ -156,7 +155,6 @@ export default function EcoDetailsPage() {
     [reviewContext],
   );
   const minApprovalsRequired = reviewContext?.minApprovalsRequired ?? 1;
-  const canAuthor = roleAllows(user?.role, authorRoles);
   const canReview = roleAllows(user?.role, reviewerRoles);
 
   const loadEcoDetails = useCallback(
@@ -233,10 +231,6 @@ export default function EcoDetailsPage() {
 
   /**
    * Runs an ECO workflow request and handles concurrency conflicts consistently.
-   *
-   * @param action - Pending action identifier.
-   * @param request - Request that returns the updated ECO.
-   * @returns A promise that resolves after the action attempt.
    */
   async function runEcoAction(
     action: PendingAction,
@@ -314,9 +308,11 @@ export default function EcoDetailsPage() {
   }
 
   const requester = usersById.get(eco.createdByUserId);
+  const isCreator = user?.id === eco.createdByUserId;
 
   return (
     <Stack spacing={2.5}>
+      {/* 1. Header & Navigation */}
       <Stack spacing={1.5}>
         <Button
           component={NextLink}
@@ -384,41 +380,6 @@ export default function EcoDetailsPage() {
         </Stack>
       </Stack>
 
-      <StickyActionBar
-        canAuthor={canAuthor}
-        canReview={canReview}
-        eco={eco}
-        isBlocked={isConflictRefreshing}
-        pendingAction={pendingAction}
-        onApprove={() =>
-          runEcoAction("approve", () =>
-            submitReviewDecision(eco.id, { decision: "Approve" }),
-          )
-        }
-        onCancel={() =>
-          runEcoAction("cancel", () =>
-            apiFetch<EcoDetailsDto>(`/api/ecos/${encodeURIComponent(eco.id)}/cancel`, {
-              method: "PUT",
-            }),
-          )
-        }
-        onRequestChanges={(comment) =>
-          runEcoAction("requestChanges", () =>
-            submitReviewDecision(eco.id, {
-              decision: "RequestChanges",
-              comment,
-            }),
-          )
-        }
-        onSubmit={() =>
-          runEcoAction("submit", () =>
-            apiFetch<EcoDetailsDto>(`/api/ecos/${encodeURIComponent(eco.id)}/submit`, {
-              method: "PUT",
-            }),
-          )
-        }
-      />
-
       {actionErrorMessage ? <Alert severity="error">{actionErrorMessage}</Alert> : null}
       {hub.status === "reconnecting" || hub.status === "disconnected" ? (
         <Alert severity="warning" variant="outlined">
@@ -426,32 +387,8 @@ export default function EcoDetailsPage() {
         </Alert>
       ) : null}
 
-      <Grid container spacing={2.5}>
-        <Grid size={{ xs: 12, lg: 8 }}>
-          <Card elevation={1}>
-            <CardContent>
-              <Stack spacing={2}>
-                <Typography variant="h6" component="h2">
-                  Change Summary
-                </Typography>
-                <Divider />
-                <RichTextRenderer value={eco.description} />
-              </Stack>
-            </CardContent>
-          </Card>
-        </Grid>
-        <Grid size={{ xs: 12, lg: 4 }}>
-          <ReviewersWidget
-            approvals={eco.approvals}
-            approvers={approvers}
-            minApprovalsRequired={minApprovalsRequired}
-            reviewRound={eco.reviewRound}
-            usersById={usersById}
-          />
-        </Grid>
-      </Grid>
-
-      <Paper elevation={1}>
+      {/* 2. Tabs Shell */}
+      <Paper elevation={1} sx={{ display: "flex", flexDirection: "column", flexGrow: 1, minHeight: 0 }}>
         <Tabs
           value={activeTab}
           onChange={(_, value: TabKey) => setActiveTab(value)}
@@ -463,11 +400,40 @@ export default function EcoDetailsPage() {
           <Tab value="items" label="Affected Items" />
           <Tab value="files" label="Files & Attachments" />
         </Tabs>
-        <Box sx={{ p: { xs: 1.5, md: 2.5 } }}>
+        <Box sx={{ p: { xs: 1.5, md: 2.5 }, flexGrow: 1, minHeight: 0 }}>
           {activeTab === "conversation" ? (
             <ConversationTab
               eco={eco}
               isBlocked={Boolean(pendingAction) || isConflictRefreshing}
+              isCreator={isCreator}
+              canReview={canReview}
+              onApprove={() =>
+                runEcoAction("approve", () =>
+                  submitReviewDecision(eco.id, { decision: "Approve" }),
+                )
+              }
+              onCancel={() =>
+                runEcoAction("cancel", () =>
+                  apiFetch<EcoDetailsDto>(`/api/ecos/${encodeURIComponent(eco.id)}/cancel`, {
+                    method: "PUT",
+                  }),
+                )
+              }
+              onRequestChanges={(comment) =>
+                runEcoAction("requestChanges", () =>
+                  submitReviewDecision(eco.id, {
+                    decision: "RequestChanges",
+                    comment,
+                  }),
+                )
+              }
+              onSubmit={() =>
+                runEcoAction("submit", () =>
+                  apiFetch<EcoDetailsDto>(`/api/ecos/${encodeURIComponent(eco.id)}/submit`, {
+                    method: "PUT",
+                  }),
+                )
+              }
               onCommentSubmit={(body) =>
                 runEcoAction("comment", () =>
                   apiFetch<EcoDetailsDto>(
@@ -484,17 +450,18 @@ export default function EcoDetailsPage() {
               }
               pendingAction={pendingAction}
               usersById={usersById}
+              approvers={approvers}
+              minApprovalsRequired={minApprovalsRequired}
             />
           ) : null}
           {activeTab === "items" ? (
            <AffectedItemsTab
-             canEdit={eco.status === "Draft" && canAuthor}
+             canEdit={eco.status === "Draft" && isCreator}
              eco={eco}
              isBlocked={Boolean(pendingAction) || isConflictRefreshing}
              isLoading={isLoading}
              loadEcoDetails={loadEcoDetails}
              onAddItem={(item) =>
-
                 runEcoAction("addItem", () =>
                   apiFetch<EcoDetailsDto>(
                     `/api/ecos/${encodeURIComponent(eco.id)}/affected-items`,
@@ -543,120 +510,362 @@ export default function EcoDetailsPage() {
   );
 }
 
-type StickyActionBarProps = {
-  canAuthor: boolean;
-  canReview: boolean;
+type ConversationTabProps = {
   eco: EcoDetailsDto;
   isBlocked: boolean;
-  pendingAction: PendingAction | null;
+  isCreator: boolean;
+  canReview: boolean;
   onApprove: () => void;
   onCancel: () => void;
   onRequestChanges: (comment: string) => void;
   onSubmit: () => void;
+  onCommentSubmit: (body: string) => Promise<void> | void;
+  onUpload: (file: File) => Promise<void> | void;
+  pendingAction: PendingAction | null;
+  usersById: Map<string, EcoUserDto>;
+  approvers: EcoUserDto[];
+  minApprovalsRequired: number;
 };
 
 /**
- * Renders sticky workflow controls for the ECO state machine.
- *
- * @param props - Action bar options.
- * @returns Sticky action bar.
+ * Renders the GitHub-style conversation grid.
  */
-function StickyActionBar({
-  canAuthor,
-  canReview,
+function ConversationTab({
   eco,
   isBlocked,
-  pendingAction,
+  isCreator,
+  canReview,
   onApprove,
   onCancel,
   onRequestChanges,
   onSubmit,
-}: StickyActionBarProps) {
+  onCommentSubmit,
+  onUpload,
+  pendingAction,
+  usersById,
+  approvers,
+  minApprovalsRequired,
+}: ConversationTabProps) {
+  const [highlightedCommentId, setHighlightedCommentId] = useState<string | null>(null);
+  const timeline = useMemo(() => createTimeline(eco.events, eco.comments), [
+    eco.events,
+    eco.comments,
+  ]);
+
+  useEffect(() => {
+    if (!window.location.hash.startsWith("#comment-")) {
+      return;
+    }
+
+    const commentId = window.location.hash.replace("#comment-", "");
+    const element = document.getElementById(`comment-${commentId}`);
+    if (!element) {
+      return;
+    }
+
+    element.scrollIntoView({ behavior: "smooth", block: "center" });
+    const highlightTimeoutId = window.setTimeout(() => {
+      setHighlightedCommentId(commentId);
+    }, 0);
+    const timeoutId = window.setTimeout(() => setHighlightedCommentId(null), 2400);
+
+    return () => {
+      window.clearTimeout(highlightTimeoutId);
+      window.clearTimeout(timeoutId);
+    };
+  }, [eco.comments]);
+
+  return (
+    <Grid container spacing={2.5}>
+      {/* Left Column: Context, Timeline, and Action */}
+      <Grid size={{ xs: 12, md: 8 }}>
+        <Stack spacing={3}>
+          {/* A. Change Summary */}
+          <Card elevation={0} variant="outlined">
+            <CardContent>
+              <Stack spacing={2}>
+                <Typography variant="h6" component="h2" sx={{ fontSize: "1.1rem", fontWeight: 600 }}>
+                  Change Summary
+                </Typography>
+                <Divider />
+                <RichTextRenderer value={eco.description} />
+              </Stack>
+            </CardContent>
+          </Card>
+
+          {/* B. Vertical Timeline */}
+          <Box sx={{ position: "relative", pl: { xs: 2, md: 4 } }}>
+            {/* The vertical connector line */}
+            <Box
+              sx={{
+                position: "absolute",
+                left: { xs: 11, md: 27 },
+                top: 0,
+                bottom: 0,
+                width: 2,
+                bgcolor: "divider",
+                zIndex: 0,
+              }}
+            />
+            <Stack spacing={2.5}>
+              {timeline.map((entry) =>
+                entry.type === "comment" ? (
+                  <CommentCard
+                    key={`comment-${entry.comment.id}`}
+                    comment={entry.comment}
+                    highlighted={highlightedCommentId === entry.comment.id}
+                    user={usersById.get(entry.comment.authorUserId)}
+                  />
+                ) : (
+                  <SystemEventRow
+                    key={`event-${entry.event.id}`}
+                    event={entry.event}
+                    user={usersById.get(entry.event.actorUserId)}
+                  />
+                ),
+              )}
+            </Stack>
+          </Box>
+
+          {/* C. Action Area (Composer + Workflow Actions) */}
+          <ActionArea
+            eco={eco}
+            isBlocked={isBlocked}
+            isCreator={isCreator}
+            canReview={canReview}
+            onApprove={onApprove}
+            onCancel={onCancel}
+            onRequestChanges={onRequestChanges}
+            onSubmit={onSubmit}
+            onCommentSubmit={onCommentSubmit}
+            onUpload={onUpload}
+            pendingAction={pendingAction}
+          />
+        </Stack>
+      </Grid>
+
+      {/* Right Column: Sticky Metadata Sidebar */}
+      <Grid size={{ xs: 12, md: 4 }}>
+        <Stack spacing={2.5} sx={{ position: "sticky", top: 24 }}>
+          <ReviewersWidget
+            approvals={eco.approvals}
+            approvers={approvers}
+            minApprovalsRequired={minApprovalsRequired}
+            reviewRound={eco.reviewRound}
+            usersById={usersById}
+          />
+          <Card elevation={0} variant="outlined">
+            <CardContent>
+              <Typography variant="overline" color="text.secondary" sx={{ fontWeight: 600 }}>
+                Metadata
+              </Typography>
+              <Stack spacing={1.5} sx={{ mt: 1 }}>
+                <DetailRow label="Created">
+                  <Typography variant="body2">{formatDateTime(eco.createdAt)}</Typography>
+                </DetailRow>
+                <DetailRow label="Priority">
+                  <PriorityChip priority={eco.priority} />
+                </DetailRow>
+                <DetailRow label="Status">
+                  <StatusChip status={eco.status} />
+                </DetailRow>
+              </Stack>
+            </CardContent>
+          </Card>
+        </Stack>
+      </Grid>
+    </Grid>
+  );
+}
+
+type ActionAreaProps = {
+  eco: EcoDetailsDto;
+  isBlocked: boolean;
+  isCreator: boolean;
+  canReview: boolean;
+  onApprove: () => void;
+  onCancel: () => void;
+  onRequestChanges: (comment: string) => void;
+  onSubmit: () => void;
+  onCommentSubmit: (body: string) => Promise<void> | void;
+  onUpload: (file: File) => Promise<void> | void;
+  pendingAction: PendingAction | null;
+};
+
+/**
+ * Combines workflow actions and the comment composer.
+ */
+function ActionArea({
+  eco,
+  isBlocked,
+  isCreator,
+  canReview,
+  onApprove,
+  onCancel,
+  onRequestChanges,
+  onSubmit,
+  onCommentSubmit,
+  onUpload,
+  pendingAction,
+}: ActionAreaProps) {
+  const { user } = useAuth();
   const [isRequestChangesOpen, setIsRequestChangesOpen] = useState(false);
-  const canSubmit = eco.status === "Draft" && canAuthor;
-  const canCancel = (eco.status === "Draft" || eco.status === "UnderReview") && canAuthor;
-  const canApprove = eco.status === "UnderReview" && canReview;
+  const [wantsToChangeVote, setWantsToChangeVote] = useState(false);
+
+  const currentVote = useMemo(() => {
+    return eco.approvals.find(
+      (a) => a.reviewRound === eco.reviewRound && a.approverUserId === user?.id,
+    );
+  }, [eco.approvals, eco.reviewRound, user?.id]);
+
+  const canSubmit = eco.status === "Draft" && isCreator;
+  const canCancel = (eco.status === "Draft" || eco.status === "UnderReview") && isCreator;
+  const canVote = eco.status === "UnderReview" && canReview && !isCreator;
+  const showVoteButtons = canVote && (!currentVote || wantsToChangeVote);
+  const showVoteIndicator = canVote && currentVote && !wantsToChangeVote;
+
   const disableActions = isBlocked || Boolean(pendingAction);
 
   return (
-    <Paper
-      elevation={2}
-      sx={{
-        position: "sticky",
-        top: 72,
-        zIndex: 10,
-        p: 1.5,
-      }}
-    >
-      <Stack
-        direction={{ xs: "column", md: "row" }}
-        spacing={1}
-        sx={{
-          alignItems: { xs: "stretch", md: "center" },
-          justifyContent: "space-between",
-        }}
-      >
-        <Typography variant="body2" color="text.secondary">
-          State actions are locked to the current ECO lifecycle and role.
-        </Typography>
-        <Stack direction={{ xs: "column", sm: "row" }} spacing={1}>
-          {canSubmit || pendingAction === "submit" ? (
-            <ActionButton
-              color="primary"
-              disabled={disableActions}
-              icon={<SendIcon />}
-              isPending={pendingAction === "submit"}
-              label="Submit"
-              onClick={onSubmit}
-              variant="contained"
-            />
-          ) : null}
-          {canApprove || pendingAction === "approve" ? (
-            <ActionButton
-              color="success"
-              disabled={disableActions}
-              icon={<CheckCircleIcon />}
-              isPending={pendingAction === "approve"}
-              label="Approve"
-              onClick={onApprove}
-              variant="contained"
-            />
-          ) : null}
-          {canApprove || pendingAction === "requestChanges" ? (
-            <ActionButton
-              color="warning"
-              disabled={disableActions}
-              icon={<ErrorOutlineIcon />}
-              isPending={pendingAction === "requestChanges"}
-              label="Request Changes"
-              onClick={() => setIsRequestChangesOpen(true)}
-              variant="outlined"
-            />
-          ) : null}
-          {canCancel || pendingAction === "cancel" ? (
-            <ActionButton
-              color="error"
-              disabled={disableActions}
-              icon={<CancelIcon />}
-              isPending={pendingAction === "cancel"}
-              label="Cancel"
-              onClick={onCancel}
-              variant="outlined"
-            />
-          ) : null}
+    <Card elevation={1} sx={{ borderTop: 4, borderColor: "primary.main" }}>
+      <CardContent>
+        <Stack spacing={2.5}>
+          {/* Workflow Buttons Area */}
+          <Stack
+            direction={{ xs: "column", sm: "row" }}
+            spacing={1.5}
+            sx={{
+              alignItems: { xs: "stretch", sm: "center" },
+              justifyContent: "space-between",
+              bgcolor: "action.hover",
+              p: 1.5,
+              borderRadius: 1,
+            }}
+          >
+            <Box>
+              {isCreator && eco.status === "UnderReview" && (
+                <Typography variant="body2" color="text.secondary">
+                  As the author, you cannot participate in the approval quorum.
+                </Typography>
+              )}
+              {!isCreator && !canReview && eco.status === "UnderReview" && (
+                <Typography variant="body2" color="text.secondary">
+                  You do not have the permissions required to review this ECO.
+                </Typography>
+              )}
+              {eco.status === "Draft" && !isCreator && (
+                <Typography variant="body2" color="text.secondary">
+                  Only the creator can submit this ECO for review.
+                </Typography>
+              )}
+            </Box>
+
+            <Stack direction={{ xs: "column", sm: "row" }} spacing={1}>
+              {canSubmit ? (
+                <ActionButton
+                  color="primary"
+                  disabled={disableActions}
+                  icon={<SendIcon />}
+                  isPending={pendingAction === "submit"}
+                  label="Submit for Review"
+                  onClick={onSubmit}
+                  variant="contained"
+                />
+              ) : null}
+
+              {showVoteIndicator && currentVote && (
+                <Stack direction="row" spacing={1} sx={{ alignItems: "center" }}>
+                  <Chip
+                    icon={currentVote.decision === "Approve" ? <CheckCircleIcon /> : <ErrorOutlineIcon />}
+                    label={currentVote.decision === "Approve" ? "Approved" : "Changes Requested"}
+                    color={currentVote.decision === "Approve" ? "success" : "warning"}
+                    variant="outlined"
+                  />
+                  <Button
+                    size="small"
+                    onClick={() => setWantsToChangeVote(true)}
+                    sx={{ textTransform: "none" }}
+                  >
+                    Change Vote
+                  </Button>
+                </Stack>
+              )}
+
+              {showVoteButtons && (
+                <>
+                  <ActionButton
+                    color="success"
+                    disabled={disableActions}
+                    icon={<CheckCircleIcon />}
+                    isPending={pendingAction === "approve"}
+                    label="Approve"
+                    onClick={() => {
+                      onApprove();
+                      setWantsToChangeVote(false);
+                    }}
+                    variant="contained"
+                  />
+                  <ActionButton
+                    color="warning"
+                    disabled={disableActions}
+                    icon={<ErrorOutlineIcon />}
+                    isPending={pendingAction === "requestChanges"}
+                    label="Request Changes"
+                    onClick={() => setIsRequestChangesOpen(true)}
+                    variant="outlined"
+                  />
+                  {wantsToChangeVote && (
+                    <Button
+                      size="small"
+                      color="inherit"
+                      onClick={() => setWantsToChangeVote(false)}
+                      sx={{ textTransform: "none" }}
+                    >
+                      Cancel
+                    </Button>
+                  )}
+                </>
+              )}
+
+              {canCancel ? (
+                <ActionButton
+                  color="error"
+                  disabled={disableActions}
+                  icon={<CancelIcon />}
+                  isPending={pendingAction === "cancel"}
+                  label="Cancel ECO"
+                  onClick={onCancel}
+                  variant="outlined"
+                />
+              ) : null}
+            </Stack>
+          </Stack>
+
+          <Divider />
+
+          {/* Comment Composer */}
+          <CommentComposer
+            ecoId={eco.id}
+            isBlocked={isBlocked}
+            isSubmitting={pendingAction === "comment"}
+            isUploading={pendingAction === "upload"}
+            onSubmit={onCommentSubmit}
+            onUpload={onUpload}
+          />
         </Stack>
-      </Stack>
+      </CardContent>
+
       <RequestChangesDialog
-        key={isRequestChangesOpen ? "request-changes-open" : "request-changes-closed"}
         open={isRequestChangesOpen}
         isPending={pendingAction === "requestChanges"}
         onClose={() => setIsRequestChangesOpen(false)}
         onConfirm={(comment) => {
           setIsRequestChangesOpen(false);
           onRequestChanges(comment);
+          setWantsToChangeVote(false);
         }}
       />
-    </Paper>
+    </Card>
   );
 }
 
@@ -687,7 +896,7 @@ function ActionButton({
       onClick={onClick}
       startIcon={isPending ? undefined : icon}
       variant={variant}
-      sx={{ minWidth: 120, textTransform: "none" }}
+      sx={{ minWidth: 120, textTransform: "none", fontWeight: 600 }}
     >
       {isPending ? <CircularProgress color="inherit" size={20} thickness={5} /> : label}
     </Button>
@@ -703,9 +912,6 @@ type RequestChangesDialogProps = {
 
 /**
  * Renders the request-changes dialog used by reviewers.
- *
- * @param props - Dialog options.
- * @returns Request changes dialog.
  */
 function RequestChangesDialog({
   open,
@@ -770,9 +976,6 @@ type ReviewersWidgetProps = {
 
 /**
  * Renders quorum progress and approver status rows.
- *
- * @param props - Reviewer widget props.
- * @returns Reviewers widget.
  */
 function ReviewersWidget({
   approvals,
@@ -789,11 +992,11 @@ function ReviewersWidget({
   ).length;
 
   return (
-    <Card elevation={1}>
+    <Card elevation={0} variant="outlined">
       <CardContent>
         <Stack spacing={2}>
           <Stack spacing={0.5}>
-            <Typography variant="h6" component="h2">
+            <Typography variant="h6" component="h2" sx={{ fontSize: "1rem", fontWeight: 600 }}>
               Reviewers
             </Typography>
             <Typography variant="body2" color="text.secondary">
@@ -842,97 +1045,15 @@ function ReviewersWidget({
   );
 }
 
-type ConversationTabProps = {
-  eco: EcoDetailsDto;
-  isBlocked: boolean;
-  onCommentSubmit: (body: string) => Promise<void> | void;
-  onUpload: (file: File) => Promise<void> | void;
-  pendingAction: PendingAction | null;
-  usersById: Map<string, EcoUserDto>;
-};
-
-/**
- * Renders the conversation timeline and markdown comment composer.
- *
- * @param props - Conversation tab props.
- * @returns Conversation tab content.
- */
-function ConversationTab({
-  eco,
-  isBlocked,
-  onCommentSubmit,
-  onUpload,
-  pendingAction,
-  usersById,
-}: ConversationTabProps) {
-  const [highlightedCommentId, setHighlightedCommentId] = useState<string | null>(null);
-  const timeline = useMemo(() => createTimeline(eco.events, eco.comments), [
-    eco.events,
-    eco.comments,
-  ]);
-
-  useEffect(() => {
-    if (!window.location.hash.startsWith("#comment-")) {
-      return;
-    }
-
-    const commentId = window.location.hash.replace("#comment-", "");
-    const element = document.getElementById(`comment-${commentId}`);
-    if (!element) {
-      return;
-    }
-
-    element.scrollIntoView({ behavior: "smooth", block: "center" });
-    const highlightTimeoutId = window.setTimeout(() => {
-      setHighlightedCommentId(commentId);
-    }, 0);
-    const timeoutId = window.setTimeout(() => setHighlightedCommentId(null), 2400);
-
-    return () => {
-      window.clearTimeout(highlightTimeoutId);
-      window.clearTimeout(timeoutId);
-    };
-  }, [eco.comments]);
-
-  return (
-    <Stack spacing={2.5}>
-      <Stack spacing={1.5}>
-        {timeline.map((entry) =>
-          entry.type === "comment" ? (
-            <CommentCard
-              key={`comment-${entry.comment.id}`}
-              comment={entry.comment}
-              highlighted={highlightedCommentId === entry.comment.id}
-              user={usersById.get(entry.comment.authorUserId)}
-            />
-          ) : (
-            <SystemEventRow
-              key={`event-${entry.event.id}`}
-              event={entry.event}
-              user={usersById.get(entry.event.actorUserId)}
-            />
-          ),
-        )}
-      </Stack>
-      <CommentComposer
-        ecoId={eco.id}
-        isBlocked={isBlocked}
-        isSubmitting={pendingAction === "comment"}
-        isUploading={pendingAction === "upload"}
-        onSubmit={onCommentSubmit}
-        onUpload={onUpload}
-      />
-    </Stack>
-  );
-}
-
-type CommentCardProps = {
+function CommentCard({
+  comment,
+  highlighted,
+  user,
+}: {
   comment: EcoCommentDto;
   highlighted: boolean;
   user: EcoUserDto | undefined;
-};
-
-function CommentCard({ comment, highlighted, user }: CommentCardProps) {
+}) {
   const authorName = user?.name ?? formatShortId(comment.authorUserId);
 
   return (
@@ -943,6 +1064,7 @@ function CommentCard({ comment, highlighted, user }: CommentCardProps) {
         border: highlighted ? 1 : undefined,
         borderColor: highlighted ? "primary.main" : undefined,
         scrollMarginTop: 128,
+        zIndex: 1,
       }}
     >
       <CardContent>
@@ -978,30 +1100,49 @@ function CommentCard({ comment, highlighted, user }: CommentCardProps) {
   );
 }
 
-type SystemEventRowProps = {
+function SystemEventRow({
+  event,
+  user,
+}: {
   event: EcoEventDto;
   user: EcoUserDto | undefined;
-};
-
-function SystemEventRow({ event, user }: SystemEventRowProps) {
+}) {
   return (
     <Stack
       direction="row"
-      spacing={1}
+      spacing={1.5}
       sx={{
-        alignItems: "flex-start",
+        alignItems: "center",
         color: "text.secondary",
-        px: { xs: 0.5, md: 2 },
+        py: 0.5,
+        zIndex: 1,
+        position: "relative",
       }}
     >
-      <TimelineIcon fontSize="small" sx={{ mt: 0.25 }} />
-      <Typography variant="body2">
+      <Box
+        sx={{
+          width: 24,
+          height: 24,
+          borderRadius: "50%",
+          bgcolor: "background.paper",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          border: 1,
+          borderColor: "divider",
+          boxShadow: 1,
+        }}
+      >
+        <TimelineIcon sx={{ fontSize: 14 }} />
+      </Box>
+      <Typography variant="body2" sx={{ flexGrow: 1 }}>
         <strong>{eventLabelByType[event.eventType]}</strong>
         {" by "}
         {user?.name ?? formatShortId(event.actorUserId)}
         {" • "}
         {event.description}
-        {" • "}
+      </Typography>
+      <Typography variant="caption" sx={{ whiteSpace: "nowrap" }}>
         {formatDateTime(event.occurredAt)}
       </Typography>
     </Stack>
@@ -1018,10 +1159,7 @@ type CommentComposerProps = {
 };
 
 /**
- * Renders the write/preview comment form with localStorage draft persistence.
- *
- * @param props - Composer props.
- * @returns Comment composer.
+ * Renders the write/preview comment form with account-namespaced draft persistence.
  */
 function CommentComposer({
   ecoId,
@@ -1031,16 +1169,19 @@ function CommentComposer({
   onSubmit,
   onUpload,
 }: CommentComposerProps) {
+  const { user } = useAuth();
   const [mode, setMode] = useState<"write" | "preview">("write");
   const fileInputRef = useRef<HTMLInputElement | null>(null);
-  const draftKey = `eco-${ecoId}-draft`;
+  const draftKey = `eco-${ecoId}-${user?.id}-draft`;
   const [draft, setDraft] = useState(() =>
     typeof window === "undefined" ? "" : window.localStorage.getItem(draftKey) ?? "",
   );
 
   useEffect(() => {
-    window.localStorage.setItem(draftKey, draft);
-  }, [draft, draftKey]);
+    if (user?.id) {
+      window.localStorage.setItem(draftKey, draft);
+    }
+  }, [draft, draftKey, user?.id]);
 
   async function handleSubmit(): Promise<void> {
     const body = draft.trim();
@@ -1064,77 +1205,73 @@ function CommentComposer({
   }
 
   return (
-    <Card elevation={1}>
-      <CardContent>
-        <Stack spacing={1.5}>
-          <Tabs value={mode} onChange={(_, value: "write" | "preview") => setMode(value)}>
-            <Tab value="write" label="Write" />
-            <Tab value="preview" label="Preview" />
-          </Tabs>
-          {mode === "write" ? (
-            <TextField
-              value={draft}
-              onChange={(event) => setDraft(event.target.value)}
-              placeholder="Leave a comment"
-              multiline
-              minRows={5}
-              fullWidth
-              disabled={isBlocked || isSubmitting}
-              slotProps={{ htmlInput: { maxLength: maximumCommentLength } }}
-            />
+    <Stack spacing={1.5}>
+      <Tabs value={mode} onChange={(_, value: "write" | "preview") => setMode(value)}>
+        <Tab value="write" label="Write" />
+        <Tab value="preview" label="Preview" />
+      </Tabs>
+      {mode === "write" ? (
+        <TextField
+          value={draft}
+          onChange={(event) => setDraft(event.target.value)}
+          placeholder="Leave a comment"
+          multiline
+          minRows={5}
+          fullWidth
+          disabled={isBlocked || isSubmitting}
+          slotProps={{ htmlInput: { maxLength: maximumCommentLength } }}
+        />
+      ) : (
+        <Paper variant="outlined" sx={{ minHeight: 148, p: 2 }}>
+          {draft.trim() ? (
+            <RichTextRenderer value={draft} />
           ) : (
-            <Paper variant="outlined" sx={{ minHeight: 148, p: 2 }}>
-              {draft.trim() ? (
-                <RichTextRenderer value={draft} />
-              ) : (
-                <Typography variant="body2" color="text.secondary">
-                  Nothing to preview.
-                </Typography>
-              )}
-            </Paper>
+            <Typography variant="body2" color="text.secondary">
+              Nothing to preview.
+            </Typography>
           )}
-          <Stack
-            direction={{ xs: "column", sm: "row" }}
-            spacing={1}
-            sx={{ justifyContent: "space-between" }}
+        </Paper>
+      )}
+      <Stack
+        direction={{ xs: "column", sm: "row" }}
+        spacing={1}
+        sx={{ justifyContent: "space-between" }}
+      >
+        <Box>
+          <input
+            ref={fileInputRef}
+            hidden
+            type="file"
+            onChange={handleFileChange}
+            accept=".pdf,.png,.jpg,.jpeg,.csv,.xlsx,.step,.stp,.dwg"
+          />
+          <Button
+            type="button"
+            variant="outlined"
+            startIcon={<AttachFileIcon />}
+            disabled={isBlocked || isUploading}
+            onClick={() => fileInputRef.current?.click()}
+            sx={{ textTransform: "none" }}
           >
-            <Box>
-              <input
-                ref={fileInputRef}
-                hidden
-                type="file"
-                onChange={handleFileChange}
-                accept=".pdf,.png,.jpg,.jpeg,.csv,.xlsx,.step,.stp,.dwg"
-              />
-              <Button
-                type="button"
-                variant="outlined"
-                startIcon={<AttachFileIcon />}
-                disabled={isBlocked || isUploading}
-                onClick={() => fileInputRef.current?.click()}
-                sx={{ textTransform: "none" }}
-              >
-                {isUploading ? "Uploading" : "Attach file"}
-              </Button>
-            </Box>
-            <Button
-              type="button"
-              variant="contained"
-              startIcon={isSubmitting ? undefined : <SendIcon />}
-              disabled={isBlocked || isSubmitting || draft.trim().length === 0}
-              onClick={() => void handleSubmit()}
-              sx={{ minWidth: 132, textTransform: "none" }}
-            >
-              {isSubmitting ? (
-                <CircularProgress color="inherit" size={20} thickness={5} />
-              ) : (
-                "Comment"
-              )}
-            </Button>
-          </Stack>
-        </Stack>
-      </CardContent>
-    </Card>
+            {isUploading ? "Uploading" : "Attach file"}
+          </Button>
+        </Box>
+        <Button
+          type="button"
+          variant="contained"
+          startIcon={isSubmitting ? undefined : <SendIcon />}
+          disabled={isBlocked || isSubmitting || draft.trim().length === 0}
+          onClick={() => void handleSubmit()}
+          sx={{ minWidth: 132, textTransform: "none" }}
+        >
+          {isSubmitting ? (
+            <CircularProgress color="inherit" size={20} thickness={5} />
+          ) : (
+            "Comment"
+          )}
+        </Button>
+      </Stack>
+    </Stack>
   );
 }
 
@@ -1359,19 +1496,17 @@ function AffectedItemsTab({
   );
 }
 
-type AddAffectedItemDialogProps = {
-  open: boolean;
-  isPending: boolean;
-  onClose: () => void;
-  onConfirm: (item: AddAffectedItemRequest) => void;
-};
-
 function AddAffectedItemDialog({
   open,
   isPending,
   onClose,
   onConfirm,
-}: AddAffectedItemDialogProps) {
+}: {
+  open: boolean;
+  isPending: boolean;
+  onClose: () => void;
+  onConfirm: (item: AddAffectedItemRequest) => void;
+}) {
   const [form, setForm] = useState<AffectedItemFormState>(initialAffectedItemForm);
   const isValid =
     form.partNumber.trim() &&
@@ -1489,13 +1624,15 @@ function AffectedItemActionChip({ action }: { action: EcoAffectedItemAction }) {
   return <Chip label={labelByAction[action]} size="small" sx={sxByAction[action]} />;
 }
 
-type FilesTabProps = {
+function FilesTab({
+  attachments,
+  ecoId,
+  usersById,
+}: {
   attachments: EcoAttachmentDto[];
   ecoId: string;
   usersById: Map<string, EcoUserDto>;
-};
-
-function FilesTab({ attachments, ecoId, usersById }: FilesTabProps) {
+}) {
   const [selectedAttachment, setSelectedAttachment] = useState<EcoAttachmentDto | null>(null);
 
   if (attachments.length === 0) {
@@ -1529,6 +1666,7 @@ function FilesTab({ attachments, ecoId, usersById }: FilesTabProps) {
                   cursor: "pointer",
                   bgcolor: "background.paper",
                   borderColor: "divider",
+                  "&:hover": { bgcolor: "action.hover" },
                 }}
               >
                 <Stack direction="row" spacing={1.25} sx={{ alignItems: "flex-start" }}>
@@ -1561,14 +1699,17 @@ function FilesTab({ attachments, ecoId, usersById }: FilesTabProps) {
   );
 }
 
-type AttachmentDrawerProps = {
+function AttachmentDrawer({
+  attachment,
+  ecoId,
+  uploader,
+  onClose,
+}: {
   attachment: EcoAttachmentDto | null;
   ecoId: string;
   uploader: EcoUserDto | undefined;
   onClose: () => void;
-};
-
-function AttachmentDrawer({ attachment, ecoId, uploader, onClose }: AttachmentDrawerProps) {
+}) {
   const [isDownloading, setIsDownloading] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
@@ -1599,9 +1740,9 @@ function AttachmentDrawer({ attachment, ecoId, uploader, onClose }: AttachmentDr
       anchor="right"
       open={Boolean(attachment)}
       onClose={onClose}
-      slotProps={{ paper: { sx: { width: { xs: "100%", sm: 460 } } } }}
+      slotProps={{ paper: { sx: { width: { xs: "100%", sm: 500 } } } }}
     >
-      <Stack spacing={2} sx={{ p: 2.5 }}>
+      <Stack spacing={2.5} sx={{ p: 3 }}>
         <Stack direction="row" sx={{ alignItems: "center", justifyContent: "space-between" }}>
           <Typography variant="h6" component="h2">
             File Details
@@ -1613,8 +1754,8 @@ function AttachmentDrawer({ attachment, ecoId, uploader, onClose }: AttachmentDr
         {attachment ? (
           <>
             <Divider />
-            <Stack spacing={1}>
-              <Typography variant="body1" sx={{ fontWeight: 600, overflowWrap: "anywhere" }}>
+            <Stack spacing={1.5}>
+              <Typography variant="subtitle1" sx={{ fontWeight: 600, overflowWrap: "anywhere" }}>
                 {attachment.fileName}
               </Typography>
               <DetailRow label="Size">{formatFileSize(attachment.fileSize)}</DetailRow>
@@ -1627,7 +1768,7 @@ function AttachmentDrawer({ attachment, ecoId, uploader, onClose }: AttachmentDr
                 <Typography
                   component="span"
                   variant="body2"
-                  sx={{ fontFamily: "monospace", overflowWrap: "anywhere" }}
+                  sx={{ fontFamily: "monospace", overflowWrap: "anywhere", fontSize: "0.8rem", color: "text.secondary" }}
                 >
                   {attachment.objectKey}
                 </Typography>
@@ -1637,15 +1778,17 @@ function AttachmentDrawer({ attachment, ecoId, uploader, onClose }: AttachmentDr
             <Button
               type="button"
               variant="contained"
+              size="large"
+              fullWidth
               startIcon={isDownloading ? undefined : <DownloadIcon />}
               disabled={isDownloading}
               onClick={() => void handleDownload()}
-              sx={{ textTransform: "none" }}
+              sx={{ textTransform: "none", mt: 2, fontWeight: 600 }}
             >
               {isDownloading ? (
-                <CircularProgress color="inherit" size={20} thickness={5} />
+                <CircularProgress color="inherit" size={24} thickness={5} />
               ) : (
-                "Download"
+                "Download File"
               )}
             </Button>
           </>
@@ -1658,7 +1801,7 @@ function AttachmentDrawer({ attachment, ecoId, uploader, onClose }: AttachmentDr
 function DetailRow({ label, children }: { label: string; children: ReactNode }) {
   return (
     <Stack spacing={0.25}>
-      <Typography variant="caption" color="text.secondary">
+      <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 600, textTransform: "uppercase", letterSpacing: 0.5 }}>
         {label}
       </Typography>
       <Box>{children}</Box>
@@ -1670,15 +1813,6 @@ function EcoDetailsSkeleton() {
   return (
     <Stack spacing={2.5}>
       <Skeleton variant="text" width="40%" height={48} />
-      <Skeleton variant="rounded" height={72} />
-      <Grid container spacing={2.5}>
-        <Grid size={{ xs: 12, lg: 8 }}>
-          <Skeleton variant="rounded" height={220} />
-        </Grid>
-        <Grid size={{ xs: 12, lg: 4 }}>
-          <Skeleton variant="rounded" height={220} />
-        </Grid>
-      </Grid>
       <Skeleton variant="rounded" height={420} />
     </Stack>
   );
