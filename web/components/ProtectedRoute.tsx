@@ -21,7 +21,7 @@ export default function ProtectedRoute({ children }: PropsWithChildren) {
 
   useEffect(() => {
     if (!isLoading && !isAuthenticated) {
-      router.replace("/login");
+      router.replace("/auth?mode=login");
     }
   }, [isAuthenticated, isLoading, router]);
 

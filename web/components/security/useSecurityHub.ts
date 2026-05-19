@@ -47,7 +47,7 @@ export function useSecurityHub({ token, currentUserId }: UseSecurityHubOptions):
 
       clearStoredAuthToken();
       window.alert("Your EngiFlow account has been deactivated.");
-      window.location.assign("/login");
+      window.location.assign("/auth?mode=login");
     }
 
     connection.on("UserPermissionsChanged", handlePermissionsChanged);

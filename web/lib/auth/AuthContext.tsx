@@ -82,7 +82,7 @@ export function AuthProvider({ children }: PropsWithChildren) {
 
   const logout = useCallback(() => {
     clearStoredAuthToken();
-    router.push("/login");
+    router.push("/auth?mode=login");
   }, [router]);
 
   const value = useMemo<AuthContextValue>(

@@ -149,8 +149,8 @@ function handleUnauthorized(): void {
   clearStoredAuthToken();
   window.dispatchEvent(new Event(AUTH_UNAUTHORIZED_EVENT));
 
-  if (window.location.pathname !== "/login") {
-    window.location.assign("/login");
+  if (window.location.pathname !== "/auth") {
+    window.location.assign("/auth?mode=login");
   }
 }
 
