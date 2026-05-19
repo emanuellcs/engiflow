@@ -1,10 +1,16 @@
 "use client";
 
+import CheckCircle from "@mui/icons-material/CheckCircle";
+import RadioButtonUnchecked from "@mui/icons-material/RadioButtonUnchecked";
+import Visibility from "@mui/icons-material/Visibility";
+import VisibilityOff from "@mui/icons-material/VisibilityOff";
 import Alert from "@mui/material/Alert";
 import Box from "@mui/material/Box";
 import Button from "@mui/material/Button";
 import CircularProgress from "@mui/material/CircularProgress";
 import Container from "@mui/material/Container";
+import IconButton from "@mui/material/IconButton";
+import InputAdornment from "@mui/material/InputAdornment";
 import Link from "@mui/material/Link";
 import Paper from "@mui/material/Paper";
 import Stack from "@mui/material/Stack";
@@ -17,7 +23,7 @@ import Typography from "@mui/material/Typography";
 import { useTheme } from "@mui/material/styles";
 import useMediaQuery from "@mui/material/useMediaQuery";
 import { useRouter } from "next/navigation";
-import { type FormEvent, type ReactNode, useState } from "react";
+import { type FormEvent, type ReactNode, useEffect, useRef, useState } from "react";
 import NextLink from "@/components/ui/NextLink";
 import { ApiError, apiFetch } from "@/lib/api/client";
 import { type AuthSessionResult, useAuth } from "@/lib/auth/AuthContext";
@@ -27,6 +33,7 @@ type RegisterFormState = {
   adminName: string;
   adminEmail: string;
   adminPassword: string;
+  adminConfirmPassword: string;
 };
 
 type RegisterFieldErrors = Partial<Record<keyof RegisterFormState, string>>;
@@ -37,13 +44,20 @@ const initialFormState: RegisterFormState = {
   adminName: "",
   adminEmail: "",
   adminPassword: "",
+  adminConfirmPassword: "",
 };
 const defaultRegisterError =
   "Unable to register your company. Review the details and try again.";
 const invalidAuthResponseError =
   "The server returned an invalid authentication response. Please try again.";
 const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-const symbolPattern = /[^a-zA-Z0-9]/;
+const passwordPatterns = {
+  length: /^.{12,}$/,
+  uppercase: /[A-Z]/,
+  lowercase: /[a-z]/,
+  number: /[0-9]/,
+  symbol: /[^a-zA-Z0-9]/,
+};
 
 /**
  * Renders the public company registration wizard and auto-signs in the first
@@ -55,15 +69,28 @@ export default function RegisterPage() {
   const router = useRouter();
   const { login } = useAuth();
   const theme = useTheme();
-  const isSmallScreen = useMediaQuery(theme.breakpoints.down("sm"), {
+  const isSmallScreen = useMediaQuery(theme.breakpoints.down("md"), {
     noSsr: true,
   });
+  const adminNameRef = useRef<HTMLInputElement>(null);
   const [activeStep, setActiveStep] = useState(0);
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [form, setForm] = useState<RegisterFormState>(initialFormState);
   const [fieldErrors, setFieldErrors] = useState<RegisterFieldErrors>({});
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [isPending, setIsPending] = useState(false);
-  const isFinalStep = activeStep === steps.length - 1;
+  const [submitted, setSubmitted] = useState(false);
+
+  useEffect(() => {
+    if (activeStep === 1) {
+      // Small timeout ensures the DOM has rendered the new step's fields
+      const timer = setTimeout(() => {
+        adminNameRef.current?.focus();
+      }, 100);
+      return () => clearTimeout(timer);
+    }
+  }, [activeStep]);
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -72,12 +99,10 @@ export default function RegisterPage() {
       return;
     }
 
-    if (!isFinalStep) {
-      handleNext();
-      return;
-    }
+    setSubmitted(true);
 
-    const nextErrors = {
+    // Final comprehensive validation
+    const nextErrors: RegisterFieldErrors = {
       ...validateStep(0, form),
       ...validateStep(1, form),
     };
@@ -114,22 +139,31 @@ export default function RegisterPage() {
     }
   }
 
-  function handleNext() {
-    const nextErrors = validateStep(activeStep, form);
+  function handleNextSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (isPending) return;
 
-    if (hasErrors(nextErrors)) {
-      setFieldErrors(nextErrors);
+    // Validate only Step 0 when proceeding
+    const stepErrors = validateStep(0, form);
+    if (hasErrors(stepErrors)) {
+      setFieldErrors(stepErrors);
+      setSubmitted(true);
       return;
     }
 
-    setFieldErrors({});
+    handleNext();
+  }
+
+  function handleNext() {
     setErrorMessage(null);
+    setSubmitted(false);
     setActiveStep((current) => Math.min(current + 1, steps.length - 1));
   }
 
   function handleBack() {
     setFieldErrors({});
     setErrorMessage(null);
+    setSubmitted(false);
     setActiveStep((current) => Math.max(current - 1, 0));
   }
 
@@ -139,6 +173,7 @@ export default function RegisterPage() {
       [field]: value,
     }));
     setFieldErrors((current) => {
+      if (!current[field]) return current;
       const next = { ...current };
       delete next[field];
       return next;
@@ -147,6 +182,7 @@ export default function RegisterPage() {
 
   function renderStepFields(stepIndex: number): ReactNode {
     if (stepIndex === 0) {
+      const hasError = submitted && Boolean(fieldErrors.companyName);
       return (
         <Stack spacing={2}>
           <TextField
@@ -159,8 +195,8 @@ export default function RegisterPage() {
             }
             autoComplete="organization"
             disabled={isPending}
-            error={Boolean(fieldErrors.companyName)}
-            helperText={fieldErrors.companyName}
+            error={hasError}
+            helperText={hasError ? fieldErrors.companyName : ""}
             required
             fullWidth
             size="small"
@@ -175,12 +211,13 @@ export default function RegisterPage() {
           id="adminName"
           name="adminName"
           label="Full name"
+          inputRef={adminNameRef}
           value={form.adminName}
           onChange={(event) => handleFieldChange("adminName", event.target.value)}
           autoComplete="name"
           disabled={isPending}
-          error={Boolean(fieldErrors.adminName)}
-          helperText={fieldErrors.adminName}
+          error={submitted && Boolean(fieldErrors.adminName)}
+          helperText={submitted ? fieldErrors.adminName : ""}
           required
           fullWidth
           size="small"
@@ -196,31 +233,124 @@ export default function RegisterPage() {
           }
           autoComplete="email"
           disabled={isPending}
-          error={Boolean(fieldErrors.adminEmail)}
-          helperText={fieldErrors.adminEmail}
+          error={submitted && Boolean(fieldErrors.adminEmail)}
+          helperText={submitted ? fieldErrors.adminEmail : ""}
           required
           fullWidth
           size="small"
         />
+        <Stack spacing={1}>
+          <TextField
+            id="adminPassword"
+            name="adminPassword"
+            label="Password"
+            type={showPassword ? "text" : "password"}
+            value={form.adminPassword}
+            onChange={(event) =>
+              handleFieldChange("adminPassword", event.target.value)
+            }
+            autoComplete="new-password"
+            disabled={isPending}
+            error={submitted && Boolean(fieldErrors.adminPassword)}
+            helperText={submitted ? fieldErrors.adminPassword : ""}
+            required
+            fullWidth
+            size="small"
+            slotProps={{
+              input: {
+                endAdornment: (
+                  <InputAdornment position="end">
+                    <IconButton
+                      aria-label="toggle password visibility"
+                      onClick={() => setShowPassword((show) => !show)}
+                      edge="end"
+                      size="small"
+                    >
+                      {showPassword ? (
+                        <VisibilityOff fontSize="small" />
+                      ) : (
+                        <Visibility fontSize="small" />
+                      )}
+                    </IconButton>
+                  </InputAdornment>
+                ),
+              },
+            }}
+          />
+
+          <Box sx={{ pl: 0.5 }}>
+            <Stack spacing={0.5}>
+              {[
+                { label: "12+ characters", met: passwordPatterns.length.test(form.adminPassword) },
+                { label: "1 Uppercase", met: passwordPatterns.uppercase.test(form.adminPassword) },
+                { label: "1 Lowercase", met: passwordPatterns.lowercase.test(form.adminPassword) },
+                { label: "1 Number", met: passwordPatterns.number.test(form.adminPassword) },
+                {
+                  label: "1 Symbol",
+                  met: passwordPatterns.symbol.test(form.adminPassword),
+                },
+              ].map((criterion) => (
+                <Stack
+                  key={criterion.label}
+                  direction="row"
+                  spacing={1}
+                  sx={{ alignItems: "center" }}
+                >
+                  {criterion.met ? (
+                    <CheckCircle sx={{ fontSize: 16, color: "success.main" }} />
+                  ) : (
+                    <RadioButtonUnchecked
+                      sx={{ fontSize: 16, color: "text.disabled" }}
+                    />
+                  )}
+                  <Typography
+                    variant="caption"
+                    color={criterion.met ? "success.main" : "text.secondary"}
+                  >
+                    {criterion.label}
+                  </Typography>
+                </Stack>
+              ))}
+            </Stack>
+          </Box>
+        </Stack>
+
         <TextField
-          id="adminPassword"
-          name="adminPassword"
-          label="Password"
-          type="password"
-          value={form.adminPassword}
+          id="adminConfirmPassword"
+          name="adminConfirmPassword"
+          label="Confirm password"
+          type={showConfirmPassword ? "text" : "password"}
+          value={form.adminConfirmPassword}
           onChange={(event) =>
-            handleFieldChange("adminPassword", event.target.value)
+            handleFieldChange("adminConfirmPassword", event.target.value)
           }
           autoComplete="new-password"
           disabled={isPending}
-          error={Boolean(fieldErrors.adminPassword)}
-          helperText={
-            fieldErrors.adminPassword ??
-            "At least 12 characters with uppercase, lowercase, number, and symbol."
-          }
+          error={submitted && Boolean(fieldErrors.adminConfirmPassword)}
+          helperText={submitted ? fieldErrors.adminConfirmPassword : ""}
           required
           fullWidth
           size="small"
+          slotProps={{
+            input: {
+              endAdornment: (
+                <InputAdornment position="end">
+                  <IconButton
+                    aria-label="toggle confirm password visibility"
+                    onClick={() => setShowConfirmPassword((show) => !show)}
+                    edge="end"
+                    size="small"
+                  >
+                    {showConfirmPassword ? (
+                      <VisibilityOff fontSize="small" />
+                    ) : (
+                      <Visibility fontSize="small" />
+                    )}
+                  </IconButton>
+                </InputAdornment>
+              ),
+            },
+          }}
         />
       </Stack>
     );
@@ -245,10 +375,9 @@ export default function RegisterPage() {
           Back
         </Button>
         <Button
-          type={isStepFinal ? "submit" : "button"}
+          type="submit"
           variant="contained"
           disabled={isPending}
-          onClick={isStepFinal ? undefined : handleNext}
           sx={{
             minHeight: 40,
             textTransform: "none",
@@ -269,13 +398,12 @@ export default function RegisterPage() {
   return (
     <Container
       maxWidth="md"
-      disableGutters
       sx={{
         minHeight: { xs: "calc(100vh - 160px)", sm: "calc(100vh - 176px)" },
         display: "flex",
         alignItems: "center",
         justifyContent: "center",
-        px: { xs: 0, sm: 2 },
+        px: { xs: 2, sm: 3 },
         py: { xs: 3, sm: 6 },
       }}
     >
@@ -288,12 +416,7 @@ export default function RegisterPage() {
           p: { xs: 3, sm: 4 },
         }}
       >
-        <Box
-          component="form"
-          noValidate
-          onSubmit={handleSubmit}
-          sx={{ width: "100%" }}
-        >
+        <Box sx={{ width: "100%" }}>
           <Stack spacing={3}>
             <Stack spacing={1}>
               <Typography variant="h4" component="h1" sx={{ fontWeight: 500 }}>
@@ -316,15 +439,22 @@ export default function RegisterPage() {
             >
               {steps.map((label, index) => (
                 <Step key={label}>
-                  <StepLabel error={stepHasErrors(index, fieldErrors)}>
+                  <StepLabel
+                    error={submitted && stepHasErrors(index, activeStep, fieldErrors)}
+                  >
                     {label}
                   </StepLabel>
                   {isSmallScreen ? (
                     <StepContent>
-                      <Stack spacing={2} sx={{ pt: 1 }}>
+                      <Box
+                        component="form"
+                        noValidate
+                        onSubmit={index === steps.length - 1 ? handleSubmit : handleNextSubmit}
+                        sx={{ pt: 1, display: "flex", flexDirection: "column", gap: 2 }}
+                      >
                         {renderStepFields(index)}
                         {renderActions(index)}
-                      </Stack>
+                      </Box>
                     </StepContent>
                   ) : null}
                 </Step>
@@ -332,10 +462,15 @@ export default function RegisterPage() {
             </Stepper>
 
             {!isSmallScreen ? (
-              <Stack spacing={2.5}>
+              <Box
+                component="form"
+                noValidate
+                onSubmit={activeStep === steps.length - 1 ? handleSubmit : handleNextSubmit}
+                sx={{ display: "flex", flexDirection: "column", gap: 2.5 }}
+              >
                 {renderStepFields(activeStep)}
                 {renderActions(activeStep)}
-              </Stack>
+              </Box>
             ) : null}
 
             <Typography variant="body2" color="text.secondary" align="center">
@@ -375,16 +510,20 @@ function validateStep(
 
   if (!form.adminPassword) {
     errors.adminPassword = "Password is required.";
-  } else if (form.adminPassword.length < 12) {
+  } else if (!passwordPatterns.length.test(form.adminPassword)) {
     errors.adminPassword = "Password must be at least 12 characters.";
-  } else if (!/[A-Z]/.test(form.adminPassword)) {
+  } else if (!passwordPatterns.uppercase.test(form.adminPassword)) {
     errors.adminPassword = "Password must include at least one uppercase letter.";
-  } else if (!/[a-z]/.test(form.adminPassword)) {
+  } else if (!passwordPatterns.lowercase.test(form.adminPassword)) {
     errors.adminPassword = "Password must include at least one lowercase letter.";
-  } else if (!/[0-9]/.test(form.adminPassword)) {
+  } else if (!passwordPatterns.number.test(form.adminPassword)) {
     errors.adminPassword = "Password must include at least one number.";
-  } else if (!symbolPattern.test(form.adminPassword)) {
+  } else if (!passwordPatterns.symbol.test(form.adminPassword)) {
     errors.adminPassword = "Password must include at least one symbol.";
+  }
+
+  if (form.adminPassword && form.adminConfirmPassword !== form.adminPassword) {
+    errors.adminConfirmPassword = "Passwords do not match.";
   }
 
   return errors;
@@ -396,13 +535,23 @@ function hasErrors(errors: RegisterFieldErrors): boolean {
 
 function stepHasErrors(
   stepIndex: number,
+  activeStep: number,
   errors: RegisterFieldErrors,
 ): boolean {
+  if (stepIndex !== activeStep) {
+    return false;
+  }
+
   if (stepIndex === 0) {
     return Boolean(errors.companyName);
   }
 
-  return Boolean(errors.adminName || errors.adminEmail || errors.adminPassword);
+  return Boolean(
+    errors.adminName ||
+      errors.adminEmail ||
+      errors.adminPassword ||
+      errors.adminConfirmPassword,
+  );
 }
 
 function getRegisterErrorMessage(error: unknown): string {

@@ -118,8 +118,7 @@ export function updateStoredAuthSessionRoles(roles: string[]): void {
 function readLegacyAuthSessionSnapshot(): string | null {
   const legacyToken =
     readWebStorageItem(window.sessionStorage, legacyAuthTokenStorageKey) ??
-    readWebStorageItem(window.localStorage, legacyAuthTokenStorageKey) ??
-    readCookie(authTokenCookieName);
+    readWebStorageItem(window.localStorage, legacyAuthTokenStorageKey);
 
   if (!legacyToken) {
     return null;

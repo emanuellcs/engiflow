@@ -3,6 +3,8 @@
 import AdminPanelSettingsIcon from "@mui/icons-material/AdminPanelSettings";
 import AssignmentTurnedInIcon from "@mui/icons-material/AssignmentTurnedIn";
 import HistoryEduIcon from "@mui/icons-material/HistoryEdu";
+import Visibility from "@mui/icons-material/Visibility";
+import VisibilityOff from "@mui/icons-material/VisibilityOff";
 import Alert from "@mui/material/Alert";
 import Box from "@mui/material/Box";
 import Button from "@mui/material/Button";
@@ -15,6 +17,8 @@ import DialogContent from "@mui/material/DialogContent";
 import DialogContentText from "@mui/material/DialogContentText";
 import DialogTitle from "@mui/material/DialogTitle";
 import FormControlLabel from "@mui/material/FormControlLabel";
+import IconButton from "@mui/material/IconButton";
+import InputAdornment from "@mui/material/InputAdornment";
 import Link from "@mui/material/Link";
 import Stack from "@mui/material/Stack";
 import TextField from "@mui/material/TextField";
@@ -61,6 +65,7 @@ export default function LoginPage() {
   const { login } = useAuth();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [rememberMe, setRememberMe] = useState(true);
   const [fieldErrors, setFieldErrors] = useState<LoginFieldErrors>({});
   const [isPending, setIsPending] = useState(false);
@@ -238,7 +243,7 @@ export default function LoginPage() {
                   name="password"
                   label="Password"
                   variant="outlined"
-                  type="password"
+                  type={showPassword ? "text" : "password"}
                   value={password}
                   onChange={(event) =>
                     handleFieldChange("password", event.target.value)
@@ -250,6 +255,28 @@ export default function LoginPage() {
                   size="small"
                   error={Boolean(fieldErrors.password)}
                   helperText={fieldErrors.password}
+                  slotProps={{
+                    input: {
+                      endAdornment: (
+                        <InputAdornment position="end">
+                          <IconButton
+                            aria-label="toggle password visibility"
+                            onClick={() => setShowPassword((show) => !show)}
+                            onMouseDown={(event) => event.preventDefault()}
+                            onMouseUp={(event) => event.preventDefault()}
+                            edge="end"
+                            size="small"
+                          >
+                            {showPassword ? (
+                              <VisibilityOff fontSize="small" />
+                            ) : (
+                              <Visibility fontSize="small" />
+                            )}
+                          </IconButton>
+                        </InputAdornment>
+                      ),
+                    },
+                  }}
                 />
                 <Box
                   sx={{
