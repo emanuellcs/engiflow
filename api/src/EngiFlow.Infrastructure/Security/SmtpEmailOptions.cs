@@ -38,7 +38,7 @@ public sealed class SmtpEmailOptions
     /// <summary>
     /// Gets or sets the sender email address.
     /// </summary>
-    public string FromEmail { get; set; } = "no-reply@engiflow.local";
+    public string FromEmail { get; set; } = string.Empty;
 
     /// <summary>
     /// Gets or sets the sender display name.

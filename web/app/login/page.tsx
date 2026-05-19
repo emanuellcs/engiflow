@@ -72,6 +72,7 @@ export default function LoginPage() {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [isForgotPasswordOpen, setIsForgotPasswordOpen] = useState(false);
+  const [isFirstAccessOpen, setIsFirstAccessOpen] = useState(false);
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -300,18 +301,35 @@ export default function LoginPage() {
                     }}
                     sx={{ m: 0 }}
                   />
-                  <Link
-                    component="button"
-                    type="button"
-                    variant="body2"
-                    onClick={() => {
-                      setSuccessMessage(null);
-                      setIsForgotPasswordOpen(true);
-                    }}
-                    sx={{ whiteSpace: "nowrap" }}
-                  >
-                    Forgot password?
-                  </Link>
+                  <Box sx={{ display: "flex", gap: 1 }}>
+                    <Link
+                      component="button"
+                      type="button"
+                      variant="body2"
+                      onClick={() => {
+                        setSuccessMessage(null);
+                        setIsForgotPasswordOpen(true);
+                      }}
+                      sx={{ whiteSpace: "nowrap" }}
+                    >
+                      Forgot password?
+                    </Link>
+                    <Typography variant="body2" color="text.disabled">
+                      •
+                    </Typography>
+                    <Link
+                      component="button"
+                      type="button"
+                      variant="body2"
+                      onClick={() => {
+                        setSuccessMessage(null);
+                        setIsFirstAccessOpen(true);
+                      }}
+                      sx={{ whiteSpace: "nowrap" }}
+                    >
+                      First access?
+                    </Link>
+                  </Box>
                 </Box>
               </Stack>
 
@@ -352,7 +370,139 @@ export default function LoginPage() {
           }}
         />
       ) : null}
+
+      {isFirstAccessOpen ? (
+        <FirstAccessDialog
+          open={isFirstAccessOpen}
+          initialEmail={email}
+          onClose={() => setIsFirstAccessOpen(false)}
+          onSuccess={() => {
+            setIsFirstAccessOpen(false);
+            setSuccessMessage("First access instructions sent to your email.");
+            setErrorMessage(null);
+          }}
+        />
+      ) : null}
     </Box>
+  );
+}
+
+type FirstAccessDialogProps = {
+  open: boolean;
+  initialEmail: string;
+  onClose: () => void;
+  onSuccess: () => void;
+};
+
+function FirstAccessDialog({
+  open,
+  initialEmail,
+  onClose,
+  onSuccess,
+}: FirstAccessDialogProps) {
+  const [email, setEmail] = useState(initialEmail);
+  const [fieldError, setFieldError] = useState<string | null>(null);
+  const [submitError, setSubmitError] = useState<string | null>(null);
+  const [isPending, setIsPending] = useState(false);
+
+  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+
+    const nextError = validateEmail(email);
+
+    if (nextError) {
+      setFieldError(nextError);
+      return;
+    }
+
+    setIsPending(true);
+    setFieldError(null);
+    setSubmitError(null);
+
+    try {
+      // Adaptive usage of the reset-password endpoint or placeholder for first-access
+      await apiFetch("/api/auth/first-access", {
+        method: "POST",
+        skipAuth: true,
+        body: {
+          email: email.trim(),
+        },
+      });
+      onSuccess();
+    } catch (error) {
+      setSubmitError(
+        readProblemDetailsMessage(error) ?? "Unable to submit first access request.",
+      );
+    } finally {
+      setIsPending(false);
+    }
+  }
+
+  return (
+    <Dialog
+      open={open}
+      onClose={isPending ? undefined : onClose}
+      slotProps={{
+        paper: {
+          sx: { width: "100%", maxWidth: 440 },
+        },
+      }}
+    >
+      <Box component="form" noValidate onSubmit={handleSubmit}>
+        <DialogTitle>First Access</DialogTitle>
+        <DialogContent sx={{ display: "flex", flexDirection: "column", gap: 2 }}>
+          <DialogContentText>
+            Invited by an admin? Enter your email to receive a secure link to
+            set up your account password.
+          </DialogContentText>
+          {submitError ? (
+            <Alert severity="error">
+              {submitError}
+            </Alert>
+          ) : null}
+          <TextField
+            autoFocus
+            required
+            id="first-access-email"
+            name="email"
+            label="Email"
+            variant="outlined"
+            type="email"
+            value={email}
+            onChange={(event) => {
+              setEmail(event.target.value);
+              setFieldError(null);
+            }}
+            error={Boolean(fieldError)}
+            helperText={fieldError ?? " "}
+            disabled={isPending}
+            fullWidth
+            size="small"
+          />
+        </DialogContent>
+        <DialogActions sx={{ px: 3, pb: 3 }}>
+          <Button
+            onClick={onClose}
+            disabled={isPending}
+            sx={{ textTransform: "none" }}
+          >
+            Cancel
+          </Button>
+          <Button
+            type="submit"
+            variant="contained"
+            disabled={isPending}
+            sx={{ minWidth: 96, textTransform: "none" }}
+          >
+            {isPending ? (
+              <CircularProgress color="inherit" size={18} thickness={5} />
+            ) : (
+              "Send Link"
+            )}
+          </Button>
+        </DialogActions>
+      </Box>
+    </Dialog>
   );
 }
 

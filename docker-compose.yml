@@ -89,7 +89,7 @@ services:
       EngiFlow__Email__Smtp__Host: mailpit
       EngiFlow__Email__Smtp__Port: "1025"
       EngiFlow__Email__Smtp__UseStartTls: "false"
-      EngiFlow__Email__Smtp__FromEmail: no-reply@engiflow.local
+      EngiFlow__Email__Smtp__FromEmail: no-reply@localhost
       EngiFlow__Email__Smtp__FromName: EngiFlow
     ports:
       - "8080:8080"

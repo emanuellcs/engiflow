@@ -18,6 +18,7 @@ using EngiFlow.Application.Users.Dtos;
 using EngiFlow.Application.Users.Notifications;
 using EngiFlow.Application.Users.Queries;
 using EngiFlow.Domain.Companies;
+using Microsoft.Extensions.Configuration;
 using EngiFlow.Domain.Ecos;
 using EngiFlow.Domain.Exceptions;
 using EngiFlow.Domain.Users;
@@ -191,12 +192,17 @@ public sealed class EcoApplicationTests
     public async Task ForgotPasswordCommandHandler_SendsResetEmail()
     {
         var resetEmailSender = new FakePasswordResetEmailSender();
-        var handler = new ForgotPasswordCommandHandler(resetEmailSender);
+        var configuration = new FakeConfiguration(new Dictionary<string, string>
+        {
+            ["App:FrontendBaseUrl"] = "https://acme.example"
+        });
+        var handler = new ForgotPasswordCommandHandler(resetEmailSender, configuration);
 
         await handler.HandleAsync(new ForgotPasswordCommand(" ADA@ACME.EXAMPLE "));
 
         Assert.Equal("ada@acme.example", resetEmailSender.Email);
         Assert.NotNull(resetEmailSender.ResetLink);
+        Assert.StartsWith("https://acme.example/reset-password", resetEmailSender.ResetLink);
         Assert.Contains("ada%40acme.example", resetEmailSender.ResetLink, StringComparison.Ordinal);
         Assert.Contains("mock-", resetEmailSender.ResetLink, StringComparison.Ordinal);
     }
@@ -1162,5 +1168,24 @@ public sealed class EcoApplicationTests
             SaveCount++;
             return Task.FromResult(1);
         }
+    }
+
+    private sealed class FakeConfiguration : IConfiguration
+    {
+        private readonly Dictionary<string, string> _values;
+
+        public FakeConfiguration(Dictionary<string, string> values) => _values = values;
+
+        public string? this[string key]
+        {
+            get => _values.GetValueOrDefault(key);
+            set => throw new NotSupportedException();
+        }
+
+        public IEnumerable<IConfigurationSection> GetChildren() => throw new NotSupportedException();
+
+        public Microsoft.Extensions.Primitives.IChangeToken GetReloadToken() => throw new NotSupportedException();
+
+        public IConfigurationSection GetSection(string key) => throw new NotSupportedException();
     }
 }

@@ -2,6 +2,7 @@ using EngiFlow.Application.Abstractions.Cqrs;
 using EngiFlow.Application.Abstractions.Security;
 using EngiFlow.Application.Auth.Dtos;
 using FluentValidation;
+using Microsoft.Extensions.Configuration;
 
 namespace EngiFlow.Application.Auth.Commands;
 
@@ -37,14 +38,19 @@ public sealed class ForgotPasswordCommandValidator : AbstractValidator<ForgotPas
 public sealed class ForgotPasswordCommandHandler : ICommandHandler<ForgotPasswordCommand, ForgotPasswordResultDto>
 {
     private readonly IPasswordResetEmailSender _resetEmailSender;
+    private readonly IConfiguration _configuration;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="ForgotPasswordCommandHandler"/> class.
     /// </summary>
     /// <param name="resetEmailSender">The email sender used to deliver reset links.</param>
-    public ForgotPasswordCommandHandler(IPasswordResetEmailSender resetEmailSender)
+    /// <param name="configuration">The application configuration.</param>
+    public ForgotPasswordCommandHandler(
+        IPasswordResetEmailSender resetEmailSender,
+        IConfiguration configuration)
     {
         _resetEmailSender = resetEmailSender;
+        _configuration = configuration;
     }
 
     /// <inheritdoc />
@@ -53,7 +59,8 @@ public sealed class ForgotPasswordCommandHandler : ICommandHandler<ForgotPasswor
         CancellationToken cancellationToken = default)
     {
         var normalizedEmail = command.Email.Trim().ToLowerInvariant();
-        var resetLink = $"https://engiflow.local/reset-password?email={Uri.EscapeDataString(normalizedEmail)}&token=mock-{Guid.NewGuid():N}";
+        var baseUrl = _configuration["App:FrontendBaseUrl"]?.TrimEnd('/') ?? "http://localhost:3000";
+        var resetLink = $"{baseUrl}/reset-password?email={Uri.EscapeDataString(normalizedEmail)}&token=mock-{Guid.NewGuid():N}";
 
         await _resetEmailSender.SendPasswordResetAsync(normalizedEmail, resetLink, cancellationToken)
             .ConfigureAwait(false);

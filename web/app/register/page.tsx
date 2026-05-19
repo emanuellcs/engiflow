@@ -102,13 +102,19 @@ export default function RegisterPage() {
     setSubmitted(true);
 
     // Final comprehensive validation
+    const step0Errors = validateStep(0, form);
+    const step1Errors = validateStep(1, form);
     const nextErrors: RegisterFieldErrors = {
-      ...validateStep(0, form),
-      ...validateStep(1, form),
+      ...step0Errors,
+      ...step1Errors,
     };
 
     if (hasErrors(nextErrors)) {
       setFieldErrors(nextErrors);
+      // If Step 0 has errors and we are on Step 1, go back to Step 0
+      if (hasErrors(step0Errors)) {
+        setActiveStep(0);
+      }
       return;
     }
 
@@ -139,31 +145,23 @@ export default function RegisterPage() {
     }
   }
 
+  function handleNextClick() {
+    if (isPending) return;
+    handleNext();
+  }
+
   function handleNextSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (isPending) return;
-
-    // Validate only Step 0 when proceeding
-    const stepErrors = validateStep(0, form);
-    if (hasErrors(stepErrors)) {
-      setFieldErrors(stepErrors);
-      setSubmitted(true);
-      return;
-    }
-
     handleNext();
   }
 
   function handleNext() {
     setErrorMessage(null);
-    setSubmitted(false);
     setActiveStep((current) => Math.min(current + 1, steps.length - 1));
   }
 
   function handleBack() {
-    setFieldErrors({});
     setErrorMessage(null);
-    setSubmitted(false);
     setActiveStep((current) => Math.max(current - 1, 0));
   }
 
@@ -375,9 +373,10 @@ export default function RegisterPage() {
           Back
         </Button>
         <Button
-          type="submit"
+          type={isStepFinal ? "submit" : "button"}
           variant="contained"
           disabled={isPending}
+          onClick={isStepFinal ? undefined : handleNextClick}
           sx={{
             minHeight: 40,
             textTransform: "none",
@@ -440,7 +439,7 @@ export default function RegisterPage() {
               {steps.map((label, index) => (
                 <Step key={label}>
                   <StepLabel
-                    error={submitted && stepHasErrors(index, activeStep, fieldErrors)}
+                    error={submitted && stepHasErrors(index, fieldErrors)}
                   >
                     {label}
                   </StepLabel>
@@ -462,15 +461,23 @@ export default function RegisterPage() {
             </Stepper>
 
             {!isSmallScreen ? (
-              <Box
-                component="form"
-                noValidate
-                onSubmit={activeStep === steps.length - 1 ? handleSubmit : handleNextSubmit}
-                sx={{ display: "flex", flexDirection: "column", gap: 2.5 }}
-              >
-                {renderStepFields(activeStep)}
-                {renderActions(activeStep)}
-              </Box>
+              <>
+                {steps.map((label, index) => {
+                  if (activeStep !== index) return null;
+                  return (
+                    <Box
+                      key={label}
+                      component="form"
+                      noValidate
+                      onSubmit={index === steps.length - 1 ? handleSubmit : handleNextSubmit}
+                      sx={{ display: "flex", flexDirection: "column", gap: 2.5 }}
+                    >
+                      {renderStepFields(index)}
+                      {renderActions(index)}
+                    </Box>
+                  );
+                })}
+              </>
             ) : null}
 
             <Typography variant="body2" color="text.secondary" align="center">
@@ -491,15 +498,22 @@ function validateStep(
   form: RegisterFormState,
 ): RegisterFieldErrors {
   if (stepIndex === 0) {
-    return form.companyName.trim()
-      ? {}
-      : { companyName: "Company name is required." };
+    if (!form.companyName.trim()) {
+      return { companyName: "Company name is required." };
+    }
+    // RegEx: At least 2 characters, supports unicode letters, numbers, spaces, and basic punctuation
+    if (!/^[\p{L}\p{N}\s.,&'-]{2,}$/u.test(form.companyName.trim())) {
+      return { companyName: "Enter a valid company name (min 2 characters)." };
+    }
+    return {};
   }
 
   const errors: RegisterFieldErrors = {};
 
   if (!form.adminName.trim()) {
     errors.adminName = "Full name is required.";
+  } else if (!/^[\p{L}\s.'-]{2,}$/u.test(form.adminName.trim())) {
+    errors.adminName = "Enter a valid name (min 2 characters).";
   }
 
   if (!form.adminEmail.trim()) {
@@ -535,13 +549,8 @@ function hasErrors(errors: RegisterFieldErrors): boolean {
 
 function stepHasErrors(
   stepIndex: number,
-  activeStep: number,
   errors: RegisterFieldErrors,
 ): boolean {
-  if (stepIndex !== activeStep) {
-    return false;
-  }
-
   if (stepIndex === 0) {
     return Boolean(errors.companyName);
   }
