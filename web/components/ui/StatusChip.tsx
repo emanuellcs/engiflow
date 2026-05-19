@@ -52,6 +52,7 @@ export default function StatusChip({ status }: StatusChipProps) {
       variant={status === "Draft" ? "outlined" : "filled"}
       sx={{
         minWidth: 104,
+        height: 34,
         fontWeight: 500,
         ...chipSxByStatus[status],
       }}

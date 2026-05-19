@@ -416,7 +416,7 @@ function EcoDashboard() {
             />
           </Box>
 
-          <Box sx={{ flexGrow: 1, width: "100%", minHeight: 0 }}>
+          <Box sx={{ flexGrow: 1, width: "100%", minHeight: 400 }}>
             <DataGrid
               rows={rows}
               columns={columns}

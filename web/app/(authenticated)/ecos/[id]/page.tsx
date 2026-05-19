@@ -26,6 +26,7 @@ import CircularProgress from "@mui/material/CircularProgress";
 import Dialog from "@mui/material/Dialog";
 import DialogActions from "@mui/material/DialogActions";
 import DialogContent from "@mui/material/DialogContent";
+import DialogContentText from "@mui/material/DialogContentText";
 import DialogTitle from "@mui/material/DialogTitle";
 import Divider from "@mui/material/Divider";
 import Drawer from "@mui/material/Drawer";
@@ -375,7 +376,7 @@ export default function EcoDetailsPage() {
               </span>
             </Tooltip>
             <PriorityChip priority={eco.priority} />
-            <Chip size="small" label={`ECO ${formatShortId(eco.id)}`} variant="outlined" sx={{ height: 34 }} />
+            <Chip size="small" label={`ECO ${formatShortId(eco.id)}`} variant="outlined" sx={{ height: 34, border: 1, borderColor: "divider" }} />
           </Stack>
         </Stack>
       </Stack>
@@ -388,7 +389,18 @@ export default function EcoDetailsPage() {
       ) : null}
 
       {/* 2. Tabs Shell */}
-      <Paper elevation={1} sx={{ display: "flex", flexDirection: "column", flexGrow: 1, minHeight: 0 }}>
+      <Paper
+        elevation={0}
+        variant="outlined"
+        sx={{
+          display: "flex",
+          flexDirection: "column",
+          flexGrow: 1,
+          minHeight: 0,
+          border: 1,
+          borderColor: "divider",
+        }}
+      >
         <Tabs
           value={activeTab}
           onChange={(_, value: TabKey) => setActiveTab(value)}
@@ -581,7 +593,7 @@ function ConversationTab({
       <Grid size={{ xs: 12, md: 8 }}>
         <Stack spacing={3}>
           {/* A. Change Summary */}
-          <Card elevation={0} variant="outlined">
+          <Card elevation={0} variant="outlined" sx={{ border: 1, borderColor: "divider" }}>
             <CardContent>
               <Stack spacing={2}>
                 <Typography variant="h6" component="h2" sx={{ fontSize: "1.1rem", fontWeight: 600 }}>
@@ -594,38 +606,35 @@ function ConversationTab({
           </Card>
 
           {/* B. Vertical Timeline */}
-          <Box sx={{ position: "relative", pl: { xs: 2, md: 4 } }}>
-            {/* The vertical connector line */}
-            <Box
-              sx={{
-                position: "absolute",
-                left: { xs: 11, md: 27 },
-                top: 0,
-                bottom: 0,
-                width: 2,
-                bgcolor: "divider",
-                zIndex: 0,
-              }}
-            />
-            <Stack spacing={2.5}>
-              {timeline.map((entry) =>
-                entry.type === "comment" ? (
+          <Stack spacing={0} sx={{ position: "relative" }}>
+            {timeline.map((entry) => (
+              <TimelineItemContainer
+                key={entry.type === "comment" ? `comment-${entry.comment.id}` : `event-${entry.event.id}`}
+                icon={
+                  entry.type === "comment" ? (
+                    <Avatar sx={{ width: 20, height: 20, fontSize: 10 }}>
+                      {getInitials(usersById.get(entry.comment.authorUserId)?.name ?? "U")}
+                    </Avatar>
+                  ) : (
+                    <TimelineIcon sx={{ fontSize: 14, color: "text.secondary" }} />
+                  )
+                }
+              >
+                {entry.type === "comment" ? (
                   <CommentCard
-                    key={`comment-${entry.comment.id}`}
                     comment={entry.comment}
                     highlighted={highlightedCommentId === entry.comment.id}
                     user={usersById.get(entry.comment.authorUserId)}
                   />
                 ) : (
                   <SystemEventRow
-                    key={`event-${entry.event.id}`}
                     event={entry.event}
                     user={usersById.get(entry.event.actorUserId)}
                   />
-                ),
-              )}
-            </Stack>
-          </Box>
+                )}
+              </TimelineItemContainer>
+            ))}
+          </Stack>
 
           {/* C. Action Area (Composer + Workflow Actions) */}
           <ActionArea
@@ -654,7 +663,7 @@ function ConversationTab({
             reviewRound={eco.reviewRound}
             usersById={usersById}
           />
-          <Card elevation={0} variant="outlined">
+          <Card elevation={0} variant="outlined" sx={{ border: 1, borderColor: "divider" }}>
             <CardContent>
               <Typography variant="overline" color="text.secondary" sx={{ fontWeight: 600 }}>
                 Metadata
@@ -675,6 +684,39 @@ function ConversationTab({
         </Stack>
       </Grid>
     </Grid>
+  );
+}
+
+/**
+ * A container that handles the visual timeline separator (dot + connector).
+ */
+function TimelineItemContainer({ children, icon }: { children: ReactNode; icon?: ReactNode }) {
+  return (
+    <Stack direction="row" spacing={2}>
+      <Stack sx={{ alignItems: "center", width: 24, flexShrink: 0 }}>
+        <Box sx={{ width: 2, height: 12, bgcolor: "divider" }} />
+        <Box
+          sx={{
+            width: 24,
+            height: 24,
+            borderRadius: "50%",
+            bgcolor: "background.paper",
+            border: 1,
+            borderColor: "divider",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            flexShrink: 0,
+            zIndex: 1,
+            boxShadow: 1,
+          }}
+        >
+          {icon ?? <Box sx={{ width: 8, height: 8, borderRadius: "50%", bgcolor: "divider" }} />}
+        </Box>
+        <Box sx={{ width: 2, flexGrow: 1, bgcolor: "divider" }} />
+      </Stack>
+      <Box sx={{ flexGrow: 1, pb: 3, pt: 1.5 }}>{children}</Box>
+    </Stack>
   );
 }
 
@@ -711,6 +753,13 @@ function ActionArea({
   const { user } = useAuth();
   const [isRequestChangesOpen, setIsRequestChangesOpen] = useState(false);
   const [wantsToChangeVote, setWantsToChangeVote] = useState(false);
+  const [confirmation, setConfirmation] = useState<{
+    open: boolean;
+    title: string;
+    message: string;
+    onConfirm: () => void;
+    color?: "primary" | "error" | "success";
+  }>({ open: false, title: "", message: "", onConfirm: () => {} });
 
   const currentVote = useMemo(() => {
     return eco.approvals.find(
@@ -726,8 +775,17 @@ function ActionArea({
 
   const disableActions = isBlocked || Boolean(pendingAction);
 
+  const confirmAction = (
+    title: string,
+    message: string,
+    onConfirm: () => void,
+    color: "primary" | "error" | "success" = "primary",
+  ) => {
+    setConfirmation({ open: true, title, message, onConfirm, color });
+  };
+
   return (
-    <Card elevation={1} sx={{ borderTop: 4, borderColor: "primary.main" }}>
+    <Card elevation={0} variant="outlined" sx={{ borderTop: 4, borderTopColor: "primary.main", border: 1, borderColor: "divider" }}>
       <CardContent>
         <Stack spacing={2.5}>
           {/* Workflow Buttons Area */}
@@ -740,6 +798,8 @@ function ActionArea({
               bgcolor: "action.hover",
               p: 1.5,
               borderRadius: 1,
+              border: 1,
+              borderColor: "divider",
             }}
           >
             <Box>
@@ -768,7 +828,13 @@ function ActionArea({
                   icon={<SendIcon />}
                   isPending={pendingAction === "submit"}
                   label="Submit for Review"
-                  onClick={onSubmit}
+                  onClick={() =>
+                    confirmAction(
+                      "Submit ECO",
+                      "Are you sure you want to submit this Engineering Change Order for review? Once submitted, the affected items will be locked for editing.",
+                      onSubmit,
+                    )
+                  }
                   variant="contained"
                 />
               ) : null}
@@ -776,10 +842,12 @@ function ActionArea({
               {showVoteIndicator && currentVote && (
                 <Stack direction="row" spacing={1} sx={{ alignItems: "center" }}>
                   <Chip
+                    size="small"
                     icon={currentVote.decision === "Approve" ? <CheckCircleIcon /> : <ErrorOutlineIcon />}
                     label={currentVote.decision === "Approve" ? "Approved" : "Changes Requested"}
                     color={currentVote.decision === "Approve" ? "success" : "warning"}
                     variant="outlined"
+                    sx={{ border: 1, borderColor: "divider" }}
                   />
                   <Button
                     size="small"
@@ -795,19 +863,26 @@ function ActionArea({
                 <>
                   <ActionButton
                     color="success"
-                    disabled={disableActions}
+                    disabled={disableActions || currentVote?.decision === "Approve"}
                     icon={<CheckCircleIcon />}
                     isPending={pendingAction === "approve"}
                     label="Approve"
                     onClick={() => {
-                      onApprove();
-                      setWantsToChangeVote(false);
+                      confirmAction(
+                        "Approve ECO",
+                        "Are you sure you want to approve this Engineering Change Order?",
+                        () => {
+                          onApprove();
+                          setWantsToChangeVote(false);
+                        },
+                        "success",
+                      );
                     }}
                     variant="contained"
                   />
                   <ActionButton
                     color="warning"
-                    disabled={disableActions}
+                    disabled={disableActions || currentVote?.decision === "RequestChanges"}
                     icon={<ErrorOutlineIcon />}
                     isPending={pendingAction === "requestChanges"}
                     label="Request Changes"
@@ -834,7 +909,14 @@ function ActionArea({
                   icon={<CancelIcon />}
                   isPending={pendingAction === "cancel"}
                   label="Cancel ECO"
-                  onClick={onCancel}
+                  onClick={() =>
+                    confirmAction(
+                      "Cancel ECO",
+                      "Are you sure you want to cancel this ECO? This action is permanent and will move the ECO to a terminal Canceled state.",
+                      onCancel,
+                      "error",
+                    )
+                  }
                   variant="outlined"
                 />
               ) : null}
@@ -864,6 +946,18 @@ function ActionArea({
           onRequestChanges(comment);
           setWantsToChangeVote(false);
         }}
+      />
+
+      <ConfirmationDialog
+        open={confirmation.open}
+        title={confirmation.title}
+        message={confirmation.message}
+        onClose={() => setConfirmation({ ...confirmation, open: false })}
+        onConfirm={() => {
+          setConfirmation({ ...confirmation, open: false });
+          confirmation.onConfirm();
+        }}
+        color={confirmation.color}
       />
     </Card>
   );
@@ -900,6 +994,43 @@ function ActionButton({
     >
       {isPending ? <CircularProgress color="inherit" size={20} thickness={5} /> : label}
     </Button>
+  );
+}
+
+function ConfirmationDialog({
+  open,
+  title,
+  message,
+  onClose,
+  onConfirm,
+  color = "primary",
+}: {
+  open: boolean;
+  title: string;
+  message: string;
+  onClose: () => void;
+  onConfirm: () => void;
+  color?: "primary" | "error" | "success";
+}) {
+  return (
+    <Dialog open={open} onClose={onClose}>
+      <DialogTitle>{title}</DialogTitle>
+      <DialogContent>
+        <DialogContentText>{message}</DialogContentText>
+      </DialogContent>
+      <DialogActions sx={{ px: 3, pb: 2 }}>
+        <Button onClick={onClose} sx={{ textTransform: "none" }}>Cancel</Button>
+        <Button
+          onClick={onConfirm}
+          color={color}
+          variant="contained"
+          sx={{ textTransform: "none" }}
+          autoFocus
+        >
+          Confirm
+        </Button>
+      </DialogActions>
+    </Dialog>
   );
 }
 
@@ -992,7 +1123,7 @@ function ReviewersWidget({
   ).length;
 
   return (
-    <Card elevation={0} variant="outlined">
+    <Card elevation={0} variant="outlined" sx={{ border: 1, borderColor: "divider" }}>
       <CardContent>
         <Stack spacing={2}>
           <Stack spacing={0.5}>
@@ -1037,6 +1168,7 @@ function ReviewersWidget({
                 label={`${formatShortId(approval.approverUserId)}: ${formatDecisionLabel(
                   approval.decision,
                 )}`}
+                sx={{ border: 1, borderColor: "divider" }}
               />
             ))}
         </Stack>
@@ -1059,10 +1191,11 @@ function CommentCard({
   return (
     <Card
       id={`comment-${comment.id}`}
-      elevation={highlighted ? 3 : 1}
+      elevation={0}
+      variant="outlined"
       sx={{
-        border: highlighted ? 1 : undefined,
-        borderColor: highlighted ? "primary.main" : undefined,
+        border: 1,
+        borderColor: highlighted ? "primary.main" : "divider",
         scrollMarginTop: 128,
         zIndex: 1,
       }}
@@ -1075,7 +1208,7 @@ function CommentCard({
             sx={{ alignItems: "center", justifyContent: "space-between" }}
           >
             <Stack direction="row" spacing={1} sx={{ alignItems: "center", minWidth: 0 }}>
-              <Avatar sx={{ width: 32, height: 32, fontSize: 13 }}>
+              <Avatar sx={{ width: 32, height: 32, fontSize: 13, border: 1, borderColor: "divider" }}>
                 {getInitials(authorName)}
               </Avatar>
               <Stack sx={{ minWidth: 0 }}>
@@ -1119,22 +1252,6 @@ function SystemEventRow({
         position: "relative",
       }}
     >
-      <Box
-        sx={{
-          width: 24,
-          height: 24,
-          borderRadius: "50%",
-          bgcolor: "background.paper",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          border: 1,
-          borderColor: "divider",
-          boxShadow: 1,
-        }}
-      >
-        <TimelineIcon sx={{ fontSize: 14 }} />
-      </Box>
       <Typography variant="body2" sx={{ flexGrow: 1 }}>
         <strong>{eventLabelByType[event.eventType]}</strong>
         {" by "}
@@ -1220,9 +1337,10 @@ function CommentComposer({
           fullWidth
           disabled={isBlocked || isSubmitting}
           slotProps={{ htmlInput: { maxLength: maximumCommentLength } }}
+          sx={{ "& .MuiOutlinedInput-root": { border: 1, borderColor: "divider" } }}
         />
       ) : (
-        <Paper variant="outlined" sx={{ minHeight: 148, p: 2 }}>
+        <Paper variant="outlined" sx={{ minHeight: 148, p: 2, border: 1, borderColor: "divider" }}>
           {draft.trim() ? (
             <RichTextRenderer value={draft} />
           ) : (
@@ -1251,7 +1369,7 @@ function CommentComposer({
             startIcon={<AttachFileIcon />}
             disabled={isBlocked || isUploading}
             onClick={() => fileInputRef.current?.click()}
-            sx={{ textTransform: "none" }}
+            sx={{ textTransform: "none", border: 1, borderColor: "divider" }}
           >
             {isUploading ? "Uploading" : "Attach file"}
           </Button>
@@ -1297,6 +1415,10 @@ function AffectedItemsTab({
   pendingAction,
 }: AffectedItemsTabProps) {
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
+  const [confirmation, setConfirmation] = useState<{ open: boolean; itemId: string | null }>({
+    open: false,
+    itemId: null,
+  });
 
   const CustomToolbar = useMemo(() => {
     return function AffectedItemsCustomToolbar(props: GridToolbarProps) {
@@ -1310,13 +1432,12 @@ function AffectedItemsTab({
     };
   }, [isLoading, loadEcoDetails]);
 
-  const columns = useMemo<GridColDef<EcoAffectedItemDto>[]>(
-    () => [
+  const columns = useMemo<GridColDef<EcoAffectedItemDto>[]>(() => {
+    const baseColumns: GridColDef<EcoAffectedItemDto>[] = [
       {
         field: "partNumber",
         headerName: "Part Number",
-        minWidth: 160,
-        flex: 1,
+        width: 160,
         headerAlign: "left",
         align: "left",
         renderCell: (params) => (
@@ -1330,8 +1451,8 @@ function AffectedItemsTab({
       {
         field: "description",
         headerName: "Description",
-        minWidth: 240,
-        flex: 1.5,
+        minWidth: 200,
+        flex: 1,
         headerAlign: "left",
         align: "left",
         renderCell: (params) => (
@@ -1345,7 +1466,7 @@ function AffectedItemsTab({
       {
         field: "currentRevision",
         headerName: "Current Rev",
-        minWidth: 130,
+        width: 110,
         headerAlign: "center",
         align: "center",
         renderCell: (params) => (
@@ -1357,28 +1478,25 @@ function AffectedItemsTab({
         ),
       },
       {
-        field: "arrow",
-        headerName: "",
-        width: 72,
-        sortable: false,
-        headerAlign: "center",
-        align: "center",
-        renderCell: () => (
-          <Box sx={{ display: "flex", alignItems: "center", justifyContent: "center", height: "100%", width: "100%" }}>
-            <Typography variant="body2" color="text.secondary">
-              {"->"}
-            </Typography>
-          </Box>
-        ),
-      },
-      {
         field: "newRevision",
         headerName: "New Rev",
-        minWidth: 120,
+        width: 130,
         headerAlign: "center",
         align: "center",
         renderCell: (params) => (
-          <Box sx={{ display: "flex", alignItems: "center", height: "100%" }}>
+          <Box
+            sx={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              height: "100%",
+              width: "100%",
+              gap: 1.5,
+            }}
+          >
+            <Typography variant="body2" color="text.secondary" sx={{ opacity: 0.5 }}>
+              {"->"}
+            </Typography>
             <Typography variant="body2" sx={{ fontWeight: 600 }}>
               {params.value}
             </Typography>
@@ -1388,7 +1506,7 @@ function AffectedItemsTab({
       {
         field: "action",
         headerName: "Action",
-        minWidth: 130,
+        width: 140,
         headerAlign: "center",
         align: "center",
         renderCell: (params) => (
@@ -1397,34 +1515,44 @@ function AffectedItemsTab({
           </Box>
         ),
       },
-      {
+    ];
+
+    if (canEdit) {
+      baseColumns.push({
         field: "remove",
-        headerName: "",
-        width: 76,
+        headerName: "Actions",
+        width: 100,
         sortable: false,
         headerAlign: "center",
         align: "center",
         renderCell: (params) => (
-          <Box sx={{ display: "flex", alignItems: "center", justifyContent: "center", height: "100%", width: "100%" }}>
-            {canEdit ? (
-              <Tooltip title="Remove item">
-                <span>
-                  <IconButton
-                    size="small"
-                    disabled={isBlocked || pendingAction === "removeItem"}
-                    onClick={() => onRemoveItem(params.row.id)}
-                  >
-                    <DeleteIcon fontSize="small" />
-                  </IconButton>
-                </span>
-              </Tooltip>
-            ) : null}
+          <Box
+            sx={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              height: "100%",
+              width: "100%",
+            }}
+          >
+            <Tooltip title="Remove item">
+              <span>
+                <IconButton
+                  size="small"
+                  disabled={isBlocked || pendingAction === "removeItem"}
+                  onClick={() => setConfirmation({ open: true, itemId: params.row.id })}
+                >
+                  <DeleteIcon fontSize="small" />
+                </IconButton>
+              </span>
+            </Tooltip>
           </Box>
         ),
-      },
-    ],
-    [canEdit, isBlocked, onRemoveItem, pendingAction],
-  );
+      });
+    }
+
+    return baseColumns;
+  }, [canEdit, isBlocked, pendingAction]);
 
   return (
     <Stack spacing={2}>
@@ -1440,7 +1568,7 @@ function AffectedItemsTab({
           Add Item
         </Button>
       ) : null}
-      <Box sx={{ width: "100%", minHeight: 300 }}>
+      <Box sx={{ width: "100%", height: 480, border: 1, borderColor: "divider", borderRadius: 2, overflow: "hidden", bgcolor: "background.paper" }}>
         <DataGrid
           rows={eco.affectedItems}
           columns={columns}
@@ -1461,9 +1589,11 @@ function AffectedItemsTab({
             ),
           }}
           sx={{
-            borderColor: "divider",
-            bgcolor: "background.paper",
-            borderRadius: 2,
+            height: "100%",
+            border: 0,
+            "& .MuiDataGrid-main": {
+              borderColor: "divider",
+            },
             "& .MuiDataGrid-columnHeaders": {
               bgcolor: "action.hover",
               borderBottom: 1,
@@ -1492,6 +1622,19 @@ function AffectedItemsTab({
           }}
         />
       ) : null}
+      <ConfirmationDialog
+        open={confirmation.open}
+        title="Remove Affected Item"
+        message="Are you sure you want to remove this item from the ECO?"
+        onClose={() => setConfirmation({ open: false, itemId: null })}
+        onConfirm={() => {
+          if (confirmation.itemId) {
+            onRemoveItem(confirmation.itemId);
+          }
+          setConfirmation({ open: false, itemId: null });
+        }}
+        color="error"
+      />
     </Stack>
   );
 }
@@ -1621,7 +1764,7 @@ function AffectedItemActionChip({ action }: { action: EcoAffectedItemAction }) {
     Remove: { bgcolor: "rgba(211, 47, 47, 0.12)", color: "error.dark" },
   };
 
-  return <Chip label={labelByAction[action]} size="small" sx={sxByAction[action]} />;
+  return <Chip label={labelByAction[action]} size="small" sx={{ ...sxByAction[action], border: 1, borderColor: "divider" }} />;
 }
 
 function FilesTab({
@@ -1665,6 +1808,7 @@ function FilesTab({
                   width: "100%",
                   cursor: "pointer",
                   bgcolor: "background.paper",
+                  border: 1,
                   borderColor: "divider",
                   "&:hover": { bgcolor: "action.hover" },
                 }}
@@ -1740,7 +1884,7 @@ function AttachmentDrawer({
       anchor="right"
       open={Boolean(attachment)}
       onClose={onClose}
-      slotProps={{ paper: { sx: { width: { xs: "100%", sm: 500 } } } }}
+      slotProps={{ paper: { sx: { width: { xs: "100%", sm: 500 }, borderLeft: 1, borderColor: "divider" } } }}
     >
       <Stack spacing={2.5} sx={{ p: 3 }}>
         <Stack direction="row" sx={{ alignItems: "center", justifyContent: "space-between" }}>

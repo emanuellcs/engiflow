@@ -47,6 +47,7 @@ export default function PriorityChip({ priority }: PriorityChipProps) {
       variant="outlined"
       sx={{
         minWidth: 76,
+        height: 34,
         fontWeight: 500,
         ...chipSxByPriority[priority],
       }}
