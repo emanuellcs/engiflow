@@ -19,6 +19,7 @@ internal static class UserMappingExtensions
             user.DisplayName,
             user.Email,
             user.Role.ToString(),
+            user.Status.ToString(),
             user.LastLoginAt);
     }
 }

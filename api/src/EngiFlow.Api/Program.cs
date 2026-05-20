@@ -39,6 +39,8 @@ builder.Services
         options.JsonSerializerOptions.Converters.Add(new JsonStringEnumConverter<EcoAffectedItemAction>(allowIntegerValues: false));
         options.JsonSerializerOptions.Converters.Add(new JsonStringEnumConverter<EcoApprovalDecision>(allowIntegerValues: false));
         options.JsonSerializerOptions.Converters.Add(new JsonStringEnumConverter<UserRole>(allowIntegerValues: false));
+        options.JsonSerializerOptions.Converters.Add(new JsonStringEnumConverter<UserStatus>(allowIntegerValues: false));
+        options.JsonSerializerOptions.Converters.Add(new JsonStringEnumConverter<PasswordSetupTokenPurpose>(allowIntegerValues: false));
     });
 builder.Services.AddCors(options =>
 {
@@ -65,6 +67,7 @@ builder.Services.AddOptions<DevelopmentSeedOptions>()
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddScoped<ITenantProvider, HttpContextTenantProvider>();
 builder.Services.AddScoped<IJwtTokenService, JwtTokenService>();
+builder.Services.AddScoped<IPreAuthTokenService, PreAuthTokenService>();
 builder.Services.AddScoped<INotificationHandler<EcoChangedNotification>, EcoDomainEventHandler>();
 builder.Services.AddScoped<INotificationHandler<UserPermissionsChangedNotification>, UserSecurityNotificationHandler>();
 builder.Services.AddScoped<INotificationHandler<UserDeactivatedNotification>, UserSecurityNotificationHandler>();
@@ -78,6 +81,7 @@ builder.Services.AddSignalR()
         options.PayloadSerializerOptions.Converters.Add(new JsonStringEnumConverter<EcoEventType>(allowIntegerValues: false));
         options.PayloadSerializerOptions.Converters.Add(new JsonStringEnumConverter<EcoAffectedItemAction>(allowIntegerValues: false));
         options.PayloadSerializerOptions.Converters.Add(new JsonStringEnumConverter<EcoApprovalDecision>(allowIntegerValues: false));
+        options.PayloadSerializerOptions.Converters.Add(new JsonStringEnumConverter<UserStatus>(allowIntegerValues: false));
     });
 builder.Services
     .AddAuthentication(JwtBearerDefaults.AuthenticationScheme)

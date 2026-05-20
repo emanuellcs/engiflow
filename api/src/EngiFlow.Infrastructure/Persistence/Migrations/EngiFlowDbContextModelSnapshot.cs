@@ -28,6 +28,11 @@ namespace EngiFlow.Infrastructure.Persistence.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("id");
 
+                    b.Property<string>("ContactEmail")
+                        .HasMaxLength(320)
+                        .HasColumnType("character varying(320)")
+                        .HasColumnName("contact_email");
+
                     b.Property<DateTimeOffset>("CreatedAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("created_at");
@@ -441,6 +446,55 @@ namespace EngiFlow.Infrastructure.Persistence.Migrations
                         });
                 });
 
+            modelBuilder.Entity("EngiFlow.Domain.Users.PasswordSetupToken", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTimeOffset?>("ConsumedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("consumed_at");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<DateTimeOffset>("ExpiresAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("expires_at");
+
+                    b.Property<string>("Purpose")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasColumnName("purpose");
+
+                    b.Property<string>("TokenHash")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)")
+                        .HasColumnName("token_hash");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("user_id");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("TokenHash")
+                        .IsUnique()
+                        .HasDatabaseName("ux_password_setup_tokens_token_hash");
+
+                    b.HasIndex("UserId", "Purpose", "ExpiresAt")
+                        .HasDatabaseName("ix_password_setup_tokens_user_id_purpose_expires_at");
+
+                    b.ToTable("password_setup_tokens", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_password_setup_tokens_purpose", "\"purpose\" IN ('Invitation', 'Reset')");
+                        });
+                });
+
             modelBuilder.Entity("EngiFlow.Domain.Users.User", b =>
                 {
                     b.Property<Guid>("Id")
@@ -471,16 +525,11 @@ namespace EngiFlow.Infrastructure.Persistence.Migrations
                         .HasColumnType("character varying(320)")
                         .HasColumnName("email");
 
-                    b.Property<bool>("IsActive")
-                        .HasColumnType("boolean")
-                        .HasColumnName("is_active");
-
                     b.Property<DateTimeOffset?>("LastLoginAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("last_login_at");
 
                     b.Property<string>("PasswordHash")
-                        .IsRequired()
                         .HasMaxLength(512)
                         .HasColumnType("character varying(512)")
                         .HasColumnName("password_hash");
@@ -491,14 +540,16 @@ namespace EngiFlow.Infrastructure.Persistence.Migrations
                         .HasColumnType("character varying(32)")
                         .HasColumnName("role");
 
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasColumnName("status");
+
                     b.HasKey("Id");
 
                     b.HasAlternateKey("Id", "CompanyId")
                         .HasName("ak_users_id_company_id");
-
-                    b.HasIndex("Email")
-                        .IsUnique()
-                        .HasDatabaseName("ux_users_email");
 
                     b.HasIndex("CompanyId", "Email")
                         .IsUnique()
@@ -507,9 +558,62 @@ namespace EngiFlow.Infrastructure.Persistence.Migrations
                     b.HasIndex("CompanyId", "Role")
                         .HasDatabaseName("ix_users_company_id_role");
 
+                    b.HasIndex("CompanyId", "Status")
+                        .HasDatabaseName("ix_users_company_id_status");
+
                     b.ToTable("users", null, t =>
                         {
                             t.HasCheckConstraint("ck_users_role", "\"role\" IN ('Owner', 'Administrator', 'Approver', 'Requester', 'Viewer')");
+
+                            t.HasCheckConstraint("ck_users_status", "\"status\" IN ('PendingActivation', 'Active', 'Deactivated')");
+                        });
+                });
+
+            modelBuilder.Entity("EngiFlow.Domain.Users.UserEvent", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<Guid>("ActorId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("actor_id");
+
+                    b.Property<Guid>("CompanyId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("company_id");
+
+                    b.Property<string>("EventType")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("event_type");
+
+                    b.Property<DateTimeOffset>("OccurredAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("occurred_at");
+
+                    b.Property<string>("Reason")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)")
+                        .HasColumnName("reason");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("user_id");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ActorId", "CompanyId");
+
+                    b.HasIndex("UserId", "CompanyId");
+
+                    b.HasIndex("CompanyId", "UserId", "OccurredAt")
+                        .HasDatabaseName("ix_user_events_company_id_user_id_occurred_at");
+
+                    b.ToTable("user_events", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_user_events_event_type", "\"event_type\" IN ('UserInvited', 'UserActivated', 'UserDeactivated', 'UserReactivated', 'PasswordResetRequested', 'FirstAccessInvitationResent')");
                         });
                 });
 
@@ -617,11 +721,37 @@ namespace EngiFlow.Infrastructure.Persistence.Migrations
                         .IsRequired();
                 });
 
+            modelBuilder.Entity("EngiFlow.Domain.Users.PasswordSetupToken", b =>
+                {
+                    b.HasOne("EngiFlow.Domain.Users.User", null)
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
             modelBuilder.Entity("EngiFlow.Domain.Users.User", b =>
                 {
                     b.HasOne("EngiFlow.Domain.Companies.Company", null)
                         .WithMany("Users")
                         .HasForeignKey("CompanyId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("EngiFlow.Domain.Users.UserEvent", b =>
+                {
+                    b.HasOne("EngiFlow.Domain.Users.User", null)
+                        .WithMany()
+                        .HasForeignKey("ActorId", "CompanyId")
+                        .HasPrincipalKey("Id", "CompanyId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("EngiFlow.Domain.Users.User", null)
+                        .WithMany()
+                        .HasForeignKey("UserId", "CompanyId")
+                        .HasPrincipalKey("Id", "CompanyId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
                 });

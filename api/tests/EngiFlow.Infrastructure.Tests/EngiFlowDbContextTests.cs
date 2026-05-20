@@ -163,18 +163,59 @@ public sealed class EngiFlowDbContextTests
     }
 
     [Fact]
-    public void UserModel_StoresPasswordHashAndUsesGlobalEmailIndex()
+    public void UserModel_StoresNullablePasswordHashStatusAndTenantScopedEmailIndex()
     {
         using var context = CreateContext(Guid.NewGuid().ToString(), CompanyId.New());
         var userEntity = context.Model.FindEntityType(typeof(User))!;
         var passwordHash = userEntity.FindProperty(nameof(User.PasswordHash))!;
+        var status = userEntity.FindProperty(nameof(User.Status))!;
 
         Assert.Equal(typeof(string), passwordHash.ClrType);
-        Assert.False(passwordHash.IsNullable);
+        Assert.True(passwordHash.IsNullable);
         Assert.Equal(512, passwordHash.GetMaxLength());
+        Assert.Equal(typeof(string), GetProviderClrType(status));
+        Assert.Equal(32, status.GetMaxLength());
         Assert.Contains(
             userEntity.GetIndexes(),
-            index => index.GetDatabaseName() == "ux_users_email" && index.IsUnique);
+            index => index.GetDatabaseName() == "ux_users_company_id_email" &&
+                index.IsUnique &&
+                index.Properties.Select(property => property.Name).SequenceEqual(new[]
+                {
+                    nameof(User.CompanyId),
+                    nameof(User.Email)
+                }));
+        Assert.DoesNotContain(
+            userEntity.GetIndexes(),
+            index => index.GetDatabaseName() == "ux_users_email");
+    }
+
+    [Fact]
+    public void UserLifecycleModels_MapAuditEventsAndSetupTokens()
+    {
+        using var context = CreateContext(Guid.NewGuid().ToString(), CompanyId.New());
+        var userEventEntity = context.Model.FindEntityType(typeof(UserEvent))!;
+        var setupTokenEntity = context.Model.FindEntityType(typeof(PasswordSetupToken))!;
+
+        Assert.Equal("user_events", userEventEntity.GetTableName());
+        Assert.Equal("password_setup_tokens", setupTokenEntity.GetTableName());
+        Assert.Equal(
+            typeof(Guid),
+            GetProviderClrType(userEventEntity.FindProperty(nameof(UserEvent.UserId))!));
+        Assert.Equal(
+            typeof(Guid),
+            GetProviderClrType(userEventEntity.FindProperty(nameof(UserEvent.ActorId))!));
+        Assert.Equal(
+            typeof(string),
+            GetProviderClrType(userEventEntity.FindProperty(nameof(UserEvent.EventType))!));
+        Assert.Equal(
+            typeof(Guid),
+            GetProviderClrType(setupTokenEntity.FindProperty(nameof(PasswordSetupToken.UserId))!));
+        Assert.Equal(
+            typeof(string),
+            GetProviderClrType(setupTokenEntity.FindProperty(nameof(PasswordSetupToken.Purpose))!));
+        Assert.Contains(
+            setupTokenEntity.GetIndexes(),
+            index => index.GetDatabaseName() == "ux_password_setup_tokens_token_hash" && index.IsUnique);
     }
 
     [Fact]
@@ -244,6 +285,9 @@ public sealed class EngiFlowDbContextTests
         Assert.Equal(
             typeof(string),
             GetProviderClrType(userEntity.FindProperty(nameof(User.Role))!));
+        Assert.Equal(
+            typeof(string),
+            GetProviderClrType(userEntity.FindProperty(nameof(User.Status))!));
         Assert.Equal(
             typeof(Guid),
             GetProviderClrType(ecoEntity.FindProperty(nameof(EngineeringChangeOrder.Id))!));

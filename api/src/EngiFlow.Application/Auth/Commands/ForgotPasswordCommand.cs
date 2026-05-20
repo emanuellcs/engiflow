@@ -1,6 +1,8 @@
 using EngiFlow.Application.Abstractions.Cqrs;
+using EngiFlow.Application.Abstractions.Persistence;
 using EngiFlow.Application.Abstractions.Security;
 using EngiFlow.Application.Auth.Dtos;
+using EngiFlow.Domain.Users;
 using FluentValidation;
 using Microsoft.Extensions.Configuration;
 
@@ -38,19 +40,39 @@ public sealed class ForgotPasswordCommandValidator : AbstractValidator<ForgotPas
 public sealed class ForgotPasswordCommandHandler : ICommandHandler<ForgotPasswordCommand, ForgotPasswordResultDto>
 {
     private readonly IPasswordResetEmailSender _resetEmailSender;
+    private readonly IPasswordSetupTokenRepository _passwordSetupTokens;
+    private readonly IPasswordSetupTokenService _passwordSetupTokenService;
     private readonly IConfiguration _configuration;
+    private readonly IUnitOfWork _unitOfWork;
+    private readonly IUserEventRepository _userEvents;
+    private readonly IUserRepository _users;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="ForgotPasswordCommandHandler"/> class.
     /// </summary>
     /// <param name="resetEmailSender">The email sender used to deliver reset links.</param>
     /// <param name="configuration">The application configuration.</param>
+    /// <param name="users">The user repository.</param>
+    /// <param name="passwordSetupTokens">The password setup token repository.</param>
+    /// <param name="passwordSetupTokenService">The password setup token service.</param>
+    /// <param name="userEvents">The user lifecycle audit repository.</param>
+    /// <param name="unitOfWork">The unit of work used to save reset tokens.</param>
     public ForgotPasswordCommandHandler(
         IPasswordResetEmailSender resetEmailSender,
-        IConfiguration configuration)
+        IConfiguration configuration,
+        IUserRepository users,
+        IPasswordSetupTokenRepository passwordSetupTokens,
+        IPasswordSetupTokenService passwordSetupTokenService,
+        IUserEventRepository userEvents,
+        IUnitOfWork unitOfWork)
     {
         _resetEmailSender = resetEmailSender;
         _configuration = configuration;
+        _users = users;
+        _passwordSetupTokens = passwordSetupTokens;
+        _passwordSetupTokenService = passwordSetupTokenService;
+        _userEvents = userEvents;
+        _unitOfWork = unitOfWork;
     }
 
     /// <inheritdoc />
@@ -60,10 +82,38 @@ public sealed class ForgotPasswordCommandHandler : ICommandHandler<ForgotPasswor
     {
         var normalizedEmail = command.Email.Trim().ToLowerInvariant();
         var baseUrl = _configuration["App:FrontendBaseUrl"]?.TrimEnd('/') ?? "http://localhost:3000";
-        var resetLink = $"{baseUrl}/reset-password?email={Uri.EscapeDataString(normalizedEmail)}&token=mock-{Guid.NewGuid():N}";
+        var activeUsers = (await _users.ListByEmailForAuthenticationAsync(normalizedEmail, cancellationToken)
+                .ConfigureAwait(false))
+            .Where(user => user.Status == UserStatus.Active)
+            .ToArray();
 
-        await _resetEmailSender.SendPasswordResetAsync(normalizedEmail, resetLink, cancellationToken)
-            .ConfigureAwait(false);
+        foreach (var user in activeUsers)
+        {
+            var rawToken = _passwordSetupTokenService.GenerateToken();
+            var resetLink = $"{baseUrl}/auth/setup-password?email={Uri.EscapeDataString(normalizedEmail)}&token={Uri.EscapeDataString(rawToken)}";
+
+            await _passwordSetupTokens.AddAsync(
+                    PasswordSetupToken.Create(
+                        user.Id,
+                        PasswordSetupTokenPurpose.Reset,
+                        _passwordSetupTokenService.HashToken(rawToken),
+                        DateTimeOffset.UtcNow.AddHours(2)),
+                    cancellationToken)
+                .ConfigureAwait(false);
+            await _userEvents.AddAsync(
+                    UserEvent.Create(
+                        user.CompanyId,
+                        user.Id,
+                        user.Id,
+                        UserEventType.PasswordResetRequested,
+                        "Password reset requested."),
+                    cancellationToken)
+                .ConfigureAwait(false);
+            await _resetEmailSender.SendPasswordResetAsync(normalizedEmail, resetLink, cancellationToken)
+                .ConfigureAwait(false);
+        }
+
+        await _unitOfWork.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
 
         return new ForgotPasswordResultDto();
     }

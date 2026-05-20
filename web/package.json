@@ -4,9 +4,9 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "build": "next build",
+    "build": "npm run lint && tsc --noEmit && next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint --max-warnings=0"
   },
   "dependencies": {
     "@emotion/cache": "^11.14.0",

@@ -199,6 +199,96 @@ public readonly record struct EcoEventId
 }
 
 /// <summary>
+/// Strongly typed identifier for an immutable user lifecycle audit event.
+/// </summary>
+public readonly record struct UserEventId
+{
+    /// <summary>
+    /// Initializes a new instance of the <see cref="UserEventId"/> record.
+    /// </summary>
+    /// <param name="value">The non-empty GUID value backing the identifier.</param>
+    /// <exception cref="DomainException">Thrown when <paramref name="value"/> is empty.</exception>
+    public UserEventId(Guid value)
+    {
+        if (value == Guid.Empty)
+        {
+            throw new DomainException("User event id cannot be empty.");
+        }
+
+        Value = value;
+    }
+
+    /// <summary>
+    /// Gets the underlying GUID value used for persistence and integration boundaries.
+    /// </summary>
+    public Guid Value { get; }
+
+    /// <summary>
+    /// Creates a new unique user event identifier.
+    /// </summary>
+    /// <returns>A non-empty user event identifier.</returns>
+    public static UserEventId New() => new(Guid.NewGuid());
+
+    /// <summary>
+    /// Rehydrates a user event identifier from an existing GUID.
+    /// </summary>
+    /// <param name="value">The persisted GUID value.</param>
+    /// <returns>A validated user event identifier.</returns>
+    public static UserEventId From(Guid value) => new(value);
+
+    /// <summary>
+    /// Returns the canonical string representation of the underlying GUID.
+    /// </summary>
+    /// <returns>The identifier as a string.</returns>
+    public override string ToString() => Value.ToString();
+}
+
+/// <summary>
+/// Strongly typed identifier for password setup and reset tokens.
+/// </summary>
+public readonly record struct PasswordSetupTokenId
+{
+    /// <summary>
+    /// Initializes a new instance of the <see cref="PasswordSetupTokenId"/> record.
+    /// </summary>
+    /// <param name="value">The non-empty GUID value backing the identifier.</param>
+    /// <exception cref="DomainException">Thrown when <paramref name="value"/> is empty.</exception>
+    public PasswordSetupTokenId(Guid value)
+    {
+        if (value == Guid.Empty)
+        {
+            throw new DomainException("Password setup token id cannot be empty.");
+        }
+
+        Value = value;
+    }
+
+    /// <summary>
+    /// Gets the underlying GUID value used for persistence and integration boundaries.
+    /// </summary>
+    public Guid Value { get; }
+
+    /// <summary>
+    /// Creates a new unique password setup token identifier.
+    /// </summary>
+    /// <returns>A non-empty password setup token identifier.</returns>
+    public static PasswordSetupTokenId New() => new(Guid.NewGuid());
+
+    /// <summary>
+    /// Rehydrates a password setup token identifier from an existing GUID.
+    /// </summary>
+    /// <param name="value">The persisted GUID value.</param>
+    /// <returns>A validated password setup token identifier.</returns>
+    public static PasswordSetupTokenId From(Guid value) => new(value);
+
+    /// <summary>
+    /// Returns the canonical string representation of the underlying GUID.
+    /// </summary>
+    /// <returns>The identifier as a string.</returns>
+    public override string ToString() => Value.ToString();
+}
+
+/// <summary>
 /// Strongly typed identifier for an ECO timeline comment.
 /// </summary>
 public readonly record struct EcoCommentId

@@ -57,6 +57,16 @@ public sealed class EngiFlowDbContext : DbContext
     public DbSet<User> Users => Set<User>();
 
     /// <summary>
+    /// Gets the immutable user lifecycle audit events table.
+    /// </summary>
+    public DbSet<UserEvent> UserEvents => Set<UserEvent>();
+
+    /// <summary>
+    /// Gets one-time password setup and reset tokens.
+    /// </summary>
+    public DbSet<PasswordSetupToken> PasswordSetupTokens => Set<PasswordSetupToken>();
+
+    /// <summary>
     /// Gets the engineering change orders table.
     /// </summary>
     public DbSet<EngineeringChangeOrder> EngineeringChangeOrders => Set<EngineeringChangeOrder>();
@@ -108,6 +118,8 @@ public sealed class EngiFlowDbContext : DbContext
         modelBuilder.ApplyConfiguration(new CompanyConfiguration());
         modelBuilder.ApplyConfiguration(new CompanySettingsConfiguration());
         modelBuilder.ApplyConfiguration(new UserConfiguration());
+        modelBuilder.ApplyConfiguration(new UserEventConfiguration());
+        modelBuilder.ApplyConfiguration(new PasswordSetupTokenConfiguration());
         modelBuilder.ApplyConfiguration(new EngineeringChangeOrderConfiguration());
         modelBuilder.ApplyConfiguration(new EcoEventConfiguration());
         modelBuilder.ApplyConfiguration(new EcoCommentConfiguration());
@@ -149,13 +161,14 @@ public sealed class EngiFlowDbContext : DbContext
 
             if (entityType.ClrType == typeof(User))
             {
-                var isActiveProperty = Expression.Call(
+                var statusProperty = Expression.Call(
                     typeof(EF),
                     nameof(EF.Property),
-                    [typeof(bool)],
+                    [typeof(UserStatus)],
                     parameter,
-                    Expression.Constant(nameof(User.IsActive)));
-                predicate = Expression.AndAlso(predicate, isActiveProperty);
+                    Expression.Constant(nameof(User.Status)));
+                var activeStatus = Expression.Constant(UserStatus.Active);
+                predicate = Expression.AndAlso(predicate, Expression.Equal(statusProperty, activeStatus));
             }
 
             var lambda = Expression.Lambda(predicate, parameter);

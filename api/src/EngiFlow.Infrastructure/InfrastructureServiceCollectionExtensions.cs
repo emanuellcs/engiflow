@@ -60,8 +60,11 @@ public static class InfrastructureServiceCollectionExtensions
         services.AddScoped<ICompanyRepository, CompanyRepository>();
         services.AddScoped<ICompanySettingsRepository, CompanySettingsRepository>();
         services.AddScoped<IEngineeringChangeOrderRepository, EngineeringChangeOrderRepository>();
+        services.AddScoped<IPasswordSetupTokenRepository, PasswordSetupTokenRepository>();
+        services.AddScoped<IUserEventRepository, UserEventRepository>();
         services.AddScoped<IUserRepository, UserRepository>();
         services.AddScoped<IPasswordHashService, AspNetCorePasswordHashService>();
+        services.AddScoped<IPasswordSetupTokenService, PasswordSetupTokenService>();
         services.AddScoped<IPasswordResetLinkLogger, LoggingPasswordResetLinkLogger>();
         services.AddScoped<IPasswordResetEmailSender, SmtpPasswordResetEmailSender>();
         services.AddScoped<IStorageService, S3StorageService>();

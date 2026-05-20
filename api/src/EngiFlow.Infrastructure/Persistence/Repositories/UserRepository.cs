@@ -30,18 +30,24 @@ internal sealed class UserRepository : IUserRepository
     /// <inheritdoc />
     public Task<User?> GetByIdAsync(UserId id, CancellationToken cancellationToken = default)
     {
-        return _dbContext.Users.SingleOrDefaultAsync(user => user.Id == id, cancellationToken);
+        return _dbContext.Users
+            .IgnoreQueryFilters()
+            .SingleOrDefaultAsync(
+                user => user.Id == id && user.CompanyId == _dbContext.CurrentCompanyId,
+                cancellationToken);
     }
 
     /// <inheritdoc />
-    public Task<User?> GetByEmailForAuthenticationAsync(
+    public async Task<IReadOnlyList<User>> ListByEmailForAuthenticationAsync(
         string normalizedEmail,
         CancellationToken cancellationToken = default)
     {
-        return _dbContext.Users
+        return await _dbContext.Users
             .IgnoreQueryFilters()
-            .AsNoTracking()
-            .SingleOrDefaultAsync(user => user.Email == normalizedEmail, cancellationToken);
+            .Where(user => user.Email == normalizedEmail)
+            .OrderBy(user => user.CompanyId)
+            .ToArrayAsync(cancellationToken)
+            .ConfigureAwait(false);
     }
 
     /// <inheritdoc />
@@ -49,7 +55,6 @@ internal sealed class UserRepository : IUserRepository
     {
         return _dbContext.Users
             .IgnoreQueryFilters()
-            .AsNoTracking()
             .SingleOrDefaultAsync(user => user.Id == id, cancellationToken);
     }
 
@@ -61,7 +66,7 @@ internal sealed class UserRepository : IUserRepository
     {
         await _dbContext.Users
             .IgnoreQueryFilters()
-            .Where(user => user.Id == id && user.IsActive)
+            .Where(user => user.Id == id && user.Status == UserStatus.Active)
             .ExecuteUpdateAsync(
                 setters => setters.SetProperty(user => user.LastLoginAt, lastLoginAt),
                 cancellationToken)
@@ -72,10 +77,53 @@ internal sealed class UserRepository : IUserRepository
     public async Task<IReadOnlyList<User>> ListActiveAsync(CancellationToken cancellationToken = default)
     {
         return await _dbContext.Users
-            .Where(user => user.IsActive)
+            .Where(user => user.Status == UserStatus.Active)
             .OrderBy(user => user.DisplayName)
             .ThenBy(user => user.Email)
             .ToArrayAsync(cancellationToken)
             .ConfigureAwait(false);
+    }
+
+    /// <inheritdoc />
+    public async Task SetPasswordAndActivateAsync(
+        UserId id,
+        string passwordHash,
+        CancellationToken cancellationToken = default)
+    {
+        await _dbContext.Users
+            .IgnoreQueryFilters()
+            .Where(user => user.Id == id && user.Status != UserStatus.Deactivated)
+            .ExecuteUpdateAsync(
+                setters => setters
+                    .SetProperty(user => user.PasswordHash, passwordHash)
+                    .SetProperty(user => user.Status, UserStatus.Active)
+                    .SetProperty(user => user.DeactivatedAt, (DateTimeOffset?)null),
+                cancellationToken)
+            .ConfigureAwait(false);
+    }
+
+    /// <inheritdoc />
+    public async Task<IReadOnlyList<User>> ListForAdministrationAsync(CancellationToken cancellationToken = default)
+    {
+        return await _dbContext.Users
+            .IgnoreQueryFilters()
+            .Where(user => user.CompanyId == _dbContext.CurrentCompanyId)
+            .OrderBy(user => user.DisplayName)
+            .ThenBy(user => user.Email)
+            .ToArrayAsync(cancellationToken)
+            .ConfigureAwait(false);
+    }
+
+    /// <inheritdoc />
+    public Task<User?> GetOwnerByCompanyIdForAuthenticationAsync(
+        CompanyId companyId,
+        CancellationToken cancellationToken = default)
+    {
+        return _dbContext.Users
+            .IgnoreQueryFilters()
+            .AsNoTracking()
+            .SingleOrDefaultAsync(
+                user => user.CompanyId == companyId && user.Role == UserRole.Owner,
+                cancellationToken);
     }
 }

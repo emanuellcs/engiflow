@@ -5,7 +5,6 @@ using EngiFlow.Application.Auth.Dtos;
 using EngiFlow.Domain.Companies;
 using EngiFlow.Domain.Users;
 using FluentValidation;
-using AppValidationException = EngiFlow.Application.Exceptions.ValidationException;
 
 namespace EngiFlow.Application.Auth.Commands;
 
@@ -81,27 +80,23 @@ public sealed class RegisterCompanyCommandHandler : ICommandHandler<RegisterComp
     private readonly IPasswordHashService _passwordHashService;
     private readonly ICompanySettingsRepository _settings;
     private readonly IUnitOfWork _unitOfWork;
-    private readonly IUserRepository _users;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="RegisterCompanyCommandHandler"/> class.
     /// </summary>
     /// <param name="companies">The company repository used to persist the new tenant root.</param>
-    /// <param name="users">The user repository used to enforce global email uniqueness.</param>
     /// <param name="passwordHashService">The password hashing service.</param>
     /// <param name="jwtTokenService">The JWT issuing service.</param>
     /// <param name="settings">The company settings repository.</param>
     /// <param name="unitOfWork">The unit of work used to save the company and administrator atomically.</param>
     public RegisterCompanyCommandHandler(
         ICompanyRepository companies,
-        IUserRepository users,
         IPasswordHashService passwordHashService,
         IJwtTokenService jwtTokenService,
         ICompanySettingsRepository settings,
         IUnitOfWork unitOfWork)
     {
         _companies = companies;
-        _users = users;
         _passwordHashService = passwordHashService;
         _jwtTokenService = jwtTokenService;
         _settings = settings;
@@ -114,19 +109,8 @@ public sealed class RegisterCompanyCommandHandler : ICommandHandler<RegisterComp
         CancellationToken cancellationToken = default)
     {
         var normalizedEmail = NormalizeEmail(command.AdminEmail);
-        var existingUser = await _users.GetByEmailForAuthenticationAsync(normalizedEmail, cancellationToken)
-            .ConfigureAwait(false);
 
-        if (existingUser is not null)
-        {
-            throw new AppValidationException(new Dictionary<string, string[]>
-            {
-                [nameof(RegisterCompanyCommand.AdminEmail)] =
-                    ["Administrator email is already registered."]
-            });
-        }
-
-        var company = Company.Create(command.CompanyName);
+        var company = Company.Create(command.CompanyName, contactEmail: normalizedEmail);
         var admin = company.RegisterUser(
             normalizedEmail,
             command.AdminName,

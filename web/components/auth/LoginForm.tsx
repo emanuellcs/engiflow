@@ -20,16 +20,58 @@ import Stack from "@mui/material/Stack";
 import TextField from "@mui/material/TextField";
 import Typography from "@mui/material/Typography";
 import { useRouter } from "next/navigation";
-import { type FormEvent, useState, forwardRef } from "react";
+import { type CSSProperties, type FormEvent, useState, forwardRef } from "react";
 import Card from "@mui/material/Card";
 import NextLink from "@/components/ui/NextLink";
 import { ApiError, apiFetch } from "@/lib/api/client";
 import { type AuthSessionResult, useAuth } from "@/lib/auth/AuthContext";
 
+/**
+ * Describes client-side login validation errors.
+ */
 type LoginFieldErrors = {
   email?: string;
   password?: string;
 };
+
+/**
+ * Describes a tenant option returned by the login API.
+ */
+export type WorkspaceTenantOption = {
+  tenantId: string;
+  companyName: string;
+  companyEmail: string;
+  ownerName: string;
+  ownerEmail: string;
+};
+
+/**
+ * Describes the multi-tenant challenge kept while the user picks a workspace.
+ */
+export type WorkspaceSelectionChallenge = {
+  preAuthToken: string;
+  preAuthExpiresAtUtc: string;
+  tenants: WorkspaceTenantOption[];
+  rememberMe: boolean;
+};
+
+/**
+ * Describes the login API response for either final auth or tenant selection.
+ */
+type LoginResponse = AuthSessionResult & {
+  requiresTenantSelection?: unknown;
+  preAuthToken?: unknown;
+  preAuthExpiresAtUtc?: unknown;
+  tenants?: unknown;
+};
+
+/**
+ * Describes props accepted by the login form.
+ */
+interface LoginFormProps {
+  style?: CSSProperties;
+  onWorkspaceSelectionRequired?: (challenge: WorkspaceSelectionChallenge) => void;
+}
 
 const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const defaultLoginError =
@@ -39,8 +81,11 @@ const invalidAuthResponseError =
 const forgotPasswordSuccess =
   "If an account exists, a reset link has been sent";
 
-const LoginForm = forwardRef<HTMLDivElement, { style?: React.CSSProperties }>(
-  ({ style }, ref) => {
+/**
+ * Renders the sign-in form and raises a workspace picker challenge when needed.
+ */
+const LoginForm = forwardRef<HTMLDivElement, LoginFormProps>(
+  ({ style, onWorkspaceSelectionRequired }, ref) => {
     const router = useRouter();
     const { login } = useAuth();
     const [email, setEmail] = useState("");
@@ -73,7 +118,7 @@ const LoginForm = forwardRef<HTMLDivElement, { style?: React.CSSProperties }>(
       setSuccessMessage(null);
 
       try {
-        const response = await apiFetch<AuthSessionResult>("/api/auth/login", {
+        const response = await apiFetch<LoginResponse>("/api/auth/login", {
           method: "POST",
           skipAuth: true,
           body: {
@@ -81,6 +126,13 @@ const LoginForm = forwardRef<HTMLDivElement, { style?: React.CSSProperties }>(
             password,
           },
         });
+
+        const workspaceChallenge = readWorkspaceSelectionChallenge(response, rememberMe);
+
+        if (workspaceChallenge) {
+          onWorkspaceSelectionRequired?.(workspaceChallenge);
+          return;
+        }
 
         login(response, rememberMe);
         router.replace("/");
@@ -91,6 +143,9 @@ const LoginForm = forwardRef<HTMLDivElement, { style?: React.CSSProperties }>(
       }
     }
 
+    /**
+     * Updates a field and clears its stale validation error.
+     */
     function handleFieldChange(field: "email" | "password", value: string) {
       if (field === "email") {
         setEmail(value);
@@ -312,6 +367,9 @@ LoginForm.displayName = "LoginForm";
 
 export default LoginForm;
 
+/**
+ * Describes props accepted by the first-access dialog.
+ */
 type FirstAccessDialogProps = {
   open: boolean;
   initialEmail: string;
@@ -319,6 +377,9 @@ type FirstAccessDialogProps = {
   onSuccess: () => void;
 };
 
+/**
+ * Renders the first-access invitation resend dialog.
+ */
 function FirstAccessDialog({
   open,
   initialEmail,
@@ -330,6 +391,9 @@ function FirstAccessDialog({
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [isPending, setIsPending] = useState(false);
 
+  /**
+   * Submits a first-access resend request.
+   */
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
@@ -428,6 +492,9 @@ function FirstAccessDialog({
   );
 }
 
+/**
+ * Describes props accepted by the forgot-password dialog.
+ */
 type ForgotPasswordDialogProps = {
   open: boolean;
   initialEmail: string;
@@ -435,6 +502,9 @@ type ForgotPasswordDialogProps = {
   onSuccess: () => void;
 };
 
+/**
+ * Renders the forgot-password request dialog.
+ */
 function ForgotPasswordDialog({
   open,
   initialEmail,
@@ -446,6 +516,9 @@ function ForgotPasswordDialog({
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [isPending, setIsPending] = useState(false);
 
+  /**
+   * Submits a password reset request.
+   */
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
@@ -544,6 +617,9 @@ function ForgotPasswordDialog({
   );
 }
 
+/**
+ * Validates the login form fields.
+ */
 function validateLogin(email: string, password: string): LoginFieldErrors {
   const errors: LoginFieldErrors = {};
   const emailError = validateEmail(email);
@@ -559,6 +635,9 @@ function validateLogin(email: string, password: string): LoginFieldErrors {
   return errors;
 }
 
+/**
+ * Validates an email address for public auth dialogs.
+ */
 function validateEmail(email: string): string | null {
   if (!email.trim()) {
     return "Email is required.";
@@ -571,10 +650,16 @@ function validateEmail(email: string): string | null {
   return null;
 }
 
+/**
+ * Checks whether a validation result contains at least one error.
+ */
 function hasErrors(errors: LoginFieldErrors): boolean {
   return Object.values(errors).some(Boolean);
 }
 
+/**
+ * Converts a login failure into user-facing copy.
+ */
 function getLoginErrorMessage(error: unknown): string {
   if (error instanceof ApiError) {
     return readProblemDetailsMessage(error) ?? defaultLoginError;
@@ -590,6 +675,73 @@ function getLoginErrorMessage(error: unknown): string {
   return defaultLoginError;
 }
 
+/**
+ * Reads and validates a workspace selection challenge from the login response.
+ */
+function readWorkspaceSelectionChallenge(
+  response: LoginResponse,
+  rememberMe: boolean,
+): WorkspaceSelectionChallenge | null {
+  if (!response.requiresTenantSelection) {
+    return null;
+  }
+
+  if (
+    typeof response.preAuthToken !== "string" ||
+    typeof response.preAuthExpiresAtUtc !== "string" ||
+    !Array.isArray(response.tenants)
+  ) {
+    throw new Error("The server returned an invalid authentication response.");
+  }
+
+  const tenants = response.tenants
+    .map(readWorkspaceTenantOption)
+    .filter((tenant): tenant is WorkspaceTenantOption => tenant !== null);
+
+  if (tenants.length === 0) {
+    throw new Error("The server returned an invalid authentication response.");
+  }
+
+  return {
+    preAuthToken: response.preAuthToken,
+    preAuthExpiresAtUtc: response.preAuthExpiresAtUtc,
+    tenants,
+    rememberMe,
+  };
+}
+
+/**
+ * Reads one workspace tenant option from an unknown API payload.
+ */
+function readWorkspaceTenantOption(value: unknown): WorkspaceTenantOption | null {
+  if (!value || typeof value !== "object") {
+    return null;
+  }
+
+  const tenant = value as Record<string, unknown>;
+
+  if (
+    typeof tenant.tenantId !== "string" ||
+    typeof tenant.companyName !== "string" ||
+    typeof tenant.companyEmail !== "string" ||
+    typeof tenant.ownerName !== "string" ||
+    typeof tenant.ownerEmail !== "string"
+  ) {
+    return null;
+  }
+
+  return {
+    tenantId: tenant.tenantId,
+    companyName: tenant.companyName,
+    companyEmail: tenant.companyEmail,
+    ownerName: tenant.ownerName,
+    ownerEmail: tenant.ownerEmail,
+  };
+}
+
+/**
+ * Extracts a problem-details message from an API error.
+ */
 function readProblemDetailsMessage(error: unknown): string | null {
   const details = error instanceof ApiError ? error.details : error;
 
@@ -622,6 +774,9 @@ function readProblemDetailsMessage(error: unknown): string | null {
   return null;
 }
 
+/**
+ * Reads the first validation message from problem-details payloads.
+ */
 function readValidationMessage(details: object): string | null {
   if (
     !("errors" in details) ||

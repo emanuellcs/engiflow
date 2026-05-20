@@ -22,13 +22,13 @@ public sealed class AuthControllerTests
     [Fact]
     public async Task LoginAsync_DispatchesLoginQueryAndReturnsOk()
     {
-        var loginResult = new LoginResultDto(
+        var loginResult = LoginResponseDto.Authenticated(new LoginResultDto(
             "jwt-token",
             "Bearer",
             DateTimeOffset.Parse("2026-05-15T01:00:00Z"),
             "Administrator",
             "EngiFlow Demo Company",
-            [nameof(UserRole.Administrator)]);
+            [nameof(UserRole.Administrator)]));
         var mediator = new FakeApplicationMediator { Dispatch = _ => loginResult };
         var controller = new AuthController(mediator);
 

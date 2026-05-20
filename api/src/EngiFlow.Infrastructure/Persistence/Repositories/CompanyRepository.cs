@@ -28,6 +28,14 @@ internal sealed class CompanyRepository : ICompanyRepository
     }
 
     /// <inheritdoc />
+    public Task<Company?> GetByIdForAuthenticationAsync(CompanyId id, CancellationToken cancellationToken = default)
+    {
+        return _dbContext.Companies
+            .AsNoTracking()
+            .SingleOrDefaultAsync(company => company.Id == id, cancellationToken);
+    }
+
+    /// <inheritdoc />
     public async Task AddAsync(Company company, CancellationToken cancellationToken = default)
     {
         await _dbContext.Companies.AddAsync(company, cancellationToken).ConfigureAwait(false);
