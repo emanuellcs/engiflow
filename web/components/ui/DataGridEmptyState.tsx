@@ -20,9 +20,11 @@ export default function DataGridEmptyState({
       sx={{
         alignItems: "center",
         justifyContent: "center",
-        minHeight: "100%",
+        height: "100%",
+        width: "100%",
         p: 3,
         textAlign: "center",
+        flex: 1,
       }}
     >
       {icon ?? <FolderOffOutlinedIcon sx={{ fontSize: 48, color: "grey.400" }} />}

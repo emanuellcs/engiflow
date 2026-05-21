@@ -179,6 +179,13 @@ function EcoDashboard() {
     };
   }, [loadEcos]);
 
+  useEffect(() => {
+    const underReviewCount = rows.filter((row) => row.status === "UnderReview").length;
+    window.dispatchEvent(
+      new CustomEvent("engiflow:update-eco-count", { detail: { count: underReviewCount } }),
+    );
+  }, [rows]);
+
   const resetToFirstPage = useCallback(() => {
     setPaginationModel((current) => ({ ...current, page: 0 }));
   }, []);
@@ -416,7 +423,7 @@ function EcoDashboard() {
             />
           </Box>
 
-          <Box sx={{ flexGrow: 1, width: "100%", minHeight: 400 }}>
+          <Box sx={{ flexGrow: 1, width: "100%", display: "flex", flexDirection: "column", minHeight: 440 }}>
             <DataGrid
               rows={rows}
               columns={columns}
@@ -445,6 +452,7 @@ function EcoDashboard() {
                 },
               }}
               sx={{
+                flex: 1,
                 border: 0,
                 borderRadius: 0,
                 "& .MuiDataGrid-columnHeaders": {
@@ -460,6 +468,7 @@ function EcoDashboard() {
                 "& .MuiDataGrid-footerContainer": {
                   borderTop: 1,
                   borderColor: "divider",
+                  mt: "auto",
                 },
               }}
             />

@@ -485,7 +485,7 @@ export default function UserManagementPage() {
         </Stack>
       </Stack>
 
-      <Box sx={{ flexGrow: 1, width: "100%", minHeight: 400 }}>
+      <Box sx={{ flexGrow: 1, width: "100%", display: "flex", flexDirection: "column", minHeight: 440 }}>
         <DataGrid
           rows={filteredUsers}
           columns={columns}
@@ -513,6 +513,7 @@ export default function UserManagementPage() {
             noRowsLabel: "No matching team members.",
           }}
           sx={{
+            flex: 1,
             borderColor: "divider",
             bgcolor: "background.paper",
             borderRadius: 2,
@@ -525,6 +526,11 @@ export default function UserManagementPage() {
               borderColor: "divider",
               display: "flex !important",
               alignItems: "center !important",
+            },
+            "& .MuiDataGrid-footerContainer": {
+              borderTop: 1,
+              borderColor: "divider",
+              mt: "auto",
             },
           }}
         />

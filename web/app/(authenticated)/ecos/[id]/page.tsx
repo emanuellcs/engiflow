@@ -773,6 +773,14 @@ function ActionArea({
   const showVoteButtons = canVote && (!currentVote || wantsToChangeVote);
   const showVoteIndicator = canVote && currentVote && !wantsToChangeVote;
 
+  const showWorkflowArea =
+    canSubmit ||
+    canCancel ||
+    showVoteButtons ||
+    showVoteIndicator ||
+    (!isCreator && !canReview && eco.status === "UnderReview") ||
+    (eco.status === "Draft" && !isCreator);
+
   const disableActions = isBlocked || Boolean(pendingAction);
 
   const confirmAction = (
@@ -789,141 +797,140 @@ function ActionArea({
       <CardContent>
         <Stack spacing={2.5}>
           {/* Workflow Buttons Area */}
-          <Stack
-            direction={{ xs: "column", sm: "row" }}
-            spacing={1.5}
-            sx={{
-              alignItems: { xs: "stretch", sm: "center" },
-              justifyContent: "space-between",
-              bgcolor: "action.hover",
-              p: 1.5,
-              borderRadius: 1,
-              border: 1,
-              borderColor: "divider",
-            }}
-          >
-            <Box>
-              {isCreator && eco.status === "UnderReview" && (
-                <Typography variant="body2" color="text.secondary">
-                  As the author, you cannot participate in the approval quorum.
-                </Typography>
-              )}
-              {!isCreator && !canReview && eco.status === "UnderReview" && (
-                <Typography variant="body2" color="text.secondary">
-                  You do not have the permissions required to review this ECO.
-                </Typography>
-              )}
-              {eco.status === "Draft" && !isCreator && (
-                <Typography variant="body2" color="text.secondary">
-                  Only the creator can submit this ECO for review.
-                </Typography>
-              )}
-            </Box>
-
-            <Stack direction={{ xs: "column", sm: "row" }} spacing={1}>
-              {canSubmit ? (
-                <ActionButton
-                  color="primary"
-                  disabled={disableActions}
-                  icon={<SendIcon />}
-                  isPending={pendingAction === "submit"}
-                  label="Submit for Review"
-                  onClick={() =>
-                    confirmAction(
-                      "Submit ECO",
-                      "Are you sure you want to submit this Engineering Change Order for review? Once submitted, the affected items will be locked for editing.",
-                      onSubmit,
-                    )
-                  }
-                  variant="contained"
-                />
-              ) : null}
-
-              {showVoteIndicator && currentVote && (
-                <Stack direction="row" spacing={1} sx={{ alignItems: "center" }}>
-                  <Chip
-                    size="small"
-                    icon={currentVote.decision === "Approve" ? <CheckCircleIcon /> : <ErrorOutlineIcon />}
-                    label={currentVote.decision === "Approve" ? "Approved" : "Changes Requested"}
-                    color={currentVote.decision === "Approve" ? "success" : "warning"}
-                    variant="outlined"
-                    sx={{ border: 1, borderColor: "divider" }}
-                  />
-                  <Button
-                    size="small"
-                    onClick={() => setWantsToChangeVote(true)}
-                    sx={{ textTransform: "none" }}
-                  >
-                    Change Vote
-                  </Button>
-                </Stack>
-              )}
-
-              {showVoteButtons && (
-                <>
-                  <ActionButton
-                    color="success"
-                    disabled={disableActions || currentVote?.decision === "Approve"}
-                    icon={<CheckCircleIcon />}
-                    isPending={pendingAction === "approve"}
-                    label="Approve"
-                    onClick={() => {
-                      confirmAction(
-                        "Approve ECO",
-                        "Are you sure you want to approve this Engineering Change Order?",
-                        () => {
-                          onApprove();
-                          setWantsToChangeVote(false);
-                        },
-                        "success",
-                      );
-                    }}
-                    variant="contained"
-                  />
-                  <ActionButton
-                    color="warning"
-                    disabled={disableActions || currentVote?.decision === "RequestChanges"}
-                    icon={<ErrorOutlineIcon />}
-                    isPending={pendingAction === "requestChanges"}
-                    label="Request Changes"
-                    onClick={() => setIsRequestChangesOpen(true)}
-                    variant="outlined"
-                  />
-                  {wantsToChangeVote && (
-                    <Button
-                      size="small"
-                      color="inherit"
-                      onClick={() => setWantsToChangeVote(false)}
-                      sx={{ textTransform: "none" }}
-                    >
-                      Cancel
-                    </Button>
+          {showWorkflowArea && (
+            <>
+              <Stack
+                direction={{ xs: "column", sm: "row" }}
+                spacing={1.5}
+                sx={{
+                  alignItems: { xs: "stretch", sm: "center" },
+                  justifyContent: "space-between",
+                }}
+              >
+                <Box>
+                  {isCreator && eco.status === "UnderReview" && (
+                    <Typography variant="body2" color="text.secondary">
+                      As the author, you cannot participate in the approval quorum.
+                    </Typography>
                   )}
-                </>
-              )}
+                  {!isCreator && !canReview && eco.status === "UnderReview" && (
+                    <Typography variant="body2" color="text.secondary">
+                      You do not have the permissions required to review this ECO.
+                    </Typography>
+                  )}
+                  {eco.status === "Draft" && !isCreator && (
+                    <Typography variant="body2" color="text.secondary">
+                      Only the creator can submit this ECO for review.
+                    </Typography>
+                  )}
+                </Box>
 
-              {canCancel ? (
-                <ActionButton
-                  color="error"
-                  disabled={disableActions}
-                  icon={<CancelIcon />}
-                  isPending={pendingAction === "cancel"}
-                  label="Cancel ECO"
-                  onClick={() =>
-                    confirmAction(
-                      "Cancel ECO",
-                      "Are you sure you want to cancel this ECO? This action is permanent and will move the ECO to a terminal Canceled state.",
-                      onCancel,
-                      "error",
-                    )
-                  }
-                  variant="outlined"
-                />
-              ) : null}
-            </Stack>
-          </Stack>
+                <Stack direction={{ xs: "column", sm: "row" }} spacing={1}>
+                  {canSubmit ? (
+                    <ActionButton
+                      color="primary"
+                      disabled={disableActions}
+                      icon={<SendIcon />}
+                      isPending={pendingAction === "submit"}
+                      label="Submit for Review"
+                      onClick={() =>
+                        confirmAction(
+                          "Submit ECO",
+                          "Are you sure you want to submit this Engineering Change Order for review? Once submitted, the affected items will be locked for editing.",
+                          onSubmit,
+                        )
+                      }
+                      variant="contained"
+                    />
+                  ) : null}
 
-          <Divider />
+                  {showVoteIndicator && currentVote && (
+                    <Stack direction="row" spacing={1} sx={{ alignItems: "center" }}>
+                      <Chip
+                        size="small"
+                        icon={currentVote.decision === "Approve" ? <CheckCircleIcon /> : <ErrorOutlineIcon />}
+                        label={currentVote.decision === "Approve" ? "Approved" : "Changes Requested"}
+                        color={currentVote.decision === "Approve" ? "success" : "warning"}
+                        variant="outlined"
+                        sx={{ border: 1, borderColor: "divider" }}
+                      />
+                      <Button
+                        size="small"
+                        onClick={() => setWantsToChangeVote(true)}
+                        sx={{ textTransform: "none" }}
+                      >
+                        Change Vote
+                      </Button>
+                    </Stack>
+                  )}
+
+                  {showVoteButtons && (
+                    <>
+                      <ActionButton
+                        color="success"
+                        disabled={disableActions || currentVote?.decision === "Approve"}
+                        icon={<CheckCircleIcon />}
+                        isPending={pendingAction === "approve"}
+                        label="Approve"
+                        onClick={() => {
+                          confirmAction(
+                            "Approve ECO",
+                            "Are you sure you want to approve this Engineering Change Order?",
+                            () => {
+                              onApprove();
+                              setWantsToChangeVote(false);
+                            },
+                            "success",
+                          );
+                        }}
+                        variant="contained"
+                      />
+                      <ActionButton
+                        color="warning"
+                        disabled={disableActions || currentVote?.decision === "RequestChanges"}
+                        icon={<ErrorOutlineIcon />}
+                        isPending={pendingAction === "requestChanges"}
+                        label="Request Changes"
+                        onClick={() => setIsRequestChangesOpen(true)}
+                        variant="outlined"
+                      />
+                      {wantsToChangeVote && (
+                        <Button
+                          size="small"
+                          color="inherit"
+                          onClick={() => setWantsToChangeVote(false)}
+                          sx={{ textTransform: "none" }}
+                        >
+                          Cancel
+                        </Button>
+                      )}
+                    </>
+                  )}
+
+                  {canCancel ? (
+                    <ActionButton
+                      color="error"
+                      disabled={disableActions}
+                      icon={<CancelIcon />}
+                      isPending={pendingAction === "cancel"}
+                      label="Cancel ECO"
+                      onClick={() =>
+                        confirmAction(
+                          "Cancel ECO",
+                          "Are you sure you want to cancel this ECO? This action is permanent and will move the ECO to a terminal Canceled state.",
+                          onCancel,
+                          "error",
+                        )
+                      }
+                      variant="outlined"
+                    />
+                  ) : null}
+                </Stack>
+              </Stack>
+
+              <Divider />
+            </>
+          )}
 
           {/* Comment Composer */}
           <CommentComposer
