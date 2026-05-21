@@ -144,3 +144,5 @@ vite.config.ts.timestamp-*
 
 .vs/
 *.csproj.user
+dotnet/
+.vscode/

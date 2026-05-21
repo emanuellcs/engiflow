@@ -19,4 +19,5 @@ public sealed record SetupPasswordRequest(string Token, string Email, string Pas
 /// Request body used to resend first-access setup links.
 /// </summary>
 /// <param name="Email">The pending account email address.</param>
-public sealed record FirstAccessRequest(string Email);
+/// <param name="TenantId">The optional tenant identifier for multi-tenant accounts.</param>
+public sealed record FirstAccessRequest(string Email, Guid? TenantId = null);

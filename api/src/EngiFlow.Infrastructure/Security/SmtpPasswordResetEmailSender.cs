@@ -33,6 +33,7 @@ internal sealed class SmtpPasswordResetEmailSender : IPasswordResetEmailSender
         ArgumentException.ThrowIfNullOrWhiteSpace(email);
         ArgumentException.ThrowIfNullOrWhiteSpace(resetLink);
 
+        var safeResetLink = WebUtility.HtmlEncode(resetLink);
         var message = CreateMessage(
             email,
             "Reset your EngiFlow password",
@@ -45,9 +46,17 @@ internal sealed class SmtpPasswordResetEmailSender : IPasswordResetEmailSender
             If you did not request this reset, you can ignore this email.
             """,
             $"""
-            <p>We received a request to reset your EngiFlow password.</p>
-            <p><a href="{WebUtility.HtmlEncode(resetLink)}">Reset your password</a></p>
-            <p>If you did not request this reset, you can ignore this email.</p>
+            <div style="font-family:Arial,sans-serif;color:#1f2937;line-height:1.5">
+              <h2 style="margin:0 0 12px">Reset your EngiFlow password</h2>
+              <p>We received a request to reset your EngiFlow password.</p>
+              <p>Click the button below to choose a new password. This link will expire in 2 hours.</p>
+              <p>
+                <a href="{safeResetLink}" style="display:inline-block;background:#1976d2;color:#fff;padding:10px 16px;border-radius:6px;text-decoration:none">
+                  Reset password
+                </a>
+              </p>
+              <p style="color:#6b7280;font-size:13px">If you did not request this reset, you can ignore this email.</p>
+            </div>
             """);
 
         await SendAsync(message, cancellationToken).ConfigureAwait(false);

@@ -19,10 +19,12 @@ import Link from "@mui/material/Link";
 import Stack from "@mui/material/Stack";
 import TextField from "@mui/material/TextField";
 import Typography from "@mui/material/Typography";
+import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import { useRouter } from "next/navigation";
 import { type CSSProperties, type FormEvent, useState, forwardRef } from "react";
 import Card from "@mui/material/Card";
 import NextLink from "@/components/ui/NextLink";
+import TenantList from "./TenantList";
 import { ApiError, apiFetch } from "@/lib/api/client";
 import { type AuthSessionResult, useAuth } from "@/lib/auth/AuthContext";
 
@@ -387,40 +389,70 @@ function FirstAccessDialog({
   onSuccess,
 }: FirstAccessDialogProps) {
   const [email, setEmail] = useState(initialEmail);
+  const [tenants, setTenants] = useState<WorkspaceTenantOption[] | null>(null);
+  const [selectedTenantId, setSelectedTenantId] = useState<string | null>(null);
   const [fieldError, setFieldError] = useState<string | null>(null);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [isPending, setIsPending] = useState(false);
 
   /**
+   * Resets the dialog to the email input state.
+   */
+  function handleBack() {
+    setTenants(null);
+    setSelectedTenantId(null);
+    setSubmitError(null);
+  }
+
+  /**
    * Submits a first-access resend request.
    */
-  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
+  async function handleSubmit(event?: FormEvent<HTMLFormElement>, tenantId?: string) {
+    event?.preventDefault();
 
-    const nextError = validateEmail(email);
-
-    if (nextError) {
-      setFieldError(nextError);
-      return;
+    if (!tenantId) {
+      const nextError = validateEmail(email);
+      if (nextError) {
+        setFieldError(nextError);
+        return;
+      }
     }
 
     setIsPending(true);
     setFieldError(null);
     setSubmitError(null);
 
+    if (tenantId) {
+      setSelectedTenantId(tenantId);
+    }
+
     try {
-      await apiFetch("/api/auth/first-access", {
+      const response = await apiFetch<{
+        requiresTenantSelection?: boolean;
+        tenants?: unknown[];
+      }>("/api/auth/first-access", {
         method: "POST",
         skipAuth: true,
         body: {
           email: email.trim(),
+          tenantId: tenantId ?? null,
         },
       });
-      onSuccess();
+
+      if (response.requiresTenantSelection && Array.isArray(response.tenants)) {
+        const options = response.tenants
+          .map(readWorkspaceTenantOption)
+          .filter((t): t is WorkspaceTenantOption => t !== null);
+
+        setTenants(options);
+      } else {
+        onSuccess();
+      }
     } catch (error) {
       setSubmitError(
         readProblemDetailsMessage(error) ?? "Unable to submit first access request.",
       );
+      setSelectedTenantId(null);
     } finally {
       setIsPending(false);
     }
@@ -436,56 +468,93 @@ function FirstAccessDialog({
         },
       }}
     >
-      <Box component="form" noValidate onSubmit={handleSubmit}>
+      <Box
+        component={tenants ? "div" : "form"}
+        noValidate
+        onSubmit={(e: FormEvent<HTMLFormElement>) => void handleSubmit(e)}
+      >
         <DialogTitle>First Access</DialogTitle>
         <DialogContent sx={{ display: "flex", flexDirection: "column", gap: 2 }}>
-          <DialogContentText>
-            Invited by an admin? Enter your email to receive a secure link to
-            set up your account password.
-          </DialogContentText>
-          {submitError ? (
-            <Alert severity="error">{submitError}</Alert>
-          ) : null}
-          <TextField
-            autoFocus
-            required
-            id="first-access-email"
-            name="email"
-            label="Email"
-            variant="outlined"
-            type="email"
-            value={email}
-            onChange={(event) => {
-              setEmail(event.target.value);
-              setFieldError(null);
-            }}
-            error={Boolean(fieldError)}
-            helperText={fieldError ?? " "}
-            disabled={isPending}
-            fullWidth
-            size="small"
-          />
+          {tenants ? (
+            <>
+              <DialogContentText>
+                Multiple workspaces found. Select the one you want to access.
+              </DialogContentText>
+              {submitError ? (
+                <Alert severity="error">{submitError}</Alert>
+              ) : null}
+              <TenantList
+                tenants={tenants}
+                selectedTenantId={selectedTenantId}
+                onSelect={(id) => void handleSubmit(undefined, id)}
+              />
+            </>
+          ) : (
+            <>
+              <DialogContentText>
+                Invited by an admin? Enter your email to receive a secure link to
+                set up your account password.
+              </DialogContentText>
+              {submitError ? (
+                <Alert severity="error">{submitError}</Alert>
+              ) : null}
+              <TextField
+                autoFocus
+                required
+                id="first-access-email"
+                name="email"
+                label="Email"
+                variant="outlined"
+                type="email"
+                value={email}
+                onChange={(event) => {
+                  setEmail(event.target.value);
+                  setFieldError(null);
+                }}
+                error={Boolean(fieldError)}
+                helperText={fieldError ?? " "}
+                disabled={isPending}
+                fullWidth
+                size="small"
+              />
+            </>
+          )}
         </DialogContent>
-        <DialogActions sx={{ px: 3, pb: 3 }}>
-          <Button
-            onClick={onClose}
-            disabled={isPending}
-            sx={{ textTransform: "none" }}
-          >
-            Cancel
-          </Button>
-          <Button
-            type="submit"
-            variant="contained"
-            disabled={isPending}
-            sx={{ minWidth: 96, textTransform: "none" }}
-          >
-            {isPending ? (
-              <CircularProgress color="inherit" size={18} thickness={5} />
-            ) : (
-              "Send Link"
-            )}
-          </Button>
+        <DialogActions sx={{ px: 3, pb: 3, justifyContent: "space-between" }}>
+          {tenants ? (
+            <Button
+              type="button"
+              variant="text"
+              startIcon={<ArrowBackIcon />}
+              onClick={handleBack}
+              disabled={isPending}
+              sx={{ textTransform: "none" }}
+            >
+              Back
+            </Button>
+          ) : (
+            <Button
+              onClick={onClose}
+              disabled={isPending}
+              sx={{ textTransform: "none" }}
+            >
+              Cancel
+            </Button>
+          )}
+          {!tenants && (
+            <Button
+              type="submit"
+              variant="contained"
+              disabled={isPending}
+              sx={{ minWidth: 96, textTransform: "none" }}
+            >
+              {isPending ? (
+                <CircularProgress color="inherit" size={18} thickness={5} />
+              ) : (
+                "Send Link"
+              )}
+            </Button>
+          )}
         </DialogActions>
       </Box>
     </Dialog>
@@ -512,40 +581,70 @@ function ForgotPasswordDialog({
   onSuccess,
 }: ForgotPasswordDialogProps) {
   const [email, setEmail] = useState(initialEmail);
+  const [tenants, setTenants] = useState<WorkspaceTenantOption[] | null>(null);
+  const [selectedTenantId, setSelectedTenantId] = useState<string | null>(null);
   const [fieldError, setFieldError] = useState<string | null>(null);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [isPending, setIsPending] = useState(false);
 
   /**
+   * Resets the dialog to the email input state.
+   */
+  function handleBack() {
+    setTenants(null);
+    setSelectedTenantId(null);
+    setSubmitError(null);
+  }
+
+  /**
    * Submits a password reset request.
    */
-  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
+  async function handleSubmit(event?: FormEvent<HTMLFormElement>, tenantId?: string) {
+    event?.preventDefault();
 
-    const nextError = validateEmail(email);
-
-    if (nextError) {
-      setFieldError(nextError);
-      return;
+    if (!tenantId) {
+      const nextError = validateEmail(email);
+      if (nextError) {
+        setFieldError(nextError);
+        return;
+      }
     }
 
     setIsPending(true);
     setFieldError(null);
     setSubmitError(null);
 
+    if (tenantId) {
+      setSelectedTenantId(tenantId);
+    }
+
     try {
-      await apiFetch("/api/auth/forgot-password", {
+      const response = await apiFetch<{
+        requiresTenantSelection?: boolean;
+        tenants?: unknown[];
+      }>("/api/auth/forgot-password", {
         method: "POST",
         skipAuth: true,
         body: {
           email: email.trim(),
+          tenantId: tenantId ?? null,
         },
       });
-      onSuccess();
+
+      if (response.requiresTenantSelection && Array.isArray(response.tenants)) {
+        const options = response.tenants
+          .map(readWorkspaceTenantOption)
+          .filter((t): t is WorkspaceTenantOption => t !== null);
+
+        setTenants(options);
+      } else {
+        onSuccess();
+      }
     } catch (error) {
       setSubmitError(
         readProblemDetailsMessage(error) ?? "Unable to submit reset request.",
       );
+      setSelectedTenantId(null);
     } finally {
       setIsPending(false);
     }
@@ -561,56 +660,94 @@ function ForgotPasswordDialog({
         },
       }}
     >
-      <Box component="form" noValidate onSubmit={handleSubmit}>
+      <Box
+        component={tenants ? "div" : "form"}
+        noValidate
+        onSubmit={(e: FormEvent<HTMLFormElement>) => void handleSubmit(e)}
+      >
         <DialogTitle>Reset password</DialogTitle>
         <DialogContent sx={{ display: "flex", flexDirection: "column", gap: 2 }}>
-          <DialogContentText>
-            Enter your account email address and EngiFlow will send reset
-            instructions if the account exists.
-          </DialogContentText>
-          {submitError ? (
-            <Alert severity="error">{submitError}</Alert>
-          ) : null}
-          <TextField
-            autoFocus
-            required
-            id="forgot-password-email"
-            name="email"
-            label="Email"
-            variant="outlined"
-            type="email"
-            value={email}
-            onChange={(event) => {
-              setEmail(event.target.value);
-              setFieldError(null);
-            }}
-            error={Boolean(fieldError)}
-            helperText={fieldError ?? " "}
-            disabled={isPending}
-            fullWidth
-            size="small"
-          />
+          {tenants ? (
+            <>
+              <DialogContentText>
+                Multiple workspaces found. Select the one you want to reset your
+                password for.
+              </DialogContentText>
+              {submitError ? (
+                <Alert severity="error">{submitError}</Alert>
+              ) : null}
+              <TenantList
+                tenants={tenants}
+                selectedTenantId={selectedTenantId}
+                onSelect={(id) => void handleSubmit(undefined, id)}
+              />
+            </>
+          ) : (
+            <>
+              <DialogContentText>
+                Enter your account email address and EngiFlow will send reset
+                instructions if the account exists.
+              </DialogContentText>
+              {submitError ? (
+                <Alert severity="error">{submitError}</Alert>
+              ) : null}
+              <TextField
+                autoFocus
+                required
+                id="forgot-password-email"
+                name="email"
+                label="Email"
+                variant="outlined"
+                type="email"
+                value={email}
+                onChange={(event) => {
+                  setEmail(event.target.value);
+                  setFieldError(null);
+                }}
+                error={Boolean(fieldError)}
+                helperText={fieldError ?? " "}
+                disabled={isPending}
+                fullWidth
+                size="small"
+              />
+            </>
+          )}
         </DialogContent>
-        <DialogActions sx={{ px: 3, pb: 3 }}>
-          <Button
-            onClick={onClose}
-            disabled={isPending}
-            sx={{ textTransform: "none" }}
-          >
-            Cancel
-          </Button>
-          <Button
-            type="submit"
-            variant="contained"
-            disabled={isPending}
-            sx={{ minWidth: 96, textTransform: "none" }}
-          >
-            {isPending ? (
-              <CircularProgress color="inherit" size={18} thickness={5} />
-            ) : (
-              "Continue"
-            )}
-          </Button>
+        <DialogActions sx={{ px: 3, pb: 3, justifyContent: "space-between" }}>
+          {tenants ? (
+            <Button
+              type="button"
+              variant="text"
+              startIcon={<ArrowBackIcon />}
+              onClick={handleBack}
+              disabled={isPending}
+              sx={{ textTransform: "none" }}
+            >
+              Back
+            </Button>
+          ) : (
+            <Button
+              onClick={onClose}
+              disabled={isPending}
+              sx={{ textTransform: "none" }}
+            >
+              Cancel
+            </Button>
+          )}
+          {!tenants && (
+            <Button
+              type="submit"
+              variant="contained"
+              disabled={isPending}
+              sx={{ minWidth: 96, textTransform: "none" }}
+            >
+              {isPending ? (
+                <CircularProgress color="inherit" size={18} thickness={5} />
+              ) : (
+                "Continue"
+              )}
+            </Button>
+          )}
         </DialogActions>
       </Box>
     </Dialog>

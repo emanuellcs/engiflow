@@ -4,4 +4,5 @@ namespace EngiFlow.Api.Models;
 /// Request body used to accept a forgot-password reset link request.
 /// </summary>
 /// <param name="Email">The account email address.</param>
-public sealed record ForgotPasswordRequest(string Email);
+/// <param name="TenantId">The optional tenant identifier for multi-tenant accounts.</param>
+public sealed record ForgotPasswordRequest(string Email, Guid? TenantId = null);

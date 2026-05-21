@@ -2,6 +2,7 @@ using EngiFlow.Application.Abstractions.Cqrs;
 using EngiFlow.Application.Abstractions.Persistence;
 using EngiFlow.Application.Abstractions.Security;
 using EngiFlow.Application.Auth.Dtos;
+using EngiFlow.Domain.Companies;
 using EngiFlow.Application.Exceptions;
 using EngiFlow.Domain.Users;
 using FluentValidation;
@@ -14,7 +15,8 @@ namespace EngiFlow.Application.Auth.Commands;
 /// Command that resends first-access setup links for pending invited users.
 /// </summary>
 /// <param name="Email">The pending account email address.</param>
-public sealed record FirstAccessCommand(string Email) : ICommand<FirstAccessResultDto>;
+/// <param name="TenantId">The optional tenant identifier for multi-tenant accounts.</param>
+public sealed record FirstAccessCommand(string Email, Guid? TenantId = null) : ICommand<FirstAccessResultDto>;
 
 /// <summary>
 /// Validates first-access resend requests.
@@ -89,6 +91,14 @@ public sealed class FirstAccessCommandHandler : ICommandHandler<FirstAccessComma
         var normalizedEmail = command.Email.Trim().ToLowerInvariant();
         var matchingUsers = await _users.ListByEmailForAuthenticationAsync(normalizedEmail, cancellationToken)
             .ConfigureAwait(false);
+
+        if (command.TenantId.HasValue)
+        {
+            matchingUsers = matchingUsers
+                .Where(user => user.CompanyId.Value == command.TenantId.Value)
+                .ToArray();
+        }
+
         var pendingUsers = matchingUsers
             .Where(user => user.Status == UserStatus.PendingActivation)
             .ToArray();
@@ -99,6 +109,28 @@ public sealed class FirstAccessCommandHandler : ICommandHandler<FirstAccessComma
             {
                 [nameof(FirstAccessCommand.Email)] = ["This account is already active. Use forgot password if you cannot sign in."]
             });
+        }
+
+        if (pendingUsers.Length > 1)
+        {
+            var memberships = new List<(User User, Company Company)>();
+            foreach (var user in pendingUsers)
+            {
+                var company = await _companies.GetByIdForAuthenticationAsync(user.CompanyId, cancellationToken)
+                    .ConfigureAwait(false);
+                if (company is not null && company.IsActive)
+                {
+                    memberships.Add((user, company));
+                }
+            }
+
+            if (memberships.Count > 1)
+            {
+                var tenants = await BuildTenantSelectionAsync(memberships, cancellationToken).ConfigureAwait(false);
+                return FirstAccessResultDto.Challenge(tenants);
+            }
+
+            pendingUsers = memberships.Select(m => m.User).ToArray();
         }
 
         foreach (var user in pendingUsers)
@@ -139,7 +171,35 @@ public sealed class FirstAccessCommandHandler : ICommandHandler<FirstAccessComma
         }
 
         await _unitOfWork.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
-        return new FirstAccessResultDto();
+        return FirstAccessResultDto.Success();
+    }
+
+    /// <summary>
+    /// Builds tenant selection metadata for the verified pending accounts.
+    /// </summary>
+    /// <param name="memberships">The matching pending user memberships.</param>
+    /// <param name="cancellationToken">A token that can cancel the operation.</param>
+    /// <returns>The tenant selection options.</returns>
+    private async Task<IReadOnlyList<TenantSelectionDto>> BuildTenantSelectionAsync(
+        IReadOnlyCollection<(User User, Company Company)> memberships,
+        CancellationToken cancellationToken)
+    {
+        var tenants = new List<TenantSelectionDto>();
+
+        foreach (var (_, company) in memberships.OrderBy(membership => membership.Company.Name))
+        {
+            var owner = await _users.GetOwnerByCompanyIdForAuthenticationAsync(company.Id, cancellationToken)
+                .ConfigureAwait(false);
+
+            tenants.Add(new TenantSelectionDto(
+                company.Id.Value,
+                company.Name,
+                company.ContactEmail ?? owner?.Email ?? string.Empty,
+                owner?.DisplayName ?? "Workspace Owner",
+                owner?.Email ?? company.ContactEmail ?? string.Empty));
+        }
+
+        return tenants;
     }
 
     /// <summary>

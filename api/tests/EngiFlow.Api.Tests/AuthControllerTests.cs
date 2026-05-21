@@ -78,7 +78,7 @@ public sealed class AuthControllerTests
     [Fact]
     public async Task ForgotPasswordAsync_DispatchesForgotPasswordCommandAndReturnsOk()
     {
-        var forgotPasswordResult = new ForgotPasswordResultDto();
+        var forgotPasswordResult = ForgotPasswordResultDto.Success();
         var mediator = new FakeApplicationMediator { Dispatch = _ => forgotPasswordResult };
         var controller = new AuthController(mediator);
 
@@ -86,7 +86,8 @@ public sealed class AuthControllerTests
             new ForgotPasswordRequest("ada@acme.example"),
             CancellationToken.None);
 
-        Assert.IsType<OkResult>(result);
+        var okResult = Assert.IsType<OkObjectResult>(result.Result);
+        Assert.Equal(forgotPasswordResult, okResult.Value);
 
         var command = Assert.IsType<ForgotPasswordCommand>(mediator.LastRequest);
         Assert.Equal("ada@acme.example", command.Email);

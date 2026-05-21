@@ -207,6 +207,7 @@ public sealed class EcoApplicationTests
             resetEmailSender,
             configuration,
             new FakeUserRepository(user),
+            new FakeCompanyRepository(company),
             new FakePasswordSetupTokenRepository(),
             new FakePasswordSetupTokenService(),
             new FakeUserEventRepository(),

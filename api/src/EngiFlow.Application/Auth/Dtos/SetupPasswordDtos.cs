@@ -15,6 +15,24 @@ public sealed record SetupPasswordContextDto(PasswordSetupTokenPurpose Purpose, 
 public sealed record SetupPasswordResultDto;
 
 /// <summary>
-/// Represents a completed first-access invitation resend request.
+/// Describes the result of a first-access resend request, potentially requiring tenant selection.
 /// </summary>
-public sealed record FirstAccessResultDto;
+/// <param name="RequiresTenantSelection">Whether the client must select a tenant before the email is sent.</param>
+/// <param name="Tenants">The tenant choices available for the provided email.</param>
+public sealed record FirstAccessResultDto(
+    bool RequiresTenantSelection,
+    IReadOnlyList<TenantSelectionDto> Tenants)
+{
+    /// <summary>
+    /// Creates a successful first-access result where the email was dispatched.
+    /// </summary>
+    /// <returns>A successful result.</returns>
+    public static FirstAccessResultDto Success() => new(false, []);
+
+    /// <summary>
+    /// Creates a tenant selection challenge for multi-tenant users.
+    /// </summary>
+    /// <param name="tenants">The available tenant choices.</param>
+    /// <returns>A tenant selection challenge result.</returns>
+    public static FirstAccessResultDto Challenge(IReadOnlyList<TenantSelectionDto> tenants) => new(true, tenants);
+}

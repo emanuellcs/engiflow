@@ -120,25 +120,25 @@ public sealed class AuthController : ControllerBase
     /// </summary>
     /// <param name="request">The account email address supplied by the client.</param>
     /// <param name="cancellationToken">A token that can cancel the request.</param>
-    /// <returns>An empty success response when the request is accepted.</returns>
+    /// <returns>A result indicating success or a tenant selection challenge.</returns>
     /// <response code="200">The reset request was accepted.</response>
     /// <response code="400">The request body failed application validation.</response>
     /// <response code="500">An unexpected server error occurred.</response>
     [AllowAnonymous]
     [HttpPost("forgot-password")]
-    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ForgotPasswordResultDto), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ValidationProblemDetails), StatusCodes.Status400BadRequest)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status500InternalServerError)]
-    public async Task<IActionResult> ForgotPasswordAsync(
+    public async Task<ActionResult<ForgotPasswordResultDto>> ForgotPasswordAsync(
         [FromBody] ForgotPasswordRequest request,
         CancellationToken cancellationToken)
     {
-        await _mediator.SendCommandAsync<ForgotPasswordCommand, ForgotPasswordResultDto>(
-                new ForgotPasswordCommand(request.Email),
+        var result = await _mediator.SendCommandAsync<ForgotPasswordCommand, ForgotPasswordResultDto>(
+                new ForgotPasswordCommand(request.Email, request.TenantId),
                 cancellationToken)
             .ConfigureAwait(false);
 
-        return Ok();
+        return Ok(result);
     }
 
     /// <summary>
@@ -202,24 +202,24 @@ public sealed class AuthController : ControllerBase
     /// </summary>
     /// <param name="request">The pending account email address.</param>
     /// <param name="cancellationToken">A token that can cancel the request.</param>
-    /// <returns>An empty success response when the request is accepted.</returns>
+    /// <returns>A result indicating success or a tenant selection challenge.</returns>
     /// <response code="200">The first-access request was accepted.</response>
     /// <response code="400">The account is already active or the request failed validation.</response>
     /// <response code="500">An unexpected server error occurred.</response>
     [AllowAnonymous]
     [HttpPost("first-access")]
-    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(FirstAccessResultDto), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ValidationProblemDetails), StatusCodes.Status400BadRequest)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status500InternalServerError)]
-    public async Task<IActionResult> FirstAccessAsync(
+    public async Task<ActionResult<FirstAccessResultDto>> FirstAccessAsync(
         [FromBody] FirstAccessRequest request,
         CancellationToken cancellationToken)
     {
-        await _mediator.SendCommandAsync<FirstAccessCommand, FirstAccessResultDto>(
-                new FirstAccessCommand(request.Email),
+        var result = await _mediator.SendCommandAsync<FirstAccessCommand, FirstAccessResultDto>(
+                new FirstAccessCommand(request.Email, request.TenantId),
                 cancellationToken)
             .ConfigureAwait(false);
 
-        return Ok();
+        return Ok(result);
     }
 }
