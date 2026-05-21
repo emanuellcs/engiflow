@@ -16,13 +16,27 @@ import FormControlLabel from "@mui/material/FormControlLabel";
 import IconButton from "@mui/material/IconButton";
 import InputAdornment from "@mui/material/InputAdornment";
 import Link from "@mui/material/Link";
+import Fade from "@mui/material/Fade";
 import Stack from "@mui/material/Stack";
 import TextField from "@mui/material/TextField";
 import Typography from "@mui/material/Typography";
+import { type TransitionProps } from "@mui/material/transitions";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import { useRouter } from "next/navigation";
 import { type CSSProperties, type FormEvent, useState, forwardRef } from "react";
 import Card from "@mui/material/Card";
+
+/**
+ * Orchestrates a professional, fluid fade-in and fade-out transition for dialogs.
+ */
+const FadeTransition = forwardRef(function Transition(
+  props: TransitionProps & {
+    children: React.ReactElement;
+  },
+  ref: React.Ref<unknown>
+) {
+  return <Fade ref={ref} {...props} timeout={{ enter: 400, exit: 300 }} />;
+});
 import NextLink from "@/components/ui/NextLink";
 import TenantList from "./TenantList";
 import { ApiError, apiFetch } from "@/lib/api/client";
@@ -65,6 +79,7 @@ type LoginResponse = AuthSessionResult & {
   preAuthToken?: unknown;
   preAuthExpiresAtUtc?: unknown;
   tenants?: unknown;
+  status?: string;
 };
 
 /**
@@ -78,6 +93,8 @@ interface LoginFormProps {
 const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const defaultLoginError =
   "Unable to sign in. Check your email and password, then try again.";
+const pendingActivationError =
+  "Your account has been invited but is not activated yet. Please click 'Forgot Password?' above to create your security credentials.";
 const invalidAuthResponseError =
   "The server returned an invalid authentication response. Please try again.";
 const forgotPasswordSuccess =
@@ -99,7 +116,6 @@ const LoginForm = forwardRef<HTMLDivElement, LoginFormProps>(
     const [errorMessage, setErrorMessage] = useState<string | null>(null);
     const [successMessage, setSuccessMessage] = useState<string | null>(null);
     const [isForgotPasswordOpen, setIsForgotPasswordOpen] = useState(false);
-    const [isFirstAccessOpen, setIsFirstAccessOpen] = useState(false);
 
     async function handleSubmit(event: FormEvent<HTMLFormElement>) {
       event.preventDefault();
@@ -128,6 +144,11 @@ const LoginForm = forwardRef<HTMLDivElement, LoginFormProps>(
             password,
           },
         });
+
+        if (response.status === "PendingActivation") {
+          setErrorMessage(pendingActivationError);
+          return;
+        }
 
         const workspaceChallenge = readWorkspaceSelectionChallenge(response, rememberMe);
 
@@ -293,21 +314,6 @@ const LoginForm = forwardRef<HTMLDivElement, LoginFormProps>(
                   >
                     Forgot password?
                   </Link>
-                  <Typography variant="body2" color="text.disabled">
-                    •
-                  </Typography>
-                  <Link
-                    component="button"
-                    type="button"
-                    variant="body2"
-                    onClick={() => {
-                      setSuccessMessage(null);
-                      setIsFirstAccessOpen(true);
-                    }}
-                    sx={{ whiteSpace: "nowrap" }}
-                  >
-                    First access?
-                  </Link>
                 </Box>
               </Box>
             </Stack>
@@ -335,31 +341,16 @@ const LoginForm = forwardRef<HTMLDivElement, LoginFormProps>(
           </Stack>
         </Box>
 
-        {isForgotPasswordOpen ? (
-          <ForgotPasswordDialog
-            open={isForgotPasswordOpen}
-            initialEmail={email}
-            onClose={() => setIsForgotPasswordOpen(false)}
-            onSuccess={() => {
-              setIsForgotPasswordOpen(false);
-              setSuccessMessage(forgotPasswordSuccess);
-              setErrorMessage(null);
-            }}
-          />
-        ) : null}
-
-        {isFirstAccessOpen ? (
-          <FirstAccessDialog
-            open={isFirstAccessOpen}
-            initialEmail={email}
-            onClose={() => setIsFirstAccessOpen(false)}
-            onSuccess={() => {
-              setIsFirstAccessOpen(false);
-              setSuccessMessage("First access instructions sent to your email.");
-              setErrorMessage(null);
-            }}
-          />
-        ) : null}
+        <ForgotPasswordDialog
+          open={isForgotPasswordOpen}
+          initialEmail={email}
+          onClose={() => setIsForgotPasswordOpen(false)}
+          onSuccess={() => {
+            setIsForgotPasswordOpen(false);
+            setSuccessMessage(forgotPasswordSuccess);
+            setErrorMessage(null);
+          }}
+        />
       </Card>
     );
   }
@@ -368,198 +359,6 @@ const LoginForm = forwardRef<HTMLDivElement, LoginFormProps>(
 LoginForm.displayName = "LoginForm";
 
 export default LoginForm;
-
-/**
- * Describes props accepted by the first-access dialog.
- */
-type FirstAccessDialogProps = {
-  open: boolean;
-  initialEmail: string;
-  onClose: () => void;
-  onSuccess: () => void;
-};
-
-/**
- * Renders the first-access invitation resend dialog.
- */
-function FirstAccessDialog({
-  open,
-  initialEmail,
-  onClose,
-  onSuccess,
-}: FirstAccessDialogProps) {
-  const [email, setEmail] = useState(initialEmail);
-  const [tenants, setTenants] = useState<WorkspaceTenantOption[] | null>(null);
-  const [selectedTenantId, setSelectedTenantId] = useState<string | null>(null);
-  const [fieldError, setFieldError] = useState<string | null>(null);
-  const [submitError, setSubmitError] = useState<string | null>(null);
-  const [isPending, setIsPending] = useState(false);
-
-  /**
-   * Resets the dialog to the email input state.
-   */
-  function handleBack() {
-    setTenants(null);
-    setSelectedTenantId(null);
-    setSubmitError(null);
-  }
-
-  /**
-   * Submits a first-access resend request.
-   */
-  async function handleSubmit(event?: FormEvent<HTMLFormElement>, tenantId?: string) {
-    event?.preventDefault();
-
-    if (!tenantId) {
-      const nextError = validateEmail(email);
-      if (nextError) {
-        setFieldError(nextError);
-        return;
-      }
-    }
-
-    setIsPending(true);
-    setFieldError(null);
-    setSubmitError(null);
-
-    if (tenantId) {
-      setSelectedTenantId(tenantId);
-    }
-
-    try {
-      const response = await apiFetch<{
-        requiresTenantSelection?: boolean;
-        tenants?: unknown[];
-      }>("/api/auth/first-access", {
-        method: "POST",
-        skipAuth: true,
-        body: {
-          email: email.trim(),
-          tenantId: tenantId ?? null,
-        },
-      });
-
-      if (response.requiresTenantSelection && Array.isArray(response.tenants)) {
-        const options = response.tenants
-          .map(readWorkspaceTenantOption)
-          .filter((t): t is WorkspaceTenantOption => t !== null);
-
-        setTenants(options);
-      } else {
-        onSuccess();
-      }
-    } catch (error) {
-      setSubmitError(
-        readProblemDetailsMessage(error) ?? "Unable to submit first access request.",
-      );
-      setSelectedTenantId(null);
-    } finally {
-      setIsPending(false);
-    }
-  }
-
-  return (
-    <Dialog
-      open={open}
-      onClose={isPending ? undefined : onClose}
-      slotProps={{
-        paper: {
-          sx: { width: "100%", maxWidth: 440 },
-        },
-      }}
-    >
-      <Box
-        component={tenants ? "div" : "form"}
-        noValidate
-        onSubmit={(e: FormEvent<HTMLFormElement>) => void handleSubmit(e)}
-      >
-        <DialogTitle>First Access</DialogTitle>
-        <DialogContent sx={{ display: "flex", flexDirection: "column", gap: 2 }}>
-          {tenants ? (
-            <>
-              <DialogContentText>
-                Multiple workspaces found. Select the one you want to access.
-              </DialogContentText>
-              {submitError ? (
-                <Alert severity="error">{submitError}</Alert>
-              ) : null}
-              <TenantList
-                tenants={tenants}
-                selectedTenantId={selectedTenantId}
-                onSelect={(id) => void handleSubmit(undefined, id)}
-              />
-            </>
-          ) : (
-            <>
-              <DialogContentText>
-                Invited by an admin? Enter your email to receive a secure link to
-                set up your account password.
-              </DialogContentText>
-              {submitError ? (
-                <Alert severity="error">{submitError}</Alert>
-              ) : null}
-              <TextField
-                autoFocus
-                required
-                id="first-access-email"
-                name="email"
-                label="Email"
-                variant="outlined"
-                type="email"
-                value={email}
-                onChange={(event) => {
-                  setEmail(event.target.value);
-                  setFieldError(null);
-                }}
-                error={Boolean(fieldError)}
-                helperText={fieldError ?? " "}
-                disabled={isPending}
-                fullWidth
-                size="small"
-              />
-            </>
-          )}
-        </DialogContent>
-        <DialogActions sx={{ px: 3, pb: 3, justifyContent: "space-between" }}>
-          {tenants ? (
-            <Button
-              type="button"
-              variant="text"
-              startIcon={<ArrowBackIcon />}
-              onClick={handleBack}
-              disabled={isPending}
-              sx={{ textTransform: "none" }}
-            >
-              Back
-            </Button>
-          ) : (
-            <Button
-              onClick={onClose}
-              disabled={isPending}
-              sx={{ textTransform: "none" }}
-            >
-              Cancel
-            </Button>
-          )}
-          {!tenants && (
-            <Button
-              type="submit"
-              variant="contained"
-              disabled={isPending}
-              sx={{ minWidth: 96, textTransform: "none" }}
-            >
-              {isPending ? (
-                <CircularProgress color="inherit" size={18} thickness={5} />
-              ) : (
-                "Send Link"
-              )}
-            </Button>
-          )}
-        </DialogActions>
-      </Box>
-    </Dialog>
-  );
-}
 
 /**
  * Describes props accepted by the forgot-password dialog.
@@ -654,6 +453,7 @@ function ForgotPasswordDialog({
     <Dialog
       open={open}
       onClose={isPending ? undefined : onClose}
+      slots={{ transition: FadeTransition }}
       slotProps={{
         paper: {
           sx: { width: "100%", maxWidth: 440 },

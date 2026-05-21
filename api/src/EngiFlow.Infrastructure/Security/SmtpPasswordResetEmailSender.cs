@@ -28,17 +28,23 @@ internal sealed class SmtpPasswordResetEmailSender : IPasswordResetEmailSender
     public async Task SendPasswordResetAsync(
         string email,
         string resetLink,
+        string? companyName = null,
         CancellationToken cancellationToken = default)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(email);
         ArgumentException.ThrowIfNullOrWhiteSpace(resetLink);
 
+        var safeCompanyName = string.IsNullOrWhiteSpace(companyName) ? "EngiFlow" : WebUtility.HtmlEncode(companyName);
+        var subject = string.IsNullOrWhiteSpace(companyName)
+            ? "Reset your EngiFlow password"
+            : $"Reset your password for {companyName}";
+
         var safeResetLink = WebUtility.HtmlEncode(resetLink);
         var message = CreateMessage(
             email,
-            "Reset your EngiFlow password",
+            subject,
             $"""
-            We received a request to reset your EngiFlow password.
+            We received a request to reset your password for {safeCompanyName}.
 
             Open this link to continue:
             {resetLink}
@@ -47,8 +53,8 @@ internal sealed class SmtpPasswordResetEmailSender : IPasswordResetEmailSender
             """,
             $"""
             <div style="font-family:Arial,sans-serif;color:#1f2937;line-height:1.5">
-              <h2 style="margin:0 0 12px">Reset your EngiFlow password</h2>
-              <p>We received a request to reset your EngiFlow password.</p>
+              <h2 style="margin:0 0 12px">{subject}</h2>
+              <p>We received a request to reset your password for <strong>{safeCompanyName}</strong>.</p>
               <p>Click the button below to choose a new password. This link will expire in 2 hours.</p>
               <p>
                 <a href="{safeResetLink}" style="display:inline-block;background:#1976d2;color:#fff;padding:10px 16px;border-radius:6px;text-decoration:none">

@@ -197,29 +197,4 @@ public sealed class AuthController : ControllerBase
         return Ok();
     }
 
-    /// <summary>
-    /// Resends setup instructions for pending first-access users.
-    /// </summary>
-    /// <param name="request">The pending account email address.</param>
-    /// <param name="cancellationToken">A token that can cancel the request.</param>
-    /// <returns>A result indicating success or a tenant selection challenge.</returns>
-    /// <response code="200">The first-access request was accepted.</response>
-    /// <response code="400">The account is already active or the request failed validation.</response>
-    /// <response code="500">An unexpected server error occurred.</response>
-    [AllowAnonymous]
-    [HttpPost("first-access")]
-    [ProducesResponseType(typeof(FirstAccessResultDto), StatusCodes.Status200OK)]
-    [ProducesResponseType(typeof(ValidationProblemDetails), StatusCodes.Status400BadRequest)]
-    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status500InternalServerError)]
-    public async Task<ActionResult<FirstAccessResultDto>> FirstAccessAsync(
-        [FromBody] FirstAccessRequest request,
-        CancellationToken cancellationToken)
-    {
-        var result = await _mediator.SendCommandAsync<FirstAccessCommand, FirstAccessResultDto>(
-                new FirstAccessCommand(request.Email, request.TenantId),
-                cancellationToken)
-            .ConfigureAwait(false);
-
-        return Ok(result);
-    }
 }

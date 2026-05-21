@@ -1199,13 +1199,17 @@ public sealed class EcoApplicationTests
 
         public string? ResetLink { get; private set; }
 
+        public string? CompanyName { get; private set; }
+
         public Task SendPasswordResetAsync(
             string email,
             string resetLink,
+            string? companyName = null,
             CancellationToken cancellationToken = default)
         {
             Email = email;
             ResetLink = resetLink;
+            CompanyName = companyName;
             return Task.CompletedTask;
         }
 

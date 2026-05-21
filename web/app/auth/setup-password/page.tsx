@@ -218,7 +218,7 @@ function SetupPasswordContent() {
                   fullWidth
                   size="small"
                 />
-                <Stack spacing={1}>
+                <Stack spacing={0}>
                   <TextField
                     id="setup-password"
                     label="New password"
@@ -232,6 +232,11 @@ function SetupPasswordContent() {
                     required
                     fullWidth
                     size="small"
+                    sx={{
+                      "& .MuiFormHelperText-root": {
+                        mb: fieldErrors.password ? 0 : -1,
+                      },
+                    }}
                     slotProps={{
                       input: {
                         endAdornment: (

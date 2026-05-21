@@ -84,6 +84,11 @@ public sealed class LoginQueryHandler : ICommandHandler<LoginQuery, LoginRespons
         var users = await _users.ListByEmailForAuthenticationAsync(normalizedEmail, cancellationToken)
             .ConfigureAwait(false);
 
+        if (users.Any(user => user.Status == UserStatus.PendingActivation))
+        {
+            return LoginResponseDto.PendingActivation();
+        }
+
         var validMemberships = new List<(User User, Company Company)>();
 
         foreach (var candidate in users)

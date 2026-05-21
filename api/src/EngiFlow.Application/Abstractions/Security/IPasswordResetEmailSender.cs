@@ -10,10 +10,12 @@ public interface IPasswordResetEmailSender
     /// </summary>
     /// <param name="email">The normalized recipient email address.</param>
     /// <param name="resetLink">The absolute reset link to include in the message.</param>
+    /// <param name="companyName">The optional workspace display name.</param>
     /// <param name="cancellationToken">A token that can cancel the send operation.</param>
     Task SendPasswordResetAsync(
         string email,
         string resetLink,
+        string? companyName = null,
         CancellationToken cancellationToken = default);
 
     /// <summary>

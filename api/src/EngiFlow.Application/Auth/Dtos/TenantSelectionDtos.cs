@@ -28,6 +28,7 @@ public sealed record TenantSelectionDto(
 /// <param name="PreAuthToken">The short-lived pre-authentication token for tenant selection.</param>
 /// <param name="PreAuthExpiresAtUtc">The pre-authentication token expiration timestamp.</param>
 /// <param name="Tenants">The tenant choices available to the verified credentials.</param>
+/// <param name="Status">The optional machine-readable status code for the response (e.g., PendingActivation).</param>
 public sealed record LoginResponseDto(
     bool RequiresTenantSelection,
     string? AccessToken,
@@ -38,8 +39,29 @@ public sealed record LoginResponseDto(
     IReadOnlyList<string> Roles,
     string? PreAuthToken,
     DateTimeOffset? PreAuthExpiresAtUtc,
-    IReadOnlyList<TenantSelectionDto> Tenants)
+    IReadOnlyList<TenantSelectionDto> Tenants,
+    string? Status = null)
 {
+    /// <summary>
+    /// Creates a response indicating the account is invited but not yet activated.
+    /// </summary>
+    /// <returns>A pending activation response.</returns>
+    public static LoginResponseDto PendingActivation()
+    {
+        return new LoginResponseDto(
+            false,
+            null,
+            null,
+            null,
+            null,
+            null,
+            [],
+            null,
+            null,
+            [],
+            "PendingActivation");
+    }
+
     /// <summary>
     /// Creates a final login response from an issued bearer session.
     /// </summary>

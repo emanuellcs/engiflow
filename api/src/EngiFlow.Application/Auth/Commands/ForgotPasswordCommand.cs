@@ -89,7 +89,7 @@ public sealed class ForgotPasswordCommandHandler : ICommandHandler<ForgotPasswor
         var normalizedEmail = command.Email.Trim().ToLowerInvariant();
         var matchingUsers = (await _users.ListByEmailForAuthenticationAsync(normalizedEmail, cancellationToken)
                 .ConfigureAwait(false))
-            .Where(user => user.Status == UserStatus.Active)
+            .Where(user => user.Status == UserStatus.Active || user.Status == UserStatus.PendingActivation)
             .ToArray();
 
         if (command.TenantId.HasValue)
@@ -125,6 +125,14 @@ public sealed class ForgotPasswordCommandHandler : ICommandHandler<ForgotPasswor
 
         foreach (var user in matchingUsers)
         {
+            var company = await _companies.GetByIdForAuthenticationAsync(user.CompanyId, cancellationToken)
+                .ConfigureAwait(false);
+
+            if (company is null || !company.IsActive)
+            {
+                continue;
+            }
+
             var rawToken = _passwordSetupTokenService.GenerateToken();
             var resetLink = $"{baseUrl}/auth/setup-password?email={Uri.EscapeDataString(normalizedEmail)}&token={Uri.EscapeDataString(rawToken)}";
 
@@ -145,7 +153,7 @@ public sealed class ForgotPasswordCommandHandler : ICommandHandler<ForgotPasswor
                         "Password reset requested."),
                     cancellationToken)
                 .ConfigureAwait(false);
-            await _resetEmailSender.SendPasswordResetAsync(normalizedEmail, resetLink, cancellationToken)
+            await _resetEmailSender.SendPasswordResetAsync(normalizedEmail, resetLink, company.Name, cancellationToken)
                 .ConfigureAwait(false);
         }
 
