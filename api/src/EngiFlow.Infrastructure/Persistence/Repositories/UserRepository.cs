@@ -115,6 +115,35 @@ internal sealed class UserRepository : IUserRepository
     }
 
     /// <inheritdoc />
+    public async Task<IReadOnlyList<User>> SearchAsync(
+        string term,
+        int limit,
+        CancellationToken cancellationToken = default)
+    {
+        var pattern = $"%{term}%";
+        var query = _dbContext.Users.AsQueryable();
+
+        if (_dbContext.Database.IsNpgsql())
+        {
+            query = query.Where(user =>
+                EF.Functions.ILike(user.DisplayName, pattern) ||
+                EF.Functions.ILike(user.Email, pattern));
+        }
+        else
+        {
+            query = query.Where(user =>
+                user.DisplayName.Contains(term) ||
+                user.Email.Contains(term));
+        }
+
+        return await query
+            .OrderBy(user => user.DisplayName)
+            .Take(limit)
+            .ToArrayAsync(cancellationToken)
+            .ConfigureAwait(false);
+    }
+
+    /// <inheritdoc />
     public Task<User?> GetOwnerByCompanyIdForAuthenticationAsync(
         CompanyId companyId,
         CancellationToken cancellationToken = default)

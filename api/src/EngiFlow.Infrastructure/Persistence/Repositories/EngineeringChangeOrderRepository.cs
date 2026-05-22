@@ -74,7 +74,7 @@ internal sealed class EngineeringChangeOrderRepository : IEngineeringChangeOrder
             .CountAsync(cancellationToken);
     }
 
-    private static IQueryable<EngineeringChangeOrder> ApplyFilter(
+    private IQueryable<EngineeringChangeOrder> ApplyFilter(
         IQueryable<EngineeringChangeOrder> query,
         EcoListFilter? filter)
     {
@@ -87,9 +87,22 @@ internal sealed class EngineeringChangeOrderRepository : IEngineeringChangeOrder
         if (!string.IsNullOrWhiteSpace(normalizedSearch))
         {
             var pattern = $"%{normalizedSearch}%";
-            query = query.Where(eco =>
-                EF.Functions.ILike(eco.Title, pattern) ||
-                EF.Functions.ILike(eco.Description, pattern));
+            var isGuid = Guid.TryParse(normalizedSearch, out var guid);
+
+            if (_dbContext.Database.IsNpgsql())
+            {
+                query = query.Where(eco =>
+                    EF.Functions.ILike(eco.Title, pattern) ||
+                    EF.Functions.ILike(eco.Description, pattern) ||
+                    (isGuid && eco.Id == EngineeringChangeOrderId.From(guid)));
+            }
+            else
+            {
+                query = query.Where(eco =>
+                    eco.Title.Contains(normalizedSearch) ||
+                    eco.Description.Contains(normalizedSearch) ||
+                    (isGuid && eco.Id == EngineeringChangeOrderId.From(guid)));
+            }
         }
 
         if (filter.Status is not null)

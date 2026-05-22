@@ -78,6 +78,18 @@ public interface IUserRepository
     Task<IReadOnlyList<User>> ListForAdministrationAsync(CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// Searches for users within the current tenant matching a display name or email pattern.
+    /// </summary>
+    /// <param name="term">The search term to match.</param>
+    /// <param name="limit">The maximum number of results to return.</param>
+    /// <param name="cancellationToken">A token that can cancel the persistence operation.</param>
+    /// <returns>Matching users within the tenant boundary.</returns>
+    Task<IReadOnlyList<User>> SearchAsync(
+        string term,
+        int limit,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// Finds the owner user for a tenant regardless of the current tenant filter.
     /// </summary>
     /// <param name="companyId">The company tenant identifier.</param>

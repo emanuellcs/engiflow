@@ -1103,6 +1103,15 @@ public sealed class EcoApplicationTests
             return Task.FromResult(users);
         }
 
+        public Task<IReadOnlyList<User>> SearchAsync(string term, int limit, CancellationToken cancellationToken = default)
+        {
+            return Task.FromResult<IReadOnlyList<User>>(
+                _users.Where(u => u.DisplayName.Contains(term, StringComparison.OrdinalIgnoreCase) || 
+                                u.Email.Contains(term, StringComparison.OrdinalIgnoreCase))
+                    .Take(limit)
+                    .ToList());
+        }
+
         public Task<User?> GetOwnerByCompanyIdForAuthenticationAsync(
             CompanyId companyId,
             CancellationToken cancellationToken = default)

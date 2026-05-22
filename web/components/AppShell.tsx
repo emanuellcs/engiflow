@@ -38,7 +38,6 @@ import DialogTitle from "@mui/material/DialogTitle";
 import Divider from "@mui/material/Divider";
 import Drawer from "@mui/material/Drawer";
 import IconButton from "@mui/material/IconButton";
-import InputBase from "@mui/material/InputBase";
 import List from "@mui/material/List";
 import ListItem from "@mui/material/ListItem";
 import ListItemButton from "@mui/material/ListItemButton";
@@ -61,6 +60,7 @@ import { useNotificationHub } from "@/components/security/useNotificationHub";
 import { useSecurityHub } from "@/components/security/useSecurityHub";
 import NextLink from "@/components/ui/NextLink";
 import NotificationPopover from "@/components/ui/NotificationPopover";
+import CommandPalette from "@/components/ui/CommandPalette";
 import { apiFetch } from "@/lib/api/client";
 import { type AuthSessionResult, useAuth } from "@/lib/auth/AuthContext";
 import { isAdminOrOwner } from "@/lib/auth/jwt";
@@ -127,7 +127,6 @@ export default function AppShell({ children }: PropsWithChildren) {
 
   // Search Dialog State
   const [isSearchOpen, setIsSearchOpen] = useState(false);
-  const [searchQuery, setSearchQuery] = useState("");
 
   // Quick Actions State
   const [actionsAnchorEl, setActionsAnchorEl] = useState<null | HTMLElement>(null);
@@ -792,53 +791,7 @@ export default function AppShell({ children }: PropsWithChildren) {
 
       <AboutDialog open={isAboutOpen} onClose={handleAboutClose} />
 
-      {/* Command Palette Placeholder */}
-      <Dialog
-        open={isSearchOpen}
-        onClose={handleSearchClose}
-        maxWidth="sm"
-        fullWidth
-        slotProps={{
-          paper: {
-            sx: { borderRadius: 3, mt: "10vh", verticalAlign: "top" },
-          },
-        }}
-      >
-        <Box sx={{ p: 2, display: "flex", alignItems: "center", borderBottom: 1, borderColor: "divider" }}>
-          <SearchOutlinedIcon sx={{ color: "text.disabled", mr: 2 }} />
-          <InputBase
-            autoFocus
-            fullWidth
-            placeholder="Search or type a command..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            sx={{ fontSize: "1rem", fontWeight: 500 }}
-          />
-          <Chip label="ESC" size="small" variant="outlined" sx={{ fontWeight: 700, fontSize: "0.65rem", ml: 1 }} />
-        </Box>
-        <DialogContent sx={{ minHeight: 300, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", bgcolor: (theme) => alpha(theme.palette.action.disabledBackground, 0.04) }}>
-          {searchQuery.length > 0 ? (
-            <Box sx={{ textAlign: "center" }}>
-              <Typography variant="body2" color="text.secondary" sx={{ fontWeight: 500 }}>
-                Searching for &quot;{searchQuery}&quot;...
-              </Typography>
-              <Typography variant="caption" color="text.disabled">
-                No results found for your query.
-              </Typography>
-            </Box>
-          ) : (
-            <>
-              <SearchOutlinedIcon sx={{ fontSize: 48, color: "text.disabled", mb: 2, opacity: 0.5 }} />
-              <Typography variant="body2" color="text.secondary" sx={{ fontWeight: 500 }}>
-                No recent commands found.
-              </Typography>
-              <Typography variant="caption" color="text.disabled">
-                Type to start searching across ECOs, users, and settings.
-              </Typography>
-            </>
-          )}
-        </DialogContent>
-      </Dialog>
+      {isSearchOpen && <CommandPalette open={isSearchOpen} onClose={handleSearchClose} />}
     </Box>
   );
 }
