@@ -144,6 +144,19 @@ internal sealed class UserRepository : IUserRepository
     }
 
     /// <inheritdoc />
+    public async Task<int> CountAsync(UserStatus? status = null, CancellationToken cancellationToken = default)
+    {
+        var query = _dbContext.Users.AsQueryable();
+
+        if (status.HasValue)
+        {
+            query = query.Where(user => user.Status == status.Value);
+        }
+
+        return await query.CountAsync(cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <inheritdoc />
     public Task<User?> GetOwnerByCompanyIdForAuthenticationAsync(
         CompanyId companyId,
         CancellationToken cancellationToken = default)

@@ -3,13 +3,11 @@
 import AddIcon from "@mui/icons-material/Add";
 import AssignmentOutlinedIcon from "@mui/icons-material/AssignmentOutlined";
 import FilterAltOffIcon from "@mui/icons-material/FilterAltOff";
-import RefreshIcon from "@mui/icons-material/Refresh";
 import SearchIcon from "@mui/icons-material/Search";
 import Avatar from "@mui/material/Avatar";
 import Box from "@mui/material/Box";
 import Button from "@mui/material/Button";
 import Checkbox from "@mui/material/Checkbox";
-import CircularProgress from "@mui/material/CircularProgress";
 import FormControl from "@mui/material/FormControl";
 import FormControlLabel from "@mui/material/FormControlLabel";
 import InputAdornment from "@mui/material/InputAdornment";
@@ -20,8 +18,6 @@ import Paper from "@mui/material/Paper";
 import Select, { type SelectChangeEvent } from "@mui/material/Select";
 import Stack from "@mui/material/Stack";
 import TextField from "@mui/material/TextField";
-import Tooltip from "@mui/material/Tooltip";
-import IconButton from "@mui/material/IconButton";
 import Typography from "@mui/material/Typography";
 import { DataGrid, type GridColDef, type GridPaginationModel } from "@mui/x-data-grid";
 import { DatePicker } from "@mui/x-date-pickers/DatePicker";
@@ -354,29 +350,6 @@ function EcoDashboard() {
         description="Search, review, and triage engineering changes across the workspace."
         actionButton={
           <Stack direction="row" spacing={1} sx={{ width: { xs: "100%", sm: "auto" }, alignItems: "center" }}>
-            <Tooltip title="Refresh data">
-              <span>
-                <IconButton
-                  onClick={() => void loadEcos()}
-                  disabled={isLoading}
-                  color="primary"
-                  size="small"
-                  sx={{
-                    border: 1,
-                    borderColor: "divider",
-                    bgcolor: "background.paper",
-                    width: 36,
-                    height: 36,
-                  }}
-                >
-                  {isLoading ? (
-                    <CircularProgress size={20} color="inherit" thickness={5} />
-                  ) : (
-                    <RefreshIcon fontSize="small" />
-                  )}
-                </IconButton>
-              </span>
-            </Tooltip>
             {canCreateEco ? (
               <Button
                 component={NextLink}
@@ -397,6 +370,8 @@ function EcoDashboard() {
             ) : null}
           </Stack>
         }
+        onRefresh={() => void loadEcos()}
+        isLoading={isLoading}
       />
 
       <Paper

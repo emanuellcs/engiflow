@@ -99,6 +99,17 @@ public sealed class SearchApplicationTests
         {
             throw new NotSupportedException();
         }
+
+        public Task<IReadOnlyList<EcoActivityDto>> ListRecentActivityAsync(int limit, CancellationToken cancellationToken = default)
+        {
+            var activity = _ecos
+                .SelectMany(eco => eco.Events.Select(e => new EcoActivityDto(e, "Test User", eco.Title)))
+                .OrderByDescending(a => a.Event.OccurredAt)
+                .Take(limit)
+                .ToList();
+
+            return Task.FromResult<IReadOnlyList<EcoActivityDto>>(activity);
+        }
     }
 
     private sealed class FakeUserRepository : IUserRepository
@@ -157,6 +168,13 @@ public sealed class SearchApplicationTests
                                 u.Email.Contains(term, StringComparison.OrdinalIgnoreCase))
                     .Take(limit)
                     .ToList());
+        }
+
+        public Task<int> CountAsync(UserStatus? status = null, CancellationToken cancellationToken = default)
+        {
+            return Task.FromResult(status.HasValue
+                ? _users.Count(u => u.Status == status.Value)
+                : _users.Count);
         }
 
         public Task<User?> GetOwnerByCompanyIdForAuthenticationAsync(CompanyId companyId, CancellationToken cancellationToken = default)

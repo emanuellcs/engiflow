@@ -74,6 +74,22 @@ internal sealed class EngineeringChangeOrderRepository : IEngineeringChangeOrder
             .CountAsync(cancellationToken);
     }
 
+    /// <inheritdoc />
+    public async Task<IReadOnlyList<EcoActivityDto>> ListRecentActivityAsync(int limit, CancellationToken cancellationToken = default)
+    {
+        // We join events with users to get the actor display name.
+        // Since EcoEvent doesn't have a direct navigation to User (Clean Architecture aggregate boundaries),
+        // we use a join in the query.
+        return await (from eco in _dbContext.EngineeringChangeOrders.AsNoTracking()
+                      from e in eco.Events
+                      join user in _dbContext.Users.AsNoTracking() on e.ActorUserId equals user.Id
+                      orderby e.OccurredAt descending
+                      select new EcoActivityDto(e, user.DisplayName, eco.Title))
+            .Take(limit)
+            .ToArrayAsync(cancellationToken)
+            .ConfigureAwait(false);
+    }
+
     private IQueryable<EngineeringChangeOrder> ApplyFilter(
         IQueryable<EngineeringChangeOrder> query,
         EcoListFilter? filter)

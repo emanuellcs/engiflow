@@ -233,6 +233,13 @@ public sealed class AuthApplicationTests
                     .ToList());
         }
 
+        public Task<int> CountAsync(UserStatus? status = null, CancellationToken cancellationToken = default)
+        {
+            return Task.FromResult(status.HasValue
+                ? _users.Count(u => u.Status == status.Value)
+                : _users.Count);
+        }
+
         public Task<User?> GetOwnerByCompanyIdForAuthenticationAsync(
             CompanyId companyId,
             CancellationToken cancellationToken = default)

@@ -90,6 +90,14 @@ public interface IUserRepository
         CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// Counts users within the current tenant, optionally filtered by status.
+    /// </summary>
+    /// <param name="status">Optional status filter.</param>
+    /// <param name="cancellationToken">A token that can cancel the persistence operation.</param>
+    /// <returns>The number of users matching the criteria.</returns>
+    Task<int> CountAsync(UserStatus? status = null, CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// Finds the owner user for a tenant regardless of the current tenant filter.
     /// </summary>
     /// <param name="companyId">The company tenant identifier.</param>

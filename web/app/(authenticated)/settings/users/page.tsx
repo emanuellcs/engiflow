@@ -3,7 +3,6 @@
 import AddIcon from "@mui/icons-material/Add";
 import PersonOffIcon from "@mui/icons-material/PersonOff";
 import RestoreIcon from "@mui/icons-material/Restore";
-import RefreshIcon from "@mui/icons-material/Refresh";
 import SearchIcon from "@mui/icons-material/Search";
 import GroupIcon from "@mui/icons-material/Group";
 import Alert from "@mui/material/Alert";
@@ -378,49 +377,26 @@ export default function UserManagementPage() {
         title="Team Management"
         description="Manage workspace users, roles, and access policies."
         actionButton={
-          <Stack direction="row" spacing={1} sx={{ width: { xs: "100%", sm: "auto" }, alignItems: "center" }}>
-            <Tooltip title="Refresh data">
-              <span>
-                <IconButton
-                  onClick={() => void loadUsers()}
-                  disabled={isLoading}
-                  color="primary"
-                  size="small"
-                  sx={{
-                    border: 1,
-                    borderColor: "divider",
-                    bgcolor: "background.paper",
-                    width: 36,
-                    height: 36,
-                  }}
-                >
-                  {isLoading ? (
-                    <CircularProgress size={20} color="inherit" thickness={5} />
-                  ) : (
-                    <RefreshIcon fontSize="small" />
-                  )}
-                </IconButton>
-              </span>
-            </Tooltip>
-            <Button
-              variant="contained"
-              startIcon={<AddIcon />}
-              onClick={() => {
-                setSuccessMessage(null);
-                setIsInviteOpen(true);
-              }}
-              sx={{
-                flexGrow: { xs: 1, sm: 0 },
-                minWidth: 128,
-                textTransform: "none",
-                fontWeight: 600,
-                height: 36,
-              }}
-            >
-              Invite User
-            </Button>
-          </Stack>
+          <Button
+            variant="contained"
+            startIcon={<AddIcon />}
+            onClick={() => {
+              setSuccessMessage(null);
+              setIsInviteOpen(true);
+            }}
+            sx={{
+              flexGrow: { xs: 1, sm: 0 },
+              minWidth: 128,
+              textTransform: "none",
+              fontWeight: 600,
+              height: 36,
+            }}
+          >
+            Invite User
+          </Button>
         }
+        onRefresh={() => void loadUsers()}
+        isLoading={isLoading}
       />
 
       {successMessage ? (

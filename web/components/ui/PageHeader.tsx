@@ -1,6 +1,11 @@
+import RefreshIcon from "@mui/icons-material/Refresh";
 import Box from "@mui/material/Box";
+import IconButton from "@mui/material/IconButton";
 import Stack from "@mui/material/Stack";
+import Tooltip from "@mui/material/Tooltip";
 import Typography from "@mui/material/Typography";
+import CircularProgress from "@mui/material/CircularProgress";
+import { useRouter } from "next/navigation";
 import type { ReactNode } from "react";
 
 export type PageHeaderProps = {
@@ -10,6 +15,12 @@ export type PageHeaderProps = {
   description?: string;
   /** Optional action element, commonly a right-aligned command button. */
   actionButton?: ReactNode;
+  /** Whether to show the global refresh button. Defaults to true. */
+  showRefresh?: boolean;
+  /** Optional custom refresh handler. If provided, replaces the default router.refresh() behavior. */
+  onRefresh?: () => void;
+  /** Whether the current page is loading data. If true, the refresh button shows a spinner. */
+  isLoading?: boolean;
 };
 
 /**
@@ -21,13 +32,29 @@ export type PageHeaderProps = {
  * @param props.title - Primary page title rendered in an h1.
  * @param props.description - Optional supporting copy below the title.
  * @param props.actionButton - Optional action element displayed at the end.
+ * @param props.showRefresh - Whether to show the refresh button.
+ * @param props.onRefresh - Custom refresh logic.
+ * @param props.isLoading - Whether the page is in a loading state.
  * @returns A standardized page header for authenticated EngiFlow views.
  */
 export default function PageHeader({
   title,
   description,
   actionButton,
+  showRefresh = true,
+  onRefresh,
+  isLoading = false,
 }: PageHeaderProps) {
+  const router = useRouter();
+
+  const handleRefresh = () => {
+    if (onRefresh) {
+      onRefresh();
+    } else {
+      router.refresh();
+    }
+  };
+
   return (
     <Stack
       component="header"
@@ -49,11 +76,42 @@ export default function PageHeader({
           </Typography>
         ) : null}
       </Box>
-      {actionButton ? (
-        <Box sx={{ alignSelf: { xs: "stretch", sm: "center" } }}>
-          {actionButton}
-        </Box>
-      ) : null}
+      <Stack
+        direction="row"
+        spacing={1}
+        sx={{ alignSelf: { xs: "stretch", sm: "center" }, alignItems: "center" }}
+      >
+        {showRefresh && (
+          <Tooltip title={onRefresh ? "Refresh data" : "Refresh page"}>
+            <span>
+              <IconButton 
+                onClick={handleRefresh} 
+                disabled={isLoading}
+                color="primary"
+                size="small" 
+                aria-label="refresh"
+                sx={{
+                  border: 1,
+                  borderColor: "divider",
+                  bgcolor: "background.paper",
+                  width: 36,
+                  height: 36,
+                  "&:hover": {
+                    bgcolor: "action.hover",
+                  }
+                }}
+              >
+                {isLoading ? (
+                  <CircularProgress size={20} color="inherit" thickness={5} />
+                ) : (
+                  <RefreshIcon fontSize="small" />
+                )}
+              </IconButton>
+            </span>
+          </Tooltip>
+        )}
+        {actionButton}
+      </Stack>
     </Stack>
   );
 }

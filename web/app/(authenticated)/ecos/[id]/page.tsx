@@ -12,7 +12,6 @@ import DownloadIcon from "@mui/icons-material/Download";
 import ErrorOutlineIcon from "@mui/icons-material/ErrorOutlined";
 import HourglassEmptyIcon from "@mui/icons-material/HourglassEmpty";
 import InsertDriveFileIcon from "@mui/icons-material/InsertDriveFile";
-import RefreshIcon from "@mui/icons-material/Refresh";
 import SendIcon from "@mui/icons-material/Send";
 import TimelineIcon from "@mui/icons-material/Timeline";
 import Avatar from "@mui/material/Avatar";
@@ -129,6 +128,16 @@ const eventLabelByType: Record<EcoEventType, string> = {
   SubmittedForReview: "Submitted for review",
 };
 
+import PageHeader from "@/components/ui/PageHeader";
+
+const RECENTLY_VIEWED_STORAGE_KEY = "engiflow.recently_viewed.ecos";
+
+type RecentlyViewedItem = {
+  id: string;
+  title: string;
+  timestamp: string;
+};
+
 /**
  * Renders the authenticated ECO detail route with a GitHub-style PR experience.
  *
@@ -147,6 +156,29 @@ export default function EcoDetailsPage() {
   const [actionErrorMessage, setActionErrorMessage] = useState<string | null>(null);
   const [pendingAction, setPendingAction] = useState<PendingAction | null>(null);
   const [isConflictAlertOpen, setIsConflictAlertOpen] = useState(false);
+
+  const trackRecentlyViewed = useCallback((id: string, title: string) => {
+    try {
+      const stored = localStorage.getItem(RECENTLY_VIEWED_STORAGE_KEY);
+      let items: RecentlyViewedItem[] = stored ? JSON.parse(stored) : [];
+      
+      // Remove existing if present to move to top
+      items = items.filter(i => i.id !== id);
+      
+      // Add current to front
+      items.unshift({
+        id,
+        title,
+        timestamp: new Date().toISOString()
+      });
+
+      // Limit to 5
+      localStorage.setItem(RECENTLY_VIEWED_STORAGE_KEY, JSON.stringify(items.slice(0, 5)));
+    } catch {
+      // Ignore storage errors
+    }
+  }, []);
+
   const usersById = useMemo(
     () => createUserLookup(reviewContext?.users ?? []),
     [reviewContext],
@@ -177,6 +209,7 @@ export default function EcoDetailsPage() {
 
         setEco(normalizeEcoDetails(details));
         setReviewContext(context);
+        trackRecentlyViewed(details.id, details.title);
       } catch (error) {
         setEco(null);
         setLoadErrorMessage(getLoadEcoErrorMessage(error));
@@ -186,7 +219,7 @@ export default function EcoDetailsPage() {
         }
       }
     },
-    [ecoId],
+    [ecoId, trackRecentlyViewed],
   );
 
   useEffect(() => {
@@ -314,72 +347,28 @@ export default function EcoDetailsPage() {
   return (
     <Stack spacing={2.5}>
       {/* 1. Header & Navigation */}
-      <Stack spacing={1.5}>
-        <Button
-          component={NextLink}
-          href="/ecos"
-          variant="text"
-          startIcon={<ArrowBackIcon />}
-          sx={{ alignSelf: "flex-start", textTransform: "none" }}
-        >
-          Back to ECOs
-        </Button>
-        <Stack
-          direction={{ xs: "column", md: "row" }}
-          spacing={1.5}
-          sx={{
-            alignItems: { xs: "flex-start", md: "center" },
-            justifyContent: "space-between",
-          }}
-        >
-          <Stack spacing={1} sx={{ minWidth: 0 }}>
-            <Stack
-              direction={{ xs: "column", sm: "row" }}
-              spacing={1}
-              sx={{ alignItems: { xs: "flex-start", sm: "center" } }}
+      <PageHeader
+        title={eco.title}
+        description={`ECO ${formatShortId(eco.id)} • Submitted by ${requester?.name ?? "Unknown"} • ${formatDateTime(eco.createdAt)}`}
+        actionButton={
+          <Stack direction="row" spacing={1} sx={{ alignItems: "center" }}>
+            <Button
+              component={NextLink}
+              href="/ecos"
+              variant="outlined"
+              startIcon={<ArrowBackIcon />}
+              size="small"
+              sx={{ textTransform: "none" }}
             >
-              <Typography variant="h4" component="h1" sx={{ overflowWrap: "anywhere" }}>
-                {eco.title}
-              </Typography>
-              <StatusChip status={eco.status} />
-            </Stack>
-            <Typography variant="body2" color="text.secondary">
-              {requester?.name ?? formatShortId(eco.createdByUserId)} submitted this change
-              {" • "}
-              Review Round {eco.reviewRound || 0}
-              {" • "}
-              {formatDateTime(eco.createdAt)}
-            </Typography>
-          </Stack>
-          <Stack direction="row" spacing={1} sx={{ flexWrap: "wrap", alignItems: "center" }}>
-            <Tooltip title="Refresh data">
-              <span>
-                <IconButton
-                  onClick={() => void loadEcoDetails()}
-                  disabled={isLoading}
-                  color="primary"
-                  size="small"
-                  sx={{
-                    border: 1,
-                    borderColor: "divider",
-                    bgcolor: "background.paper",
-                    width: 34,
-                    height: 34,
-                  }}
-                >
-                  {isLoading ? (
-                    <CircularProgress size={18} color="inherit" thickness={5} />
-                  ) : (
-                    <RefreshIcon fontSize="small" />
-                  )}
-                </IconButton>
-              </span>
-            </Tooltip>
+              Back to ECOs
+            </Button>
+            <StatusChip status={eco.status} />
             <PriorityChip priority={eco.priority} />
-            <Chip size="small" label={`ECO ${formatShortId(eco.id)}`} variant="outlined" sx={{ height: 34, border: 1, borderColor: "divider" }} />
           </Stack>
-        </Stack>
-      </Stack>
+        }
+        onRefresh={() => void loadEcoDetails()}
+        isLoading={isLoading}
+      />
 
       {actionErrorMessage ? <Alert severity="error">{actionErrorMessage}</Alert> : null}
       {hub.status === "reconnecting" || hub.status === "disconnected" ? (
