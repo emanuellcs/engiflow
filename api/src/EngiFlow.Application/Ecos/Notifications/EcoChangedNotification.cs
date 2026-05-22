@@ -15,6 +15,8 @@ namespace EngiFlow.Application.Ecos.Notifications;
 public sealed record EcoChangedNotification(
     Guid CompanyId,
     Guid EcoId,
+    string Title,
+    Guid CreatedByUserId,
     EcoStatus Status,
     int ReviewRound,
     IReadOnlyList<EcoEventDto> Events) : INotification;

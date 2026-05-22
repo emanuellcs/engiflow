@@ -17,14 +17,19 @@ import InfoOutlinedIcon from "@mui/icons-material/InfoOutlined";
 import LogoutIcon from "@mui/icons-material/Logout";
 import ManageAccountsIcon from "@mui/icons-material/ManageAccounts";
 import MenuIcon from "@mui/icons-material/Menu";
+import NotificationsOutlinedIcon from "@mui/icons-material/NotificationsOutlined";
 import PeopleOutlinedIcon from "@mui/icons-material/PeopleOutlined";
+import SearchOutlinedIcon from "@mui/icons-material/SearchOutlined";
 import SettingsIcon from "@mui/icons-material/Settings";
+import UnfoldMoreOutlinedIcon from "@mui/icons-material/UnfoldMoreOutlined";
 import AppBar from "@mui/material/AppBar";
 import Avatar from "@mui/material/Avatar";
 import Badge from "@mui/material/Badge";
 import Box from "@mui/material/Box";
+import Breadcrumbs from "@mui/material/Breadcrumbs";
 import Button from "@mui/material/Button";
 import Chip from "@mui/material/Chip";
+import CircularProgress from "@mui/material/CircularProgress";
 import Collapse from "@mui/material/Collapse";
 import Dialog from "@mui/material/Dialog";
 import DialogActions from "@mui/material/DialogActions";
@@ -33,12 +38,16 @@ import DialogTitle from "@mui/material/DialogTitle";
 import Divider from "@mui/material/Divider";
 import Drawer from "@mui/material/Drawer";
 import IconButton from "@mui/material/IconButton";
+import InputBase from "@mui/material/InputBase";
 import List from "@mui/material/List";
 import ListItem from "@mui/material/ListItem";
 import ListItemButton from "@mui/material/ListItemButton";
 import ListItemIcon from "@mui/material/ListItemIcon";
 import ListItemText from "@mui/material/ListItemText";
+import Menu from "@mui/material/Menu";
+import MenuItem from "@mui/material/MenuItem";
 import Stack from "@mui/material/Stack";
+
 import { alpha, useTheme } from "@mui/material/styles";
 import Toolbar from "@mui/material/Toolbar";
 import Tooltip from "@mui/material/Tooltip";
@@ -46,12 +55,17 @@ import Typography from "@mui/material/Typography";
 import { usePathname } from "next/navigation";
 import type { PropsWithChildren, ReactNode } from "react";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import TenantList from "@/components/auth/TenantList";
 import { useEcoHub } from "@/components/ecos/useEcoHub";
+import { useNotificationHub } from "@/components/security/useNotificationHub";
 import { useSecurityHub } from "@/components/security/useSecurityHub";
 import NextLink from "@/components/ui/NextLink";
+import NotificationPopover from "@/components/ui/NotificationPopover";
 import { apiFetch } from "@/lib/api/client";
-import { useAuth } from "@/lib/auth/AuthContext";
+import { type AuthSessionResult, useAuth } from "@/lib/auth/AuthContext";
 import { isAdminOrOwner } from "@/lib/auth/jwt";
+import { getRememberMe } from "@/lib/auth/token-storage";
+import { type WorkspaceTenantOption } from "./auth/LoginForm";
 
 const drawerWidth = 240;
 const collapsedDrawerWidth = 64;
@@ -88,23 +102,169 @@ type NavigationDrawerContentProps = {
 export default function AppShell({ children }: PropsWithChildren) {
   const theme = useTheme();
   const pathname = usePathname() ?? "/";
-  const { logout, token, user } = useAuth();
+  const { login, logout, token, user } = useAuth();
   const [isMobileDrawerOpen, setIsMobileDrawerOpen] = useState(false);
   const [isExpanded, setIsExpanded] = useState(true);
   const [isAboutOpen, setIsAboutOpen] = useState(false);
   const [ecoCount, setEcoCount] = useState<number>(0);
+
+  // Real-time Notification Hub
+  const {
+    notifications,
+    unreadCount,
+    markAsRead,
+    markAllAsRead,
+  } = useNotificationHub({
+    token,
+    tenantId: user?.tenantId ?? null,
+  });
+
+  // Workspace Switcher State
+  const [workspaceAnchorEl, setWorkspaceAnchorEl] = useState<null | HTMLElement>(null);
+  const [tenants, setTenants] = useState<WorkspaceTenantOption[]>([]);
+  const [isTenantsLoading, setIsTenantsLoading] = useState(false);
+  const [switchingTenantId, setSwitchingTenantId] = useState<string | null>(null);
+
+  // Search Dialog State
+  const [isSearchOpen, setIsSearchOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+
+  // Quick Actions State
+  const [actionsAnchorEl, setActionsAnchorEl] = useState<null | HTMLElement>(null);
+  const [userAnchorEl, setUserAnchorEl] = useState<null | HTMLElement>(null);
+  const [notificationsAnchorEl, setNotificationsAnchorEl] = useState<null | HTMLElement>(null);
 
   const isAdministrator = isAdminOrOwner(user?.role);
   const companyName = user?.companyName ?? "Workspace";
   const userName = user?.userName ?? "User";
   const role = user?.role ?? "User";
   const canCreateEco = isAdministrator || role === requesterRole;
-  const showDashboardAction = pathname !== "/";
-  const showEcosAction = !pathname.startsWith("/ecos");
-  const showNewEcoAction = canCreateEco && !pathname.startsWith("/ecos/new");
-  const showTeamAction = isAdministrator && !pathname.startsWith("/settings/users");
 
   const currentDrawerWidth = isExpanded ? drawerWidth : collapsedDrawerWidth;
+
+  // Keyboard shortcut for Command Palette (⌘K)
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if ((event.metaKey || event.ctrlKey) && event.key === "k") {
+        event.preventDefault();
+        setIsSearchOpen(true);
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, []);
+
+  /**
+   * Opens the workspace switcher menu and fetches available tenants if not already loaded.
+   * @param event - The click event used to anchor the menu.
+   */
+  const handleWorkspaceOpen = async (event: React.MouseEvent<HTMLElement>) => {
+    setWorkspaceAnchorEl(event.currentTarget);
+    if (tenants.length === 0) {
+      setIsTenantsLoading(true);
+      try {
+        const result = await apiFetch<WorkspaceTenantOption[]>("/api/auth/tenants");
+        setTenants(result);
+      } catch (error) {
+        console.error("Failed to fetch tenants:", error);
+      } finally {
+        setIsTenantsLoading(false);
+      }
+    }
+  };
+
+  /**
+   * Closes the workspace switcher menu.
+   */
+  const handleWorkspaceClose = () => {
+    setWorkspaceAnchorEl(null);
+  };
+
+  /**
+   * Switches the active authenticated session to a different tenant and refreshes the application.
+   * @param tenantId - The target tenant identifier.
+   */
+  const handleTenantSelect = async (tenantId: string) => {
+    if (tenantId === user?.tenantId) {
+      handleWorkspaceClose();
+      return;
+    }
+
+    setSwitchingTenantId(tenantId);
+    const rememberMe = getRememberMe();
+
+    try {
+      const result = await apiFetch<AuthSessionResult>("/api/auth/switch-tenant", {
+        method: "POST",
+        body: { tenantId },
+      });
+
+      login(result, rememberMe);
+
+      // Force a full hydration in the new workspace context.
+      // This ensures all hooks (SWR, SignalR) are reset with the new tenant claims.
+      window.location.assign("/");
+    } catch (error) {
+      console.error("Failed to switch tenant:", error);
+      setSwitchingTenantId(null);
+    }
+  };
+
+  /**
+   * Opens the global search command palette.
+   */
+  const handleSearchOpen = () => setIsSearchOpen(true);
+
+  /**
+   * Closes the global search command palette.
+   */
+  const handleSearchClose = () => setIsSearchOpen(false);
+
+  /**
+   * Opens the global quick actions menu.
+   * @param event - The click event used to anchor the menu.
+   */
+  const handleActionsOpen = (event: React.MouseEvent<HTMLElement>) => {
+    setActionsAnchorEl(event.currentTarget);
+  };
+
+  /**
+   * Closes the global quick actions menu.
+   */
+  const handleActionsClose = () => {
+    setActionsAnchorEl(null);
+  };
+
+  /**
+   * Opens the Topbar user profile menu.
+   * @param event - The click event used to anchor the menu.
+   */
+  const handleUserOpen = (event: React.MouseEvent<HTMLElement>) => {
+    setUserAnchorEl(event.currentTarget);
+  };
+
+  /**
+   * Closes the Topbar user profile menu.
+   */
+  const handleUserClose = () => {
+    setUserAnchorEl(null);
+  };
+
+  /**
+   * Opens the Topbar notifications menu.
+   * @param event - The click event used to anchor the menu.
+   */
+  const handleNotificationsOpen = (event: React.MouseEvent<HTMLElement>) => {
+    setNotificationsAnchorEl(event.currentTarget);
+  };
+
+  /**
+   * Closes the Topbar notifications menu.
+   */
+  const handleNotificationsClose = () => {
+    setNotificationsAnchorEl(null);
+  };
 
   const fetchEcoCount = useCallback(async (isMounted: boolean) => {
     try {
@@ -231,96 +391,296 @@ export default function AppShell({ children }: PropsWithChildren) {
           sx={{
             minHeight: { xs: 56, md: 52 },
             gap: 1,
+            px: { xs: 1, md: 2 },
           }}
         >
           <IconButton
             edge="start"
             aria-label="Open navigation"
             onClick={handleMobileDrawerOpen}
-            sx={{ mr: 1, display: { md: "none" } }}
+            sx={{ display: { md: "none" } }}
           >
             <MenuIcon />
           </IconButton>
-          <Chip
-            icon={<BusinessIcon fontSize="small" />}
-            label={companyName}
-            variant="outlined"
+
+          {/* Task A: Workspace Switcher */}
+          <Button
             size="small"
+            color="inherit"
+            onClick={handleWorkspaceOpen}
+            startIcon={<BusinessIcon fontSize="small" />}
+            endIcon={<UnfoldMoreOutlinedIcon fontSize="small" />}
             sx={{
-              maxWidth: { xs: 170, sm: 320 },
-              "& .MuiChip-label": {
-                overflow: "hidden",
-                textOverflow: "ellipsis",
+              textTransform: "none",
+              fontWeight: 700,
+              fontSize: "0.875rem",
+              px: 1,
+              minWidth: 0,
+              display: { xs: "none", sm: "inline-flex" },
+              maxWidth: { sm: 180, md: 240 },
+              "& .MuiButton-startIcon": { mr: 0.75 },
+              "& .MuiButton-endIcon": { ml: 0.5, color: "text.disabled" },
+            }}
+          >
+            <Typography variant="inherit" noWrap>
+              {companyName}
+            </Typography>
+          </Button>
+
+          {/* Mobile Workspace Toggle */}
+          <IconButton
+            size="small"
+            onClick={handleWorkspaceOpen}
+            sx={{ display: { xs: "inline-flex", sm: "none" } }}
+          >
+            <BusinessIcon fontSize="small" />
+          </IconButton>
+
+          <Menu
+            anchorEl={workspaceAnchorEl}
+            open={Boolean(workspaceAnchorEl)}
+            onClose={handleWorkspaceClose}
+            slotProps={{
+              paper: {
+                sx: { width: 320, mt: 1, borderRadius: 2, boxShadow: theme.shadows[4] },
               },
             }}
-          />
-          <Box sx={{ flex: 1, minWidth: 0 }} />
-          <Stack direction="row" spacing={1} sx={{ alignItems: "center" }}>
-            {showDashboardAction ? (
-              <Tooltip title="Dashboard">
-                <IconButton
-                  component={NextLink}
-                  href="/"
-                  aria-label="Open dashboard"
-                  size="small"
+          >
+            <Box sx={{ p: 2, pb: 1 }}>
+              <Typography variant="subtitle2" sx={{ fontWeight: 800, color: "text.secondary", fontSize: "0.75rem", textTransform: "uppercase", letterSpacing: "0.05em" }}>
+                Switch Workspace
+              </Typography>
+            </Box>
+            <Box sx={{ px: 2, pb: 2 }}>
+              {isTenantsLoading ? (
+                <Stack direction="row" spacing={1} sx={{ py: 2, justifyContent: "center", alignItems: "center" }}>
+                  <CircularProgress size={16} />
+                  <Typography variant="body2" color="text.secondary">Loading workspaces...</Typography>
+                </Stack>
+              ) : (
+                <TenantList
+                  tenants={tenants}
+                  selectedTenantId={switchingTenantId}
+                  currentTenantId={user?.tenantId}
+                  onSelect={handleTenantSelect}
+                  maxHeight={400}
+                />
+              )}
+            </Box>
+          </Menu>
+
+          {/* Task B: Dynamic Breadcrumbs */}
+          <Breadcrumbs
+            aria-label="breadcrumb"
+            separator={<Typography color="text.disabled" variant="caption">/</Typography>}
+            sx={{
+              ml: 1,
+              display: "flex",
+              flex: 1,
+              minWidth: 0,
+              "& .MuiBreadcrumbs-ol": { flexWrap: "nowrap" },
+            }}
+          >
+            {getPathSegments(pathname).map((segment, index, array) => {
+              const isLast = index === array.length - 1;
+              const isDesktop = { xs: "none", md: "inline" };
+              const isMobileActive = { xs: "inline", md: "inline" };
+
+              // On mobile, only show the last segment
+              const display = isLast ? isMobileActive : isDesktop;
+
+              return (
+                <Typography
+                  key={segment.href}
+                  variant="body2"
+                  noWrap
+                  sx={{
+                    display,
+                    fontWeight: isLast ? 700 : 500,
+                    color: isLast ? "text.primary" : "text.secondary",
+                    maxWidth: { xs: 120, sm: 160, md: 200 },
+                    textDecoration: "none",
+                    "&:hover": { textDecoration: isLast ? "none" : "underline" },
+                  }}
+                  {...(!isLast ? { component: NextLink, href: segment.href } : {})}
                 >
-                  <DashboardIcon fontSize="small" />
-                </IconButton>
-              </Tooltip>
-            ) : null}
-            {showEcosAction ? (
-              <Tooltip title="ECOs">
-                <IconButton
-                  component={NextLink}
-                  href="/ecos"
-                  aria-label="Open ECOs"
-                  size="small"
-                >
-                  <AssignmentIcon fontSize="small" />
-                </IconButton>
-              </Tooltip>
-            ) : null}
-            {showTeamAction ? (
-              <Tooltip title="Team Management">
-                <IconButton
-                  component={NextLink}
-                  href="/settings/users"
-                  aria-label="Open team management"
-                  size="small"
-                >
-                  <GroupIcon fontSize="small" />
-                </IconButton>
-              </Tooltip>
-            ) : null}
-            {showNewEcoAction ? (
-              <Button
-                component={NextLink}
-                href="/ecos/new"
-                variant="contained"
-                size="small"
-                startIcon={<AddIcon fontSize="small" />}
+                  {segment.label}
+                </Typography>
+              );
+            })}
+          </Breadcrumbs>
+
+          {/* Task C: Command Palette Anchor (⌘K) */}
+          <Box
+            onClick={handleSearchOpen}
+            sx={{
+              display: { xs: "none", lg: "flex" },
+              justifyContent: "center",
+              flex: 1,
+              px: 2,
+            }}
+          >
+            <Box
+              sx={{
+                width: "100%",
+                maxWidth: 400,
+                height: 36,
+                bgcolor: (theme) => alpha(theme.palette.text.primary, 0.04),
+                borderRadius: 2,
+                display: "flex",
+                alignItems: "center",
+                px: 2,
+                cursor: "pointer",
+                border: 1,
+                borderColor: "divider",
+                transition: "all 0.2s",
+                "&:hover": {
+                  bgcolor: (theme) => alpha(theme.palette.text.primary, 0.08),
+                  borderColor: "primary.light",
+                },
+              }}
+            >
+              <SearchOutlinedIcon fontSize="small" sx={{ color: "text.disabled", mr: 1.5 }} />
+              <Typography variant="body2" color="text.disabled" sx={{ flex: 1 }}>
+                Search or type a command...
+              </Typography>
+              <Typography
+                variant="caption"
                 sx={{
-                  minHeight: 32,
-                  textTransform: "none",
-                  display: { xs: "none", sm: "inline-flex" },
+                  bgcolor: (theme) => alpha(theme.palette.text.primary, 0.1),
+                  px: 0.8,
+                  py: 0.2,
+                  borderRadius: 0.8,
+                  fontWeight: 700,
+                  fontSize: "0.65rem",
+                  color: "text.secondary",
                 }}
               >
-                New ECO
-              </Button>
-            ) : null}
-            {showNewEcoAction ? (
-              <Tooltip title="New ECO">
-                <IconButton
-                  component={NextLink}
-                  href="/ecos/new"
-                  aria-label="Create ECO"
-                  size="small"
-                  sx={{ display: { xs: "inline-flex", sm: "none" } }}
-                >
-                  <AddIcon fontSize="small" />
-                </IconButton>
-              </Tooltip>
-            ) : null}
+                ⌘K
+              </Typography>
+            </Box>
+          </Box>
+
+          {/* Task D: Global Quick Actions & Utilities */}
+          <Stack direction="row" spacing={0.5} sx={{ alignItems: "center", ml: "auto" }}>
+            <IconButton
+              size="small"
+              onClick={handleSearchOpen}
+              sx={{ display: { xs: "inline-flex", lg: "none" } }}
+            >
+              <SearchOutlinedIcon fontSize="small" />
+            </IconButton>
+
+            <Tooltip title="Global Actions">
+              <IconButton
+                size="small"
+                onClick={handleActionsOpen}
+                sx={{
+                  bgcolor: "primary.main",
+                  color: "white",
+                  width: 32,
+                  height: 32,
+                  "&:hover": { bgcolor: "primary.dark" },
+                }}
+              >
+                <AddIcon fontSize="small" />
+              </IconButton>
+            </Tooltip>
+
+            <Menu
+              anchorEl={actionsAnchorEl}
+              open={Boolean(actionsAnchorEl)}
+              onClose={handleActionsClose}
+              transformOrigin={{ horizontal: "right", vertical: "top" }}
+              anchorOrigin={{ horizontal: "right", vertical: "bottom" }}
+              slotProps={{
+                paper: {
+                  sx: { width: 180, mt: 1, borderRadius: 2, boxShadow: theme.shadows[3] },
+                },
+              }}
+            >
+              {canCreateEco ? (
+                <MenuItem component={NextLink} href="/ecos/new" onClick={handleActionsClose}>
+                  <ListItemIcon><AddIcon fontSize="small" /></ListItemIcon>
+                  <ListItemText primary="New ECO" slotProps={{ primary: { variant: "body2", sx: { fontWeight: 600 } } }} />
+                </MenuItem>
+              ) : null}
+              {isAdministrator ? (
+                <MenuItem component={NextLink} href="/settings/users" onClick={handleActionsClose}>
+                  <ListItemIcon><PeopleOutlinedIcon fontSize="small" /></ListItemIcon>
+                  <ListItemText primary="Invite User" slotProps={{ primary: { variant: "body2", sx: { fontWeight: 600 } } }} />
+                </MenuItem>
+              ) : null}
+              {!canCreateEco && !isAdministrator ? (
+                <MenuItem disabled>
+                  <ListItemText primary="No actions available" slotProps={{ primary: { variant: "body2", sx: { color: "text.disabled" } } }} />
+                </MenuItem>
+              ) : null}
+            </Menu>
+
+            <IconButton
+              size="small"
+              onClick={handleNotificationsOpen}
+              sx={{ display: { xs: "none", sm: "inline-flex" } }}
+            >
+              <Badge badgeContent={unreadCount} color="error" variant="dot">
+                <NotificationsOutlinedIcon fontSize="small" />
+              </Badge>
+            </IconButton>
+
+            <NotificationPopover
+              anchorEl={notificationsAnchorEl}
+              open={Boolean(notificationsAnchorEl)}
+              onClose={handleNotificationsClose}
+              notifications={notifications}
+              onMarkAsRead={markAsRead}
+              onMarkAllAsRead={markAllAsRead}
+            />
+
+            <Divider orientation="vertical" flexItem sx={{ mx: 0.5, height: 24, alignSelf: "center", display: { xs: "none", sm: "block" } }} />
+
+            <Avatar
+              onClick={handleUserOpen}
+              sx={{
+                width: 32,
+                height: 32,
+                bgcolor: "secondary.main",
+                fontSize: "0.75rem",
+                fontWeight: 700,
+                cursor: "pointer",
+                transition: "transform 0.2s",
+                "&:hover": { transform: "scale(1.1)" },
+              }}
+            >
+              {getInitials(userName)}
+            </Avatar>
+
+            <Menu
+              anchorEl={userAnchorEl}
+              open={Boolean(userAnchorEl)}
+              onClose={handleUserClose}
+              transformOrigin={{ horizontal: "right", vertical: "top" }}
+              anchorOrigin={{ horizontal: "right", vertical: "bottom" }}
+              slotProps={{
+                paper: {
+                  sx: { width: 220, mt: 1, borderRadius: 2, boxShadow: theme.shadows[3] },
+                },
+              }}
+            >
+              <Box sx={{ px: 2, py: 1.5 }}>
+                <Typography variant="subtitle2" noWrap sx={{ fontWeight: 700 }}>{userName}</Typography>
+                <Typography variant="caption" color="text.secondary" noWrap sx={{ display: "block" }}>{role}</Typography>
+              </Box>
+              <Divider />
+              <MenuItem component={NextLink} href="/settings" onClick={handleUserClose}>
+                <ListItemIcon><SettingsIcon fontSize="small" /></ListItemIcon>
+                <ListItemText primary="Settings" slotProps={{ primary: { variant: "body2" } }} />
+              </MenuItem>
+              <MenuItem onClick={() => { handleUserClose(); logout(); }}>
+                <ListItemIcon><LogoutIcon fontSize="small" /></ListItemIcon>
+                <ListItemText primary="Logout" slotProps={{ primary: { variant: "body2" } }} />
+              </MenuItem>
+            </Menu>
           </Stack>
         </Toolbar>
       </AppBar>
@@ -431,8 +791,88 @@ export default function AppShell({ children }: PropsWithChildren) {
       </Box>
 
       <AboutDialog open={isAboutOpen} onClose={handleAboutClose} />
+
+      {/* Command Palette Placeholder */}
+      <Dialog
+        open={isSearchOpen}
+        onClose={handleSearchClose}
+        maxWidth="sm"
+        fullWidth
+        slotProps={{
+          paper: {
+            sx: { borderRadius: 3, mt: "10vh", verticalAlign: "top" },
+          },
+        }}
+      >
+        <Box sx={{ p: 2, display: "flex", alignItems: "center", borderBottom: 1, borderColor: "divider" }}>
+          <SearchOutlinedIcon sx={{ color: "text.disabled", mr: 2 }} />
+          <InputBase
+            autoFocus
+            fullWidth
+            placeholder="Search or type a command..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            sx={{ fontSize: "1rem", fontWeight: 500 }}
+          />
+          <Chip label="ESC" size="small" variant="outlined" sx={{ fontWeight: 700, fontSize: "0.65rem", ml: 1 }} />
+        </Box>
+        <DialogContent sx={{ minHeight: 300, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", bgcolor: (theme) => alpha(theme.palette.action.disabledBackground, 0.04) }}>
+          {searchQuery.length > 0 ? (
+            <Box sx={{ textAlign: "center" }}>
+              <Typography variant="body2" color="text.secondary" sx={{ fontWeight: 500 }}>
+                Searching for &quot;{searchQuery}&quot;...
+              </Typography>
+              <Typography variant="caption" color="text.disabled">
+                No results found for your query.
+              </Typography>
+            </Box>
+          ) : (
+            <>
+              <SearchOutlinedIcon sx={{ fontSize: 48, color: "text.disabled", mb: 2, opacity: 0.5 }} />
+              <Typography variant="body2" color="text.secondary" sx={{ fontWeight: 500 }}>
+                No recent commands found.
+              </Typography>
+              <Typography variant="caption" color="text.disabled">
+                Type to start searching across ECOs, users, and settings.
+              </Typography>
+            </>
+          )}
+        </DialogContent>
+      </Dialog>
     </Box>
   );
+}
+
+/**
+ * Parses the current pathname into a list of breadcrumb segments.
+ *
+ * @param pathname - The current URL pathname.
+ * @returns A list of breadcrumb segments with labels and hrefs.
+ */
+function getPathSegments(pathname: string): { label: string; href: string }[] {
+  const segments: { label: string; href: string }[] = [{ label: "Workspace", href: "/" }];
+
+  if (pathname === "/") {
+    return segments;
+  }
+
+  const parts = pathname.split("/").filter(Boolean);
+  let currentPath = "";
+
+  for (const part of parts) {
+    currentPath += `/${part}`;
+    
+    // Custom labels for known routes
+    let label = part.charAt(0).toUpperCase() + part.slice(1).replace(/-/g, " ");
+    
+    // Handle specific route naming
+    if (part.toLowerCase() === "ecos") label = "ECOs";
+    if (part.startsWith("eco-")) label = part.toUpperCase(); // e.g. ECO-2026-001
+
+    segments.push({ label, href: currentPath });
+  }
+
+  return segments;
 }
 
 /**

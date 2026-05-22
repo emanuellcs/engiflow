@@ -94,6 +94,69 @@ public sealed class AuthControllerTests
     }
 
     [Fact]
+    public async Task GetMyTenantsAsync_DispatchesGetMyTenantsQueryAndReturnsOk()
+    {
+        var tenants = new List<TenantSelectionDto>
+        {
+            new(Guid.NewGuid(), "Acme Corp", "contact@acme.com", "John Doe", "john@acme.com")
+        };
+        var mediator = new FakeApplicationMediator { Dispatch = _ => tenants };
+        var controller = new AuthController(mediator);
+
+        var result = await controller.GetMyTenantsAsync(CancellationToken.None);
+
+        var okResult = Assert.IsType<OkObjectResult>(result.Result);
+        Assert.Same(tenants, okResult.Value);
+
+        Assert.IsType<GetMyTenantsQuery>(mediator.LastRequest);
+    }
+
+    [Fact]
+    public async Task SwitchTenantAsync_DispatchesSwitchTenantCommandAndReturnsOk()
+    {
+        var tenantId = Guid.NewGuid();
+        var switchResult = new LoginResultDto(
+            "new-jwt-token",
+            "Bearer",
+            DateTimeOffset.Parse("2026-05-15T01:00:00Z"),
+            "Ada Lovelace",
+            "Acme Engineering",
+            [nameof(UserRole.Administrator)]);
+        var mediator = new FakeApplicationMediator { Dispatch = _ => switchResult };
+        var controller = new AuthController(mediator);
+
+        var result = await controller.SwitchTenantAsync(
+            new SwitchTenantRequest(tenantId),
+            CancellationToken.None);
+
+        var okResult = Assert.IsType<OkObjectResult>(result.Result);
+        Assert.Same(switchResult, okResult.Value);
+
+        var command = Assert.IsType<SwitchTenantCommand>(mediator.LastRequest);
+        Assert.Equal(tenantId, command.TenantId);
+    }
+
+    [Fact]
+    public void GetMyTenantsAsync_RequiresAuthenticatedUser()
+    {
+        var authorize = typeof(AuthController)
+            .GetMethod(nameof(AuthController.GetMyTenantsAsync))!
+            .GetCustomAttributes(typeof(AuthorizeAttribute), inherit: true);
+
+        Assert.NotEmpty(authorize);
+    }
+
+    [Fact]
+    public void SwitchTenantAsync_RequiresAuthenticatedUser()
+    {
+        var authorize = typeof(AuthController)
+            .GetMethod(nameof(AuthController.SwitchTenantAsync))!
+            .GetCustomAttributes(typeof(AuthorizeAttribute), inherit: true);
+
+        Assert.NotEmpty(authorize);
+    }
+
+    [Fact]
     public void LoginAsync_AllowsAnonymousRequests()
     {
         var allowAnonymous = typeof(AuthController)

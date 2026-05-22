@@ -40,6 +40,17 @@ export function getStoredAuthToken(): string | null {
   return readCookie(authTokenCookieName);
 }
 
+/**
+ * Checks if the current session was persisted via rememberMe (stored in localStorage).
+ */
+export function getRememberMe(): boolean {
+  if (!isBrowser()) {
+    return false;
+  }
+
+  return Boolean(readWebStorageItem(window.localStorage, authSessionStorageKey));
+}
+
 export function storeAuthSession(
   session: StoredAuthSession,
   rememberMe: boolean,

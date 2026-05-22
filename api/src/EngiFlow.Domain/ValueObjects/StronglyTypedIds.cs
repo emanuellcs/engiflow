@@ -467,3 +467,48 @@ public readonly record struct EcoAttachmentId
     /// <returns>The identifier as a string.</returns>
     public override string ToString() => Value.ToString();
 }
+
+/// <summary>
+/// Strongly typed identifier for a tenant-scoped user notification.
+/// </summary>
+public readonly record struct NotificationId
+{
+    /// <summary>
+    /// Initializes a new instance of the <see cref="NotificationId"/> record.
+    /// </summary>
+    /// <param name="value">The non-empty GUID value backing the identifier.</param>
+    /// <exception cref="DomainException">Thrown when <paramref name="value"/> is empty.</exception>
+    public NotificationId(Guid value)
+    {
+        if (value == Guid.Empty)
+        {
+            throw new DomainException("Notification id cannot be empty.");
+        }
+
+        Value = value;
+    }
+
+    /// <summary>
+    /// Gets the underlying GUID value used for persistence and integration boundaries.
+    /// </summary>
+    public Guid Value { get; }
+
+    /// <summary>
+    /// Creates a new unique notification identifier.
+    /// </summary>
+    /// <returns>A non-empty notification identifier.</returns>
+    public static NotificationId New() => new(Guid.NewGuid());
+
+    /// <summary>
+    /// Rehydrates a notification identifier from an existing GUID.
+    /// </summary>
+    /// <param name="value">The persisted GUID value.</param>
+    /// <returns>A validated notification identifier.</returns>
+    public static NotificationId From(Guid value) => new(value);
+
+    /// <summary>
+    /// Returns the canonical string representation of the underlying GUID.
+    /// </summary>
+    /// <returns>The identifier as a string.</returns>
+    public override string ToString() => Value.ToString();
+}

@@ -52,6 +52,11 @@ public sealed class EngiFlowDbContext : DbContext
     public DbSet<CompanySettings> CompanySettings => Set<CompanySettings>();
 
     /// <summary>
+    /// Gets tenant-scoped user notifications.
+    /// </summary>
+    public DbSet<EngiFlow.Domain.Notifications.Notification> Notifications => Set<EngiFlow.Domain.Notifications.Notification>();
+
+    /// <summary>
     /// Gets the users table.
     /// </summary>
     public DbSet<User> Users => Set<User>();
@@ -120,6 +125,7 @@ public sealed class EngiFlowDbContext : DbContext
         modelBuilder.ApplyConfiguration(new UserConfiguration());
         modelBuilder.ApplyConfiguration(new UserEventConfiguration());
         modelBuilder.ApplyConfiguration(new PasswordSetupTokenConfiguration());
+        modelBuilder.ApplyConfiguration(new NotificationConfiguration());
         modelBuilder.ApplyConfiguration(new EngineeringChangeOrderConfiguration());
         modelBuilder.ApplyConfiguration(new EcoEventConfiguration());
         modelBuilder.ApplyConfiguration(new EcoCommentConfiguration());

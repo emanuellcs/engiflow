@@ -20,6 +20,8 @@ internal static class EcoNotificationQueueExtensions
         queue.Enqueue(new EcoChangedNotification(
             details.CompanyId,
             details.Id,
+            details.Title,
+            details.CreatedByUserId,
             details.Status,
             details.ReviewRound,
             details.Events));

@@ -73,4 +73,10 @@ internal static class StronglyTypedIdConverters
     /// </summary>
     public static readonly ValueConverter<EcoAttachmentId, Guid> EcoAttachmentId =
         new(id => id.Value, value => Domain.ValueObjects.EcoAttachmentId.From(value));
+
+    /// <summary>
+    /// Converts <see cref="NotificationId"/> values to and from database UUID values.
+    /// </summary>
+    public static readonly ValueConverter<NotificationId, Guid> NotificationId =
+        new(id => id.Value, value => Domain.ValueObjects.NotificationId.From(value));
 }

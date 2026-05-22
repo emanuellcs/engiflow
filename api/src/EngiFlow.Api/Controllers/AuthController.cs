@@ -197,4 +197,55 @@ public sealed class AuthController : ControllerBase
         return Ok();
     }
 
+    /// <summary>
+    /// Retrieves the available workspaces for the currently authenticated user.
+    /// </summary>
+    /// <param name="cancellationToken">A token that can cancel the request.</param>
+    /// <returns>A list of available tenants.</returns>
+    /// <response code="200">The available tenants were returned.</response>
+    /// <response code="401">A valid bearer token is required.</response>
+    /// <response code="500">An unexpected server error occurred.</response>
+    [Authorize]
+    [HttpGet("tenants")]
+    [ProducesResponseType(typeof(IReadOnlyList<TenantSelectionDto>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status500InternalServerError)]
+    public async Task<ActionResult<IReadOnlyList<TenantSelectionDto>>> GetMyTenantsAsync(
+        CancellationToken cancellationToken)
+    {
+        var result = await _mediator.SendQueryAsync<GetMyTenantsQuery, IReadOnlyList<TenantSelectionDto>>(
+                new GetMyTenantsQuery(),
+                cancellationToken)
+            .ConfigureAwait(false);
+
+        return Ok(result);
+    }
+
+    /// <summary>
+    /// Switches the current authenticated session to a different tenant.
+    /// </summary>
+    /// <param name="request">The target tenant selection.</param>
+    /// <param name="cancellationToken">A token that can cancel the request.</param>
+    /// <returns>A brand new bearer access token for the selected workspace.</returns>
+    /// <response code="200">The session was successfully switched and a new token was issued.</response>
+    /// <response code="400">The request body failed application validation.</response>
+    /// <response code="401">A valid bearer token is required or access to the target tenant was denied.</response>
+    /// <response code="500">An unexpected server error occurred.</response>
+    [Authorize]
+    [HttpPost("switch-tenant")]
+    [ProducesResponseType(typeof(LoginResultDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ValidationProblemDetails), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status500InternalServerError)]
+    public async Task<ActionResult<LoginResultDto>> SwitchTenantAsync(
+        [FromBody] SwitchTenantRequest request,
+        CancellationToken cancellationToken)
+    {
+        var result = await _mediator.SendCommandAsync<SwitchTenantCommand, LoginResultDto>(
+                new SwitchTenantCommand(request.TenantId),
+                cancellationToken)
+            .ConfigureAwait(false);
+
+        return Ok(result);
+    }
 }
