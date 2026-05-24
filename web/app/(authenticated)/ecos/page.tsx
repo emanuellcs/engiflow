@@ -124,7 +124,7 @@ function EcoDashboard() {
         setReviewContext(context);
       } catch (error) {
         if (!isAbortError(error)) {
-          setReviewContext({ minApprovalsRequired: 1, users: [] });
+          setReviewContext({ minApprovalsRequired: 1, allowSelfApproval: false, users: [] });
         }
       }
     }

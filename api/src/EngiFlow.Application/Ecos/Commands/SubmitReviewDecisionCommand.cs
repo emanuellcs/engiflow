@@ -74,8 +74,8 @@ public sealed class SubmitReviewDecisionCommandHandler : ICommandHandler<SubmitR
         var actorUserId = await EcoCommandHandlerSupport
             .EnsureCurrentUserCanActAsync(_users, _tenantProvider, cancellationToken)
             .ConfigureAwait(false);
-        var minApprovalsRequired = await EcoCommandHandlerSupport
-            .GetMinApprovalsRequiredAsync(_settings, _tenantProvider, cancellationToken)
+        var settings = await EcoCommandHandlerSupport
+            .GetGovernanceSettingsAsync(_settings, _tenantProvider, cancellationToken)
             .ConfigureAwait(false);
         var eco = await EcoCommandHandlerSupport.GetEcoAsync(_ecos, command.EcoId, cancellationToken)
             .ConfigureAwait(false);
@@ -83,7 +83,8 @@ public sealed class SubmitReviewDecisionCommandHandler : ICommandHandler<SubmitR
         eco.SubmitReviewDecision(
             actorUserId,
             command.Decision,
-            minApprovalsRequired,
+            settings.MinApprovalsRequired,
+            settings.AllowSelfApproval,
             command.Comment);
         await _unitOfWork.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
         _notifications.EnqueueEcoChanged(eco);

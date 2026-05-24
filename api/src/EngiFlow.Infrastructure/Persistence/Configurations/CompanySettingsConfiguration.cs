@@ -15,9 +15,16 @@ internal sealed class CompanySettingsConfiguration : IEntityTypeConfiguration<Co
     {
         builder.ToTable(
             "company_settings",
-            table => table.HasCheckConstraint(
-                "ck_company_settings_min_approvals_required",
-                "\"min_approvals_required\" >= 1"));
+            table =>
+            {
+                table.HasCheckConstraint(
+                    "ck_company_settings_min_approvals_required",
+                    "\"min_approvals_required\" >= 1");
+
+                table.HasCheckConstraint(
+                    "ck_company_settings_max_review_days_before_sla_breach",
+                    "\"max_review_days_before_sla_breach\" >= 1");
+            });
 
         builder.HasKey(settings => settings.CompanyId);
 
@@ -29,6 +36,16 @@ internal sealed class CompanySettingsConfiguration : IEntityTypeConfiguration<Co
         builder.Property(settings => settings.MinApprovalsRequired)
             .HasColumnName("min_approvals_required")
             .HasDefaultValue(1)
+            .IsRequired();
+
+        builder.Property(settings => settings.MaxReviewDaysBeforeSlabreach)
+            .HasColumnName("max_review_days_before_sla_breach")
+            .HasDefaultValue(5)
+            .IsRequired();
+
+        builder.Property(settings => settings.AllowSelfApproval)
+            .HasColumnName("allow_self_approval")
+            .HasDefaultValue(false)
             .IsRequired();
 
         builder.Property(settings => settings.CreatedAt)

@@ -4,7 +4,11 @@ namespace EngiFlow.Application.Settings.Dtos;
 /// Describes tenant workflow governance settings.
 /// </summary>
 /// <param name="MinApprovalsRequired">Minimum approvals required for an ECO review quorum.</param>
+/// <param name="MaxReviewDaysBeforeSlabreach">Maximum review time before SLA breach (Days).</param>
+/// <param name="AllowSelfApproval">Whether ECO authors can approve their own submissions.</param>
 /// <param name="UpdatedAt">The UTC timestamp when settings were last updated.</param>
 public sealed record CompanySettingsDto(
     int MinApprovalsRequired,
+    int MaxReviewDaysBeforeSlabreach,
+    bool AllowSelfApproval,
     DateTimeOffset UpdatedAt);

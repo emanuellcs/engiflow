@@ -343,6 +343,7 @@ export default function EcoDetailsPage() {
 
   const requester = usersById.get(eco.createdByUserId);
   const isCreator = user?.id === eco.createdByUserId;
+  const allowSelfApproval = reviewContext?.allowSelfApproval ?? false;
 
   return (
     <Stack spacing={2.5}>
@@ -408,6 +409,7 @@ export default function EcoDetailsPage() {
               isBlocked={Boolean(pendingAction) || isConflictRefreshing}
               isCreator={isCreator}
               canReview={canReview}
+              allowSelfApproval={allowSelfApproval}
               onApprove={() =>
                 runEcoAction("approve", () =>
                   submitReviewDecision(eco.id, { decision: "Approve" }),
@@ -516,6 +518,7 @@ type ConversationTabProps = {
   isBlocked: boolean;
   isCreator: boolean;
   canReview: boolean;
+  allowSelfApproval: boolean;
   onApprove: () => void;
   onCancel: () => void;
   onRequestChanges: (comment: string) => void;
@@ -536,6 +539,7 @@ function ConversationTab({
   isBlocked,
   isCreator,
   canReview,
+  allowSelfApproval,
   onApprove,
   onCancel,
   onRequestChanges,
@@ -631,6 +635,7 @@ function ConversationTab({
             isBlocked={isBlocked}
             isCreator={isCreator}
             canReview={canReview}
+            allowSelfApproval={allowSelfApproval}
             onApprove={onApprove}
             onCancel={onCancel}
             onRequestChanges={onRequestChanges}
@@ -641,7 +646,6 @@ function ConversationTab({
           />
         </Stack>
       </Grid>
-
       {/* Right Column: Sticky Metadata Sidebar */}
       <Grid size={{ xs: 12, md: 4 }}>
         <Stack spacing={2.5} sx={{ position: "sticky", top: 24 }}>
@@ -714,6 +718,7 @@ type ActionAreaProps = {
   isBlocked: boolean;
   isCreator: boolean;
   canReview: boolean;
+  allowSelfApproval: boolean;
   onApprove: () => void;
   onCancel: () => void;
   onRequestChanges: (comment: string) => void;
@@ -731,6 +736,7 @@ function ActionArea({
   isBlocked,
   isCreator,
   canReview,
+  allowSelfApproval,
   onApprove,
   onCancel,
   onRequestChanges,
@@ -751,14 +757,14 @@ function ActionArea({
   }>({ open: false, title: "", message: "", onConfirm: () => {} });
 
   const currentVote = useMemo(() => {
-    return eco.approvals.find(
+    return eco.approvals?.find(
       (a) => a.reviewRound === eco.reviewRound && a.approverUserId === user?.id,
     );
   }, [eco.approvals, eco.reviewRound, user?.id]);
 
   const canSubmit = eco.status === "Draft" && isCreator;
   const canCancel = (eco.status === "Draft" || eco.status === "UnderReview") && isCreator;
-  const canVote = eco.status === "UnderReview" && canReview && !isCreator;
+  const canVote = eco.status === "UnderReview" && canReview && (!isCreator || allowSelfApproval);
   const showVoteButtons = canVote && (!currentVote || wantsToChangeVote);
   const showVoteIndicator = canVote && currentVote && !wantsToChangeVote;
 
@@ -767,7 +773,7 @@ function ActionArea({
     canCancel ||
     showVoteButtons ||
     showVoteIndicator ||
-    (!isCreator && !canReview && eco.status === "UnderReview") ||
+    (eco.status === "UnderReview" && !canVote) ||
     (eco.status === "Draft" && !isCreator);
 
   const disableActions = isBlocked || Boolean(pendingAction);
@@ -797,12 +803,12 @@ function ActionArea({
                 }}
               >
                 <Box>
-                  {isCreator && eco.status === "UnderReview" && (
+                  {isCreator && eco.status === "UnderReview" && !allowSelfApproval && (
                     <Typography variant="body2" color="text.secondary">
                       As the author, you cannot participate in the approval quorum.
                     </Typography>
                   )}
-                  {!isCreator && !canReview && eco.status === "UnderReview" && (
+                  {eco.status === "UnderReview" && !canVote && !isCreator && (
                     <Typography variant="body2" color="text.secondary">
                       You do not have the permissions required to review this ECO.
                     </Typography>

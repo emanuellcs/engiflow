@@ -96,6 +96,7 @@ public sealed class EcosControllerTests
     {
         var context = new EcoReviewContextDto(
             2,
+            true,
             [new EcoUserDto(Guid.NewGuid(), "Ada Lovelace", "ada@example.test", "Approver")]);
         var mediator = new FakeApplicationMediator { Dispatch = _ => context };
         var controller = new EcosController(mediator);

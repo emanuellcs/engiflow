@@ -292,6 +292,8 @@ export interface EcoUserDto {
 export interface EcoReviewContextDto {
   /** Tenant quorum setting. */
   minApprovalsRequired: number;
+  /** Whether authors can approve their own ECOs. */
+  allowSelfApproval: boolean;
   /** Active tenant users visible to ECO screens. */
   users: EcoUserDto[];
 }

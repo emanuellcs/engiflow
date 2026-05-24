@@ -14,10 +14,17 @@ public sealed class CompanySettings : ITenantScoped
     {
     }
 
-    private CompanySettings(CompanyId companyId, int minApprovalsRequired, DateTimeOffset createdAt)
+    private CompanySettings(
+        CompanyId companyId,
+        int minApprovalsRequired,
+        int maxReviewDaysBeforeSlabreach,
+        bool allowSelfApproval,
+        DateTimeOffset createdAt)
     {
         CompanyId = companyId;
         MinApprovalsRequired = minApprovalsRequired;
+        MaxReviewDaysBeforeSlabreach = maxReviewDaysBeforeSlabreach;
+        AllowSelfApproval = allowSelfApproval;
         CreatedAt = createdAt;
         UpdatedAt = createdAt;
     }
@@ -29,6 +36,16 @@ public sealed class CompanySettings : ITenantScoped
     /// Gets the number of active review-round approvals required for an ECO to become approved.
     /// </summary>
     public int MinApprovalsRequired { get; private set; }
+
+    /// <summary>
+    /// Gets the maximum number of days allowed for a review before it is considered an SLA breach.
+    /// </summary>
+    public int MaxReviewDaysBeforeSlabreach { get; private set; }
+
+    /// <summary>
+    /// Gets a value indicating whether the ECO author is permitted to approve their own creation.
+    /// </summary>
+    public bool AllowSelfApproval { get; private set; }
 
     /// <summary>
     /// Gets the UTC timestamp when the settings row was created.
@@ -50,7 +67,37 @@ public sealed class CompanySettings : ITenantScoped
     {
         DomainGuard.AgainstDefault(companyId, nameof(companyId));
         var timestamp = DomainGuard.UtcTimestamp(createdAt);
-        return new CompanySettings(companyId, 1, timestamp);
+        return new CompanySettings(companyId, 1, 5, false, timestamp);
+    }
+
+    /// <summary>
+    /// Updates the core workflow governance policies for the tenant.
+    /// </summary>
+    /// <param name="minApprovalsRequired">The required number of approvals for a quorum.</param>
+    /// <param name="maxReviewDaysBeforeSlabreach">The SLA threshold in days.</param>
+    /// <param name="allowSelfApproval">Whether authors can approve their own ECOs.</param>
+    /// <param name="updatedAt">Optional deterministic update timestamp.</param>
+    /// <exception cref="DomainException">Thrown when the quorum is less than one or SLA days are less than one.</exception>
+    public void UpdatePolicies(
+        int minApprovalsRequired,
+        int maxReviewDaysBeforeSlabreach,
+        bool allowSelfApproval,
+        DateTimeOffset? updatedAt = null)
+    {
+        if (minApprovalsRequired < 1)
+        {
+            throw new DomainException("Minimum approvals required must be at least one.");
+        }
+
+        if (maxReviewDaysBeforeSlabreach < 1)
+        {
+            throw new DomainException("The SLA threshold must be at least one day.");
+        }
+
+        MinApprovalsRequired = minApprovalsRequired;
+        MaxReviewDaysBeforeSlabreach = maxReviewDaysBeforeSlabreach;
+        AllowSelfApproval = allowSelfApproval;
+        UpdatedAt = DomainGuard.UtcTimestamp(updatedAt);
     }
 
     /// <summary>
@@ -59,6 +106,7 @@ public sealed class CompanySettings : ITenantScoped
     /// <param name="minApprovalsRequired">The required number of approvals.</param>
     /// <param name="updatedAt">Optional deterministic update timestamp.</param>
     /// <exception cref="DomainException">Thrown when the quorum is less than one.</exception>
+    [Obsolete("Use UpdatePolicies instead to update multiple governance settings atomically.")]
     public void SetMinApprovalsRequired(int minApprovalsRequired, DateTimeOffset? updatedAt = null)
     {
         if (minApprovalsRequired < 1)

@@ -14,7 +14,7 @@ public sealed class SettingsControllerTests
     [Fact]
     public async Task GetAsync_DispatchesSettingsQueryAndReturnsOk()
     {
-        var dto = new CompanySettingsDto(2, DateTimeOffset.Parse("2026-05-18T00:00:00Z"));
+        var dto = new CompanySettingsDto(2, 5, false, DateTimeOffset.Parse("2026-05-18T00:00:00Z"));
         var mediator = new FakeApplicationMediator { Dispatch = _ => dto };
         var controller = new SettingsController(mediator);
 
@@ -28,18 +28,20 @@ public sealed class SettingsControllerTests
     [Fact]
     public async Task UpdateAsync_DispatchesSettingsCommandAndReturnsOk()
     {
-        var dto = new CompanySettingsDto(3, DateTimeOffset.Parse("2026-05-18T00:00:00Z"));
+        var dto = new CompanySettingsDto(3, 10, true, DateTimeOffset.Parse("2026-05-18T00:00:00Z"));
         var mediator = new FakeApplicationMediator { Dispatch = _ => dto };
         var controller = new SettingsController(mediator);
 
         var result = await controller.UpdateAsync(
-            new UpdateSettingsRequest(3),
+            new UpdateSettingsRequest(3, 10, true),
             CancellationToken.None);
 
         var ok = Assert.IsType<OkObjectResult>(result.Result);
         Assert.Same(dto, ok.Value);
         var command = Assert.IsType<UpdateCompanySettingsCommand>(mediator.LastRequest);
         Assert.Equal(3, command.MinApprovalsRequired);
+        Assert.Equal(10, command.MaxReviewDaysBeforeSlabreach);
+        Assert.True(command.AllowSelfApproval);
     }
 
     [Fact]

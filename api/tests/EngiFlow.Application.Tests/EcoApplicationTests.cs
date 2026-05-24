@@ -537,7 +537,7 @@ public sealed class EcoApplicationTests
                 null)));
 
         Assert.Equal(
-            "Compliance Rule: The author of the ECO cannot participate in its approval quorum",
+            "Governance Policy: Self-approval is disabled for this tenant. Authors cannot approve their own ECOs.",
             exception.Message);
         Assert.Equal(0, unitOfWork.SaveCount);
     }
@@ -558,7 +558,7 @@ public sealed class EcoApplicationTests
         Assert.Equal(1, unitOfWork.SaveCount);
 
         var updateHandler = new UpdateCompanySettingsCommandHandler(repository, tenantProvider, unitOfWork);
-        var updated = await updateHandler.HandleAsync(new UpdateCompanySettingsCommand(3));
+        var updated = await updateHandler.HandleAsync(new UpdateCompanySettingsCommand(3, 5, false));
 
         Assert.Equal(3, updated.MinApprovalsRequired);
         Assert.Equal(2, unitOfWork.SaveCount);
@@ -802,7 +802,7 @@ public sealed class EcoApplicationTests
             UserRole.Approver);
         inactive.Deactivate();
         var settings = CompanySettings.CreateDefault(companyId);
-        settings.SetMinApprovalsRequired(2);
+        settings.UpdatePolicies(2, 5, false);
         var handler = new GetEcoReviewContextQueryHandler(
             new FakeUserRepository(currentUser, approver, inactive),
             new FakeCompanySettingsRepository(settings),

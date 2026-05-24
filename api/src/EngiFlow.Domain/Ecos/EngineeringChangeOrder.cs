@@ -371,10 +371,17 @@ public sealed class EngineeringChangeOrder : ITenantScoped
     /// <summary>
     /// Records an approval decision and applies quorum or request-changes transitions.
     /// </summary>
+    /// <param name="approverUserId">The identifier of the user submitting the decision.</param>
+    /// <param name="decision">The approval or request-changes decision.</param>
+    /// <param name="minApprovalsRequired">The required number of approvals for quorum.</param>
+    /// <param name="allowSelfApproval">Whether the author is permitted to approve their own ECO.</param>
+    /// <param name="comment">An optional review comment.</param>
+    /// <param name="occurredAt">Optional deterministic timestamp.</param>
     public void SubmitReviewDecision(
         UserId approverUserId,
         EcoApprovalDecision decision,
         int minApprovalsRequired,
+        bool allowSelfApproval,
         string? comment = null,
         DateTimeOffset? occurredAt = null)
     {
@@ -386,9 +393,9 @@ public sealed class EngineeringChangeOrder : ITenantScoped
             throw new DomainException("Review decisions can only be submitted while an ECO is under review.");
         }
 
-        if (approverUserId == CreatedByUserId)
+        if (!allowSelfApproval && approverUserId == CreatedByUserId)
         {
-            throw new DomainException("Compliance Rule: The author of the ECO cannot participate in its approval quorum");
+            throw new DomainException("Governance Policy: Self-approval is disabled for this tenant. Authors cannot approve their own ECOs.");
         }
 
         if (minApprovalsRequired < 1)
@@ -474,7 +481,7 @@ public sealed class EngineeringChangeOrder : ITenantScoped
     /// </summary>
     public void Approve(UserId actorUserId, DateTimeOffset? occurredAt = null)
     {
-        SubmitReviewDecision(actorUserId, EcoApprovalDecision.Approve, 1, null, occurredAt);
+        SubmitReviewDecision(actorUserId, EcoApprovalDecision.Approve, 1, false, null, occurredAt);
     }
 
     /// <summary>
@@ -482,7 +489,7 @@ public sealed class EngineeringChangeOrder : ITenantScoped
     /// </summary>
     public void Reject(UserId actorUserId, string? reason = null, DateTimeOffset? occurredAt = null)
     {
-        SubmitReviewDecision(actorUserId, EcoApprovalDecision.RequestChanges, 1, reason, occurredAt);
+        SubmitReviewDecision(actorUserId, EcoApprovalDecision.RequestChanges, 1, false, reason, occurredAt);
     }
 
     /// <summary>
