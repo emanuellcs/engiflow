@@ -70,7 +70,7 @@ internal sealed class NotificationConfiguration : IEntityTypeConfiguration<Notif
             .HasColumnType("timestamp with time zone")
             .IsRequired();
 
-        // Task A: Performance-Optimized Database index
+        // Performance-Optimized Database index
         builder.HasIndex(n => new { n.UserId, n.CompanyId, n.IsRead, n.CreatedAt })
             .HasDatabaseName("ix_notifications_user_company_read_created")
             .IsDescending(false, false, false, true); // (UserId, CompanyId, IsRead, CreatedAt DESC)

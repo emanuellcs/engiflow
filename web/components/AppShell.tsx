@@ -130,7 +130,6 @@ export default function AppShell({ children }: PropsWithChildren) {
 
   // Quick Actions State
   const [actionsAnchorEl, setActionsAnchorEl] = useState<null | HTMLElement>(null);
-  const [userAnchorEl, setUserAnchorEl] = useState<null | HTMLElement>(null);
   const [notificationsAnchorEl, setNotificationsAnchorEl] = useState<null | HTMLElement>(null);
 
   const isAdministrator = isAdminOrOwner(user?.role);
@@ -141,7 +140,7 @@ export default function AppShell({ children }: PropsWithChildren) {
 
   const currentDrawerWidth = isExpanded ? drawerWidth : collapsedDrawerWidth;
 
-  // Keyboard shortcut for Command Palette (⌘K)
+  // Keyboard shortcut for Command Palette
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
       if ((event.metaKey || event.ctrlKey) && event.key === "k") {
@@ -233,21 +232,6 @@ export default function AppShell({ children }: PropsWithChildren) {
    */
   const handleActionsClose = () => {
     setActionsAnchorEl(null);
-  };
-
-  /**
-   * Opens the Topbar user profile menu.
-   * @param event - The click event used to anchor the menu.
-   */
-  const handleUserOpen = (event: React.MouseEvent<HTMLElement>) => {
-    setUserAnchorEl(event.currentTarget);
-  };
-
-  /**
-   * Closes the Topbar user profile menu.
-   */
-  const handleUserClose = () => {
-    setUserAnchorEl(null);
   };
 
   /**
@@ -402,7 +386,7 @@ export default function AppShell({ children }: PropsWithChildren) {
             <MenuIcon />
           </IconButton>
 
-          {/* Task A: Workspace Switcher */}
+          {/* Workspace Switcher */}
           <Button
             size="small"
             color="inherit"
@@ -468,7 +452,7 @@ export default function AppShell({ children }: PropsWithChildren) {
             </Box>
           </Menu>
 
-          {/* Task B: Dynamic Breadcrumbs */}
+          {/* Dynamic Breadcrumbs */}
           <Breadcrumbs
             aria-label="breadcrumb"
             separator={<Typography color="text.disabled" variant="caption">/</Typography>}
@@ -509,7 +493,7 @@ export default function AppShell({ children }: PropsWithChildren) {
             })}
           </Breadcrumbs>
 
-          {/* Task C: Command Palette Anchor (⌘K) */}
+          {/* Command Palette Anchor */}
           <Box
             onClick={handleSearchOpen}
             sx={{
@@ -560,7 +544,7 @@ export default function AppShell({ children }: PropsWithChildren) {
             </Box>
           </Box>
 
-          {/* Task D: Global Quick Actions & Utilities */}
+          {/* Global Quick Actions & Utilities */}
           <Stack direction="row" spacing={0.5} sx={{ alignItems: "center", ml: "auto" }}>
             <IconButton
               size="small"
@@ -569,6 +553,24 @@ export default function AppShell({ children }: PropsWithChildren) {
             >
               <SearchOutlinedIcon fontSize="small" />
             </IconButton>
+
+            <IconButton
+              size="small"
+              onClick={handleNotificationsOpen}
+            >
+              <Badge badgeContent={unreadCount} color="error" variant="dot">
+                <NotificationsOutlinedIcon fontSize="small" />
+              </Badge>
+            </IconButton>
+
+            <NotificationPopover
+              anchorEl={notificationsAnchorEl}
+              open={Boolean(notificationsAnchorEl)}
+              onClose={handleNotificationsClose}
+              notifications={notifications}
+              onMarkAsRead={markAsRead}
+              onMarkAllAsRead={markAllAsRead}
+            />
 
             <Tooltip title="Global Actions">
               <IconButton
@@ -615,70 +617,6 @@ export default function AppShell({ children }: PropsWithChildren) {
                   <ListItemText primary="No actions available" slotProps={{ primary: { variant: "body2", sx: { color: "text.disabled" } } }} />
                 </MenuItem>
               ) : null}
-            </Menu>
-
-            <IconButton
-              size="small"
-              onClick={handleNotificationsOpen}
-              sx={{ display: { xs: "none", sm: "inline-flex" } }}
-            >
-              <Badge badgeContent={unreadCount} color="error" variant="dot">
-                <NotificationsOutlinedIcon fontSize="small" />
-              </Badge>
-            </IconButton>
-
-            <NotificationPopover
-              anchorEl={notificationsAnchorEl}
-              open={Boolean(notificationsAnchorEl)}
-              onClose={handleNotificationsClose}
-              notifications={notifications}
-              onMarkAsRead={markAsRead}
-              onMarkAllAsRead={markAllAsRead}
-            />
-
-            <Divider orientation="vertical" flexItem sx={{ mx: 0.5, height: 24, alignSelf: "center", display: { xs: "none", sm: "block" } }} />
-
-            <Avatar
-              onClick={handleUserOpen}
-              sx={{
-                width: 32,
-                height: 32,
-                bgcolor: "secondary.main",
-                fontSize: "0.75rem",
-                fontWeight: 700,
-                cursor: "pointer",
-                transition: "transform 0.2s",
-                "&:hover": { transform: "scale(1.1)" },
-              }}
-            >
-              {getInitials(userName)}
-            </Avatar>
-
-            <Menu
-              anchorEl={userAnchorEl}
-              open={Boolean(userAnchorEl)}
-              onClose={handleUserClose}
-              transformOrigin={{ horizontal: "right", vertical: "top" }}
-              anchorOrigin={{ horizontal: "right", vertical: "bottom" }}
-              slotProps={{
-                paper: {
-                  sx: { width: 220, mt: 1, borderRadius: 2, boxShadow: theme.shadows[3] },
-                },
-              }}
-            >
-              <Box sx={{ px: 2, py: 1.5 }}>
-                <Typography variant="subtitle2" noWrap sx={{ fontWeight: 700 }}>{userName}</Typography>
-                <Typography variant="caption" color="text.secondary" noWrap sx={{ display: "block" }}>{role}</Typography>
-              </Box>
-              <Divider />
-              <MenuItem component={NextLink} href="/settings" onClick={handleUserClose}>
-                <ListItemIcon><SettingsIcon fontSize="small" /></ListItemIcon>
-                <ListItemText primary="Settings" slotProps={{ primary: { variant: "body2" } }} />
-              </MenuItem>
-              <MenuItem onClick={() => { handleUserClose(); logout(); }}>
-                <ListItemIcon><LogoutIcon fontSize="small" /></ListItemIcon>
-                <ListItemText primary="Logout" slotProps={{ primary: { variant: "body2" } }} />
-              </MenuItem>
             </Menu>
           </Stack>
         </Toolbar>
@@ -791,7 +729,7 @@ export default function AppShell({ children }: PropsWithChildren) {
 
       <AboutDialog open={isAboutOpen} onClose={handleAboutClose} />
 
-      {isSearchOpen && <CommandPalette open={isSearchOpen} onClose={handleSearchClose} />}
+      <CommandPalette open={isSearchOpen} onClose={handleSearchClose} />
     </Box>
   );
 }
@@ -810,6 +748,7 @@ function getPathSegments(pathname: string): { label: string; href: string }[] {
   }
 
   const parts = pathname.split("/").filter(Boolean);
+  const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
   let currentPath = "";
 
   for (const part of parts) {
@@ -821,6 +760,11 @@ function getPathSegments(pathname: string): { label: string; href: string }[] {
     // Handle specific route naming
     if (part.toLowerCase() === "ecos") label = "ECOs";
     if (part.startsWith("eco-")) label = part.toUpperCase(); // e.g. ECO-2026-001
+
+    // Replace UUIDs with short human-readable identifiers
+    if (uuidRegex.test(part)) {
+      label = part.slice(0, 8).toUpperCase();
+    }
 
     segments.push({ label, href: currentPath });
   }

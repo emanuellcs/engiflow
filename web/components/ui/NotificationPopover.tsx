@@ -75,6 +75,7 @@ export default function NotificationPopover({
       slotProps={{
         paper: {
           sx: {
+            bgcolor: "#ffffff",
             width: 360,
             mt: 1,
             borderRadius: 2,
@@ -119,7 +120,7 @@ export default function NotificationPopover({
             sx={{
               py: 6,
               textAlign: "center",
-              bgcolor: (theme) => alpha(theme.palette.action.disabledBackground, 0.04),
+              bgcolor: "transparent",
             }}
           >
             <NotificationsOutlinedIcon

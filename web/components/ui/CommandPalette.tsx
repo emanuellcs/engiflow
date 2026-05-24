@@ -207,6 +207,7 @@ export default function CommandPalette({ open, onClose }: CommandPaletteProps) {
       onClose={onClose}
       maxWidth="sm"
       fullWidth
+      transitionDuration={{ enter: 300, exit: 200 }}
       slotProps={{
         paper: {
           sx: { 
