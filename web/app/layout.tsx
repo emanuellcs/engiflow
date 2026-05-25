@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import type { ReactNode } from "react";
+import { cookies } from "next/headers";
 import { AppRouterCacheProvider } from "@mui/material-nextjs/v16-appRouter";
 import Providers from "@/app/providers";
 import "@fontsource/roboto/300.css";
@@ -22,16 +23,19 @@ export const metadata: Metadata = {
  * @param props.children - The public or authenticated route subtree to render.
  * @returns The document shell shared by every EngiFlow web route.
  */
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: Readonly<{
   children: ReactNode;
 }>) {
+  const cookieStore = await cookies();
+  const locale = cookieStore.get("engi-locale")?.value || "en";
+
   return (
-    <html lang="en">
+    <html lang={locale}>
       <body>
         <AppRouterCacheProvider options={{ key: "mui" }}>
-          <Providers>{children}</Providers>
+          <Providers initialLocale={locale as "en" | "pt-BR"}>{children}</Providers>
         </AppRouterCacheProvider>
       </body>
     </html>

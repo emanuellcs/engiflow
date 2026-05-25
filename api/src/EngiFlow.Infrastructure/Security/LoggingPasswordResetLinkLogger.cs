@@ -4,7 +4,7 @@ using Microsoft.Extensions.Logging;
 namespace EngiFlow.Infrastructure.Security;
 
 /// <summary>
-/// Logs MVP password reset links through the configured application logger.
+/// Logs development password reset links through the configured application logger.
 /// </summary>
 internal sealed class LoggingPasswordResetLinkLogger : IPasswordResetLinkLogger
 {

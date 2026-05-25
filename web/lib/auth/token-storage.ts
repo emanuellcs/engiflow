@@ -1,12 +1,23 @@
+/** Custom event dispatched to synchronize authentication state across components and tabs. */
 export const AUTH_STATE_CHANGED_EVENT = "engiflow:auth-state-changed";
+/** Custom event dispatched when an API call returns a 401 Unauthorized status. */
 export const AUTH_UNAUTHORIZED_EVENT = "engiflow:auth-unauthorized";
 
+/**
+ * Encapsulates the persisted authentication session.
+ */
 export type StoredAuthSession = {
+  /** The active JWT bearer token. */
   accessToken: string;
+  /** The token type descriptor. */
   tokenType?: string;
+  /** The UTC expiration timestamp. */
   expiresAtUtc?: string;
+  /** The display name of the user. */
   userName?: string;
+  /** The name of the active tenant company. */
   companyName?: string;
+  /** The list of permissions/roles for the active session. */
   roles?: string[];
 };
 
@@ -14,6 +25,12 @@ const authSessionStorageKey = "engiflow.auth.session";
 const legacyAuthTokenStorageKey = "engiflow.auth.token";
 const authTokenCookieName = "engiflow_auth_token";
 
+/**
+ * Retrieves a serialized snapshot of the current authentication session from storage.
+ * Orchestrates lookups across SessionStorage, LocalStorage, and legacy keys.
+ *
+ * @returns The serialized session JSON or null if no session exists.
+ */
 export function getStoredAuthSessionSnapshot(): string | null {
   if (!isBrowser()) {
     return null;
@@ -26,6 +43,11 @@ export function getStoredAuthSessionSnapshot(): string | null {
   );
 }
 
+/**
+ * Extracts the active JWT from the stored session or fallback cookie.
+ *
+ * @returns The raw JWT string or null if unauthenticated.
+ */
 export function getStoredAuthToken(): string | null {
   if (!isBrowser()) {
     return null;
@@ -40,6 +62,24 @@ export function getStoredAuthToken(): string | null {
   return readCookie(authTokenCookieName);
 }
 
+/**
+ * Checks if the current session was persisted via rememberMe (stored in localStorage).
+ */
+export function getRememberMe(): boolean {
+  if (!isBrowser()) {
+    return false;
+  }
+
+  return Boolean(readWebStorageItem(window.localStorage, authSessionStorageKey));
+}
+
+/**
+ * Persists an authentication session to appropriate storage tiers based on preference.
+ * Synchronizes SessionStorage/LocalStorage with HttpOnly-compatible cookies.
+ *
+ * @param session - The authentication payload to persist.
+ * @param rememberMe - Whether to use long-lived LocalStorage and persistent cookies.
+ */
 export function storeAuthSession(
   session: StoredAuthSession,
   rememberMe: boolean,
@@ -69,6 +109,9 @@ export function storeAuthSession(
   dispatchAuthStateChanged();
 }
 
+/**
+ * Purges all authentication identifiers from all storage tiers (Storage and Cookies).
+ */
 export function clearStoredAuthToken(): void {
   if (!isBrowser()) {
     return;
@@ -83,6 +126,12 @@ export function clearStoredAuthToken(): void {
   dispatchAuthStateChanged();
 }
 
+/**
+ * Updates the cached roles within the active persistent session.
+ * Used for dynamic permission synchronization during tenant switching.
+ *
+ * @param roles - The updated list of role identifiers.
+ */
 export function updateStoredAuthSessionRoles(roles: string[]): void {
   if (!isBrowser()) {
     return;
@@ -118,8 +167,7 @@ export function updateStoredAuthSessionRoles(roles: string[]): void {
 function readLegacyAuthSessionSnapshot(): string | null {
   const legacyToken =
     readWebStorageItem(window.sessionStorage, legacyAuthTokenStorageKey) ??
-    readWebStorageItem(window.localStorage, legacyAuthTokenStorageKey) ??
-    readCookie(authTokenCookieName);
+    readWebStorageItem(window.localStorage, legacyAuthTokenStorageKey);
 
   if (!legacyToken) {
     return null;

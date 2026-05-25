@@ -337,7 +337,7 @@ public sealed class EcosController : ControllerBase
     /// if the database transaction fails after upload.
     /// </remarks>
     /// <param name="id">The ECO identifier.</param>
-    /// <param name="file">The uploaded attachment file.</param>
+    /// <param name="request">The attachment upload request.</param>
     /// <param name="cancellationToken">A token that can cancel the request.</param>
     /// <returns>The updated ECO detail view.</returns>
     /// <response code="200">The attachment was uploaded and recorded.</response>
@@ -355,22 +355,22 @@ public sealed class EcosController : ControllerBase
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status500InternalServerError)]
     public async Task<ActionResult<EcoDetailsDto>> UploadAttachmentAsync(
         Guid id,
-        [FromForm(Name = "file")] IFormFile? file,
+        [FromForm] UploadAttachmentRequest request,
         CancellationToken cancellationToken)
     {
-        if (file is null)
+        if (request?.File is null)
         {
             ModelState.AddModelError("file", "Attachment file is required.");
             return ValidationProblem(ModelState);
         }
 
-        await using var stream = file.OpenReadStream();
+        await using var stream = request.File.OpenReadStream();
         var updated = await _mediator.SendCommandAsync<UploadAttachmentCommand, EcoDetailsDto>(
                 new UploadAttachmentCommand(
                     id,
-                    file.FileName,
-                    file.ContentType,
-                    file.Length,
+                    request.File.FileName,
+                    request.File.ContentType,
+                    request.File.Length,
                     stream),
                 cancellationToken)
             .ConfigureAwait(false);

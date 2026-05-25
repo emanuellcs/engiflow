@@ -5,7 +5,7 @@ using EngiFlow.Application.Users.Dtos;
 namespace EngiFlow.Application.Users.Queries;
 
 /// <summary>
-/// Query that lists active users in the current tenant.
+/// Query that lists users in the current tenant for administrator management.
 /// </summary>
 public sealed record ListUsersQuery : IQuery<IReadOnlyList<UserSummaryDto>>;
 
@@ -30,7 +30,7 @@ public sealed class ListUsersQueryHandler : IQueryHandler<ListUsersQuery, IReadO
         ListUsersQuery query,
         CancellationToken cancellationToken = default)
     {
-        var users = await _users.ListActiveAsync(cancellationToken).ConfigureAwait(false);
+        var users = await _users.ListForAdministrationAsync(cancellationToken).ConfigureAwait(false);
 
         return users.Select(user => user.ToSummaryDto()).ToArray();
     }

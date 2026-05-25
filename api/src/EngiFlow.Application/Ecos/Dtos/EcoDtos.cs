@@ -110,6 +110,7 @@ public sealed record EcoUserDto(
 /// </summary>
 public sealed record EcoReviewContextDto(
     int MinApprovalsRequired,
+    bool AllowSelfApproval,
     IReadOnlyList<EcoUserDto> Users);
 
 /// <summary>

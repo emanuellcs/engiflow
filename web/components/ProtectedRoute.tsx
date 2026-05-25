@@ -6,6 +6,7 @@ import type { PropsWithChildren } from "react";
 import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/lib/auth/AuthContext";
+import { useTranslation } from "@/context/I18nContext";
 
 /**
  * Guards authenticated routes by redirecting anonymous users to the login page
@@ -21,7 +22,7 @@ export default function ProtectedRoute({ children }: PropsWithChildren) {
 
   useEffect(() => {
     if (!isLoading && !isAuthenticated) {
-      router.replace("/login");
+      router.replace("/auth?mode=login");
     }
   }, [isAuthenticated, isLoading, router]);
 
@@ -39,6 +40,7 @@ export default function ProtectedRoute({ children }: PropsWithChildren) {
  * @returns A status region containing a Material UI circular progress indicator.
  */
 function ProtectedRouteLoading() {
+  const { t } = useTranslation();
   return (
     <Box
       role="status"
@@ -50,7 +52,7 @@ function ProtectedRouteLoading() {
         justifyContent: "center",
       }}
     >
-      <CircularProgress aria-label="Loading workspace" size={36} thickness={4} />
+      <CircularProgress aria-label={t("common.loadingWorkspace")} size={36} thickness={4} />
     </Box>
   );
 }

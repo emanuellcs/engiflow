@@ -1,13 +1,20 @@
+# --- EngiFlow Local Service Mesh Composition ---
+# This configuration orchestrates the high-availability local development mesh, 
+# simulating a production-grade multi-tenant environment.
 services:
+  # --- Database Service (Persistence Layer) ---
+  # We utilize the official PostgreSQL 18 Alpine image as the local stand-in for the future managed RDS database.
+  # This selection minimizes the container footprint while maintaining feature parity with AWS RDS Aurora.
   postgres:
-    # PostgreSQL is the local stand-in for the future managed RDS database.
     image: postgres:18-alpine
     environment:
+      # These environment keys define the core identity of the database engine.
       POSTGRES_DB: ${POSTGRES_DB:-engiflow}
       POSTGRES_USER: ${POSTGRES_USER:-engiflow}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-engiflow_dev_password}
     healthcheck:
-      # The API waits for this health check so local startup is deterministic.
+      # Critical orchestrator: The API service utilizes this health check to ensure local startup is deterministic.
+      # It verifies that the database engine is accepting connections before dependent services initialize.
       test: ["CMD-SHELL", "pg_isready -U \"$${POSTGRES_USER}\" -d \"$${POSTGRES_DB}\""]
       interval: 10s
       timeout: 5s
@@ -16,13 +23,15 @@ services:
     ports:
       - "5432:5432"
     volumes:
-      # Persist local database state across container restarts.
+      # Data Persistence: We mount a named host volume (postgres-data) to the container's 
+      # internal data directory. This ensures state is preserved across engine teardowns.
       - postgres-data:/var/lib/postgresql
     networks:
       - engiflow
 
+  # --- Object Storage (S3-Compatible) ---
+  # MinIO provides the S3-compatible storage layer for ECO attachments in local development.
   minio:
-    # S3-compatible object storage for ECO attachments in local development.
     image: minio/minio:RELEASE.2025-09-07T16-13-09Z-cpuv1
     command: server /data --console-address ":9001"
     environment:
@@ -36,8 +45,9 @@ services:
     networks:
       - engiflow
 
+  # --- Storage Initializer (Sidecar Pattern) ---
+  # This transient service automates the creation of the S3 bucket on stack startup.
   minio-init:
-    # Creates the attachment bucket on local startup.
     image: minio/mc:RELEASE.2025-08-13T08-35-41Z-cpuv1
     depends_on:
       minio:
@@ -55,8 +65,9 @@ services:
     networks:
       - engiflow
 
+  # --- SMTP Sink (Development Mock) ---
+  # Mailpit captures outbound emails for local password-recovery development and testing.
   mailpit:
-    # Local SMTP sink used for password-recovery development and tests.
     image: axllent/mailpit:v1.30.0
     ports:
       - "1025:1025"
@@ -64,12 +75,16 @@ services:
     networks:
       - engiflow
 
+  # --- Core API (Backend Boundary) ---
+  # The API service encapsulates the ASP.NET Core boundary of the Clean Architecture stack.
+  # We use a multi-stage Dockerfile build context for optimized production images.
   api:
-    # Production-style image for the ASP.NET Core boundary of the Clean Architecture stack.
     build:
       context: ./api
       dockerfile: Dockerfile
     depends_on:
+      # Orchestration Control: Ensures that the API only starts after the database is healthy 
+      # and the storage bucket is initialized.
       postgres:
         condition: service_healthy
       minio-init:
@@ -79,6 +94,7 @@ services:
     environment:
       ASPNETCORE_ENVIRONMENT: Development
       ASPNETCORE_URLS: http://+:8080
+      # Infrastructure Binding: We map service-to-service discovery via Docker's internal DNS (host=postgres).
       ConnectionStrings__DefaultConnection: Host=postgres;Port=5432;Database=${POSTGRES_DB:-engiflow};Username=${POSTGRES_USER:-engiflow};Password=${POSTGRES_PASSWORD:-engiflow_dev_password}
       EngiFlow__Storage__S3__BucketName: ${MINIO_BUCKET:-engiflow-attachments}
       EngiFlow__Storage__S3__Region: us-east-1
@@ -89,15 +105,17 @@ services:
       EngiFlow__Email__Smtp__Host: mailpit
       EngiFlow__Email__Smtp__Port: "1025"
       EngiFlow__Email__Smtp__UseStartTls: "false"
-      EngiFlow__Email__Smtp__FromEmail: no-reply@engiflow.local
+      EngiFlow__Email__Smtp__FromEmail: no-reply@localhost
       EngiFlow__Email__Smtp__FromName: EngiFlow
     ports:
+      # Port Forwarding: Host traffic on 8080 is routed into the container's isolated network boundary.
       - "8080:8080"
     networks:
       - engiflow
 
+  # --- Web Frontend (React/Next.js Phase) ---
+  # The web service hosts the Next.js 16 frontend shell, utilizing standalone runtime optimization.
   web:
-    # Production-style Next.js image using standalone output from next.config.ts.
     build:
       context: ./web
       dockerfile: Dockerfile
@@ -105,6 +123,7 @@ services:
       api:
         condition: service_started
     environment:
+      # API Routing: Binds the frontend tightly to the core backend API via Docker's internal mesh.
       API_INTERNAL_BASE_URL: ${API_INTERNAL_BASE_URL:-http://api:8080}
       HOSTNAME: 0.0.0.0
       NEXT_PUBLIC_API_BASE_URL: ${NEXT_PUBLIC_API_BASE_URL:-}
@@ -112,17 +131,20 @@ services:
       NODE_ENV: production
       PORT: "3000"
     ports:
+      # Mapping port 3000 for the localized dashboard and cockpit state elements.
       - "3000:3000"
     networks:
       - engiflow
 
+# --- Network Isolation (Bridge Overlay) ---
+# A dedicated bridge network isolates these three application boundaries, preventing 
+# raw system vector leakage while enabling secure internal service discovery.
 networks:
   engiflow:
-    # A dedicated bridge network keeps service discovery explicit and local to the stack.
     driver: bridge
 
+# --- Persistence Volumes ---
 volumes:
-  # Named volume keeps PostgreSQL data outside the container lifecycle.
+  # Named volumes ensure that database state and object data persist across container restarts.
   postgres-data:
-  # Named volume keeps MinIO object data outside the container lifecycle.
   minio-data:

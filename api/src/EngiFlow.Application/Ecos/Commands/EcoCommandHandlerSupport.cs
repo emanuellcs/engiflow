@@ -54,9 +54,9 @@ internal static class EcoCommandHandlerSupport
     }
 
     /// <summary>
-    /// Gets the tenant approval quorum, creating default settings for older tenants when needed.
+    /// Gets the tenant governance settings, creating default settings for older tenants when needed.
     /// </summary>
-    public static async Task<int> GetMinApprovalsRequiredAsync(
+    public static async Task<CompanySettings> GetGovernanceSettingsAsync(
         ICompanySettingsRepository settingsRepository,
         ITenantProvider tenantProvider,
         CancellationToken cancellationToken)
@@ -67,11 +67,11 @@ internal static class EcoCommandHandlerSupport
 
         if (settings is not null)
         {
-            return settings.MinApprovalsRequired;
+            return settings;
         }
 
         settings = CompanySettings.CreateDefault(companyId);
         await settingsRepository.AddAsync(settings, cancellationToken).ConfigureAwait(false);
-        return settings.MinApprovalsRequired;
+        return settings;
     }
 }

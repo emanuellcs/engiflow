@@ -28,32 +28,120 @@ internal sealed class SmtpPasswordResetEmailSender : IPasswordResetEmailSender
     public async Task SendPasswordResetAsync(
         string email,
         string resetLink,
+        string? companyName = null,
         CancellationToken cancellationToken = default)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(email);
         ArgumentException.ThrowIfNullOrWhiteSpace(resetLink);
 
+        var safeCompanyName = string.IsNullOrWhiteSpace(companyName) ? "EngiFlow" : WebUtility.HtmlEncode(companyName);
+        var subject = string.IsNullOrWhiteSpace(companyName)
+            ? "Reset your EngiFlow password"
+            : $"Reset your password for {companyName}";
+
+        var safeResetLink = WebUtility.HtmlEncode(resetLink);
+        var message = CreateMessage(
+            email,
+            subject,
+            $"""
+            We received a request to reset your password for {safeCompanyName}.
+
+            Open this link to continue:
+            {resetLink}
+
+            If you did not request this reset, you can ignore this email.
+            """,
+            $"""
+            <div style="font-family:Arial,sans-serif;color:#1f2937;line-height:1.5">
+              <h2 style="margin:0 0 12px">{subject}</h2>
+              <p>We received a request to reset your password for <strong>{safeCompanyName}</strong>.</p>
+              <p>Click the button below to choose a new password. This link will expire in 2 hours.</p>
+              <p>
+                <a href="{safeResetLink}" style="display:inline-block;background:#1976d2;color:#fff;padding:10px 16px;border-radius:6px;text-decoration:none">
+                  Reset password
+                </a>
+              </p>
+              <p style="color:#6b7280;font-size:13px">If you did not request this reset, you can ignore this email.</p>
+            </div>
+            """);
+
+        await SendAsync(message, cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <inheritdoc />
+    public async Task SendPasswordSetupAsync(
+        string email,
+        string setupLink,
+        string companyName,
+        string invitedByName,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(email);
+        ArgumentException.ThrowIfNullOrWhiteSpace(setupLink);
+        ArgumentException.ThrowIfNullOrWhiteSpace(companyName);
+        ArgumentException.ThrowIfNullOrWhiteSpace(invitedByName);
+
+        var safeCompanyName = WebUtility.HtmlEncode(companyName);
+        var safeInvitedByName = WebUtility.HtmlEncode(invitedByName);
+        var safeSetupLink = WebUtility.HtmlEncode(setupLink);
+        var message = CreateMessage(
+            email,
+            "Activate your EngiFlow workspace access",
+            $"""
+            {invitedByName} invited you to {companyName} in EngiFlow.
+
+            Create your password within 48 hours:
+            {setupLink}
+
+            If you were not expecting this invitation, contact your workspace administrator.
+            """,
+            $"""
+            <div style="font-family:Arial,sans-serif;color:#1f2937;line-height:1.5">
+              <h2 style="margin:0 0 12px">Activate your EngiFlow workspace access</h2>
+              <p>{safeInvitedByName} invited you to <strong>{safeCompanyName}</strong> in EngiFlow.</p>
+              <p>Create your password within 48 hours to activate your workspace access.</p>
+              <p>
+                <a href="{safeSetupLink}" style="display:inline-block;background:#1976d2;color:#fff;padding:10px 16px;border-radius:6px;text-decoration:none">
+                  Set up password
+                </a>
+              </p>
+              <p style="color:#6b7280;font-size:13px">If you were not expecting this invitation, contact your workspace administrator.</p>
+            </div>
+            """);
+
+        await SendAsync(message, cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Creates a MIME message with consistent EngiFlow sender metadata.
+    /// </summary>
+    /// <param name="email">The recipient email address.</param>
+    /// <param name="subject">The message subject.</param>
+    /// <param name="textBody">The plain-text body.</param>
+    /// <param name="htmlBody">The HTML body.</param>
+    /// <returns>The prepared MIME message.</returns>
+    private MimeMessage CreateMessage(string email, string subject, string textBody, string htmlBody)
+    {
         var message = new MimeMessage();
         message.From.Add(new MailboxAddress(_options.FromName, _options.FromEmail));
         message.To.Add(MailboxAddress.Parse(email));
-        message.Subject = "Reset your EngiFlow password";
+        message.Subject = subject;
         message.Body = new BodyBuilder
         {
-            TextBody = $"""
-                We received a request to reset your EngiFlow password.
-
-                Open this link to continue:
-                {resetLink}
-
-                If you did not request this reset, you can ignore this email.
-                """,
-            HtmlBody = $"""
-                <p>We received a request to reset your EngiFlow password.</p>
-                <p><a href="{WebUtility.HtmlEncode(resetLink)}">Reset your password</a></p>
-                <p>If you did not request this reset, you can ignore this email.</p>
-                """
+            TextBody = textBody,
+            HtmlBody = htmlBody
         }.ToMessageBody();
 
+        return message;
+    }
+
+    /// <summary>
+    /// Sends a prepared MIME message through the configured SMTP server.
+    /// </summary>
+    /// <param name="message">The message to send.</param>
+    /// <param name="cancellationToken">A token that can cancel the send operation.</param>
+    private async Task SendAsync(MimeMessage message, CancellationToken cancellationToken)
+    {
         using var smtpClient = new SmtpClient();
         var secureSocketOptions = _options.UseStartTls
             ? SecureSocketOptions.StartTls

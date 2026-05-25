@@ -1,5 +1,6 @@
 using EngiFlow.Api.Controllers;
 using EngiFlow.Api.Models;
+using Microsoft.AspNetCore.Http;
 using EngiFlow.Application.Abstractions.Cqrs;
 using EngiFlow.Application.Ecos.Commands;
 using EngiFlow.Application.Ecos.Dtos;
@@ -95,6 +96,7 @@ public sealed class EcosControllerTests
     {
         var context = new EcoReviewContextDto(
             2,
+            true,
             [new EcoUserDto(Guid.NewGuid(), "Ada Lovelace", "ada@example.test", "Approver")]);
         var mediator = new FakeApplicationMediator { Dispatch = _ => context };
         var controller = new EcosController(mediator);
@@ -183,6 +185,31 @@ public sealed class EcosControllerTests
         var command = Assert.IsType<RejectEcoCommand>(mediator.LastRequest);
         Assert.Equal(ecoId, command.EcoId);
         Assert.Equal("Specification is incomplete.", command.Reason);
+    }
+
+    [Fact]
+    public async Task UploadAttachmentAsync_DispatchesUploadCommandAndReturnsOk()
+    {
+        var ecoId = Guid.NewGuid();
+        var eco = CreateEcoDetails(ecoId);
+        var mediator = new FakeApplicationMediator { Dispatch = _ => eco };
+        var controller = new EcosController(mediator);
+        
+        var file = new FakeFormFile("bracket.pdf", "application/pdf", 1024);
+
+        var result = await controller.UploadAttachmentAsync(
+            ecoId,
+            new UploadAttachmentRequest { File = file },
+            CancellationToken.None);
+
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        Assert.Same(eco, ok.Value);
+
+        var command = Assert.IsType<UploadAttachmentCommand>(mediator.LastRequest);
+        Assert.Equal(ecoId, command.EcoId);
+        Assert.Equal("bracket.pdf", command.FileName);
+        Assert.Equal("application/pdf", command.ContentType);
+        Assert.Equal(1024, command.ContentLength);
     }
 
     [Fact]
@@ -278,5 +305,19 @@ public sealed class EcosControllerTests
 
             return (TResponse)Dispatch(request);
         }
+    }
+
+    private sealed class FakeFormFile(string fileName, string contentType, long length) : IFormFile
+    {
+        public string ContentType => contentType;
+        public string ContentDisposition => "";
+        public IHeaderDictionary Headers => new HeaderDictionary();
+        public long Length => length;
+        public string Name => "file";
+        public string FileName => fileName;
+
+        public void CopyTo(Stream target) => throw new NotImplementedException();
+        public Task CopyToAsync(Stream target, CancellationToken cancellationToken = default) => throw new NotImplementedException();
+        public Stream OpenReadStream() => new MemoryStream();
     }
 }

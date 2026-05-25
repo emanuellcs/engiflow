@@ -16,9 +16,10 @@ public sealed class DevelopmentSeedOptions
     public string CompanyName { get; init; } = "EngiFlow Demo Company";
 
     /// <summary>
-    /// Gets or initializes the default administrator email address.
+    /// Gets the default administrator email address.
     /// </summary>
-    public string AdminEmail { get; init; } = "admin@engiflow.local";
+    public string AdminEmail { get; init; } = string.Empty;
+
 
     /// <summary>
     /// Gets or initializes the default administrator display name.

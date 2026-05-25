@@ -4,6 +4,9 @@ import {
   getStoredAuthToken,
 } from "@/lib/auth/token-storage";
 
+/**
+ * Represents a standard JSON-compatible value.
+ */
 export type JsonValue =
   | string
   | number
@@ -12,13 +15,23 @@ export type JsonValue =
   | JsonValue[]
   | { [key: string]: JsonValue };
 
+/**
+ * Extended fetch options for the EngiFlow API client.
+ */
 export type ApiFetchOptions = Omit<RequestInit, "body"> & {
+  /** The request payload, either a native BodyInit or a serializable JSON object. */
   body?: BodyInit | JsonValue;
+  /** Whether to bypass the automatic inclusion of the Bearer authentication token. */
   skipAuth?: boolean;
 };
 
+/**
+ * Enterprise-grade API error encapsulating HTTP status and server-provided error details.
+ */
 export class ApiError extends Error {
+  /** The HTTP status code returned by the server. */
   readonly status: number;
+  /** The raw error response body (usually ProblemDetails). */
   readonly details: unknown;
 
   constructor(status: number, message: string, details: unknown) {
@@ -30,17 +43,29 @@ export class ApiError extends Error {
 }
 
 const defaultApiBaseUrl = "";
+const LOCALE_COOKIE_NAME = "engi-locale";
 
+/**
+ * Enterprise API client wrapper.
+ * Handles authentication, serialization, and locale synchronization.
+ */
 export async function apiFetch<TResponse = unknown>(
   path: string,
   options: ApiFetchOptions = {},
 ): Promise<TResponse> {
   const { skipAuth = false, body, headers, ...requestOptions } = options;
   const requestHeaders = new Headers(headers);
+  
+  // 1. Authenticate Request
   const token = getStoredAuthToken();
-
   if (!skipAuth && token && !requestHeaders.has("Authorization")) {
     requestHeaders.set("Authorization", `Bearer ${token}`);
+  }
+
+  // 2. Synchronize Locale
+  const locale = await resolveLocale();
+  if (locale && !requestHeaders.has("Accept-Language")) {
+    requestHeaders.set("Accept-Language", locale);
   }
 
   const response = await fetch(resolveApiUrl(path), {
@@ -64,6 +89,30 @@ export async function apiFetch<TResponse = unknown>(
   }
 
   return responseBody as TResponse;
+}
+
+/**
+ * Resolves the active locale from cookies isomorphically.
+ */
+async function resolveLocale(): Promise<string | null> {
+  // Client-side detection
+  if (typeof window !== "undefined") {
+    return (
+      document.cookie
+        .split("; ")
+        .find((row) => row.startsWith(`${LOCALE_COOKIE_NAME}=`))
+        ?.split("=")[1] || "en"
+    );
+  }
+
+  // Server-side detection (Next.js 16)
+  try {
+    const { cookies } = await import("next/headers");
+    const cookieStore = await cookies();
+    return cookieStore.get(LOCALE_COOKIE_NAME)?.value || "en";
+  } catch {
+    return "en";
+  }
 }
 
 function resolveApiUrl(path: string): string {
@@ -149,8 +198,8 @@ function handleUnauthorized(): void {
   clearStoredAuthToken();
   window.dispatchEvent(new Event(AUTH_UNAUTHORIZED_EVENT));
 
-  if (window.location.pathname !== "/login") {
-    window.location.assign("/login");
+  if (window.location.pathname !== "/auth") {
+    window.location.assign("/auth?mode=login");
   }
 }
 

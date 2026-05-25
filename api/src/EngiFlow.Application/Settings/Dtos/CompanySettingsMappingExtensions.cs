@@ -12,6 +12,10 @@ internal static class CompanySettingsMappingExtensions
     /// </summary>
     public static CompanySettingsDto ToDto(this CompanySettings settings)
     {
-        return new CompanySettingsDto(settings.MinApprovalsRequired, settings.UpdatedAt);
+        return new CompanySettingsDto(
+            settings.MinApprovalsRequired,
+            settings.MaxReviewDaysBeforeSlabreach,
+            settings.AllowSelfApproval,
+            settings.UpdatedAt);
     }
 }

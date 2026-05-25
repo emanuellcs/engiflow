@@ -8,11 +8,13 @@ using EngiFlow.Api.Initialization;
 using EngiFlow.Api.Tenancy;
 using EngiFlow.Application;
 using EngiFlow.Application.Abstractions.Persistence;
+using EngiFlow.Application.Abstractions.Messaging;
 using EngiFlow.Application.Ecos.Notifications;
 using EngiFlow.Application.Abstractions.Security;
 using EngiFlow.Application.Abstractions.Tenancy;
 using EngiFlow.Application.Users.Notifications;
 using EngiFlow.Domain.Ecos;
+using EngiFlow.Domain.Notifications;
 using EngiFlow.Domain.Users;
 using EngiFlow.Domain.ValueObjects;
 using EngiFlow.Infrastructure;
@@ -39,6 +41,9 @@ builder.Services
         options.JsonSerializerOptions.Converters.Add(new JsonStringEnumConverter<EcoAffectedItemAction>(allowIntegerValues: false));
         options.JsonSerializerOptions.Converters.Add(new JsonStringEnumConverter<EcoApprovalDecision>(allowIntegerValues: false));
         options.JsonSerializerOptions.Converters.Add(new JsonStringEnumConverter<UserRole>(allowIntegerValues: false));
+        options.JsonSerializerOptions.Converters.Add(new JsonStringEnumConverter<UserStatus>(allowIntegerValues: false));
+        options.JsonSerializerOptions.Converters.Add(new JsonStringEnumConverter<PasswordSetupTokenPurpose>(allowIntegerValues: false));
+        options.JsonSerializerOptions.Converters.Add(new JsonStringEnumConverter<NotificationCategory>(allowIntegerValues: false));
     });
 builder.Services.AddCors(options =>
 {
@@ -65,6 +70,8 @@ builder.Services.AddOptions<DevelopmentSeedOptions>()
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddScoped<ITenantProvider, HttpContextTenantProvider>();
 builder.Services.AddScoped<IJwtTokenService, JwtTokenService>();
+builder.Services.AddScoped<IPreAuthTokenService, PreAuthTokenService>();
+builder.Services.AddScoped<INotificationService, NotificationService>();
 builder.Services.AddScoped<INotificationHandler<EcoChangedNotification>, EcoDomainEventHandler>();
 builder.Services.AddScoped<INotificationHandler<UserPermissionsChangedNotification>, UserSecurityNotificationHandler>();
 builder.Services.AddScoped<INotificationHandler<UserDeactivatedNotification>, UserSecurityNotificationHandler>();
@@ -78,6 +85,8 @@ builder.Services.AddSignalR()
         options.PayloadSerializerOptions.Converters.Add(new JsonStringEnumConverter<EcoEventType>(allowIntegerValues: false));
         options.PayloadSerializerOptions.Converters.Add(new JsonStringEnumConverter<EcoAffectedItemAction>(allowIntegerValues: false));
         options.PayloadSerializerOptions.Converters.Add(new JsonStringEnumConverter<EcoApprovalDecision>(allowIntegerValues: false));
+        options.PayloadSerializerOptions.Converters.Add(new JsonStringEnumConverter<UserStatus>(allowIntegerValues: false));
+        options.PayloadSerializerOptions.Converters.Add(new JsonStringEnumConverter<NotificationCategory>(allowIntegerValues: false));
     });
 builder.Services
     .AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
@@ -230,6 +239,7 @@ app.UseAuthorization();
 app.MapControllers();
 app.MapHub<EcoHub>("/hubs/ecos");
 app.MapHub<SecurityHub>("/hubs/security");
+app.MapHub<NotificationHub>("/hubs/notifications");
 
 app.Run();
 

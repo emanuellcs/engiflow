@@ -23,13 +23,14 @@ public sealed class User : ITenantScoped
     }
 
     /// <summary>
-    /// Initializes a new active company-scoped user.
+    /// Initializes a new company-scoped user.
     /// </summary>
     /// <param name="id">The user identifier.</param>
     /// <param name="companyId">The tenant identifier that owns the user.</param>
     /// <param name="email">The normalized email address.</param>
     /// <param name="displayName">The user display name.</param>
     /// <param name="role">The user's role in the ECO workflow.</param>
+    /// <param name="status">The initial lifecycle status.</param>
     /// <param name="createdAt">The UTC creation timestamp.</param>
     private User(
         UserId id,
@@ -37,6 +38,7 @@ public sealed class User : ITenantScoped
         string email,
         string displayName,
         UserRole role,
+        UserStatus status,
         DateTimeOffset createdAt)
     {
         Id = id;
@@ -44,7 +46,7 @@ public sealed class User : ITenantScoped
         Email = email;
         DisplayName = displayName;
         Role = role;
-        IsActive = true;
+        Status = status;
         CreatedAt = createdAt;
     }
 
@@ -80,12 +82,17 @@ public sealed class User : ITenantScoped
     /// The domain stores only the opaque hash. Password hashing policy and token creation
     /// remain outside the domain boundary.
     /// </remarks>
-    public string PasswordHash { get; private set; } = string.Empty;
+    public string? PasswordHash { get; private set; }
 
     /// <summary>
     /// Gets a value indicating whether the user can perform domain actions.
     /// </summary>
-    public bool IsActive { get; private set; }
+    public bool IsActive => Status == UserStatus.Active;
+
+    /// <summary>
+    /// Gets the lifecycle status of the user account.
+    /// </summary>
+    public UserStatus Status { get; private set; }
 
     /// <summary>
     /// Gets the UTC timestamp when the user was created.
@@ -128,6 +135,42 @@ public sealed class User : ITenantScoped
             NormalizeEmail(email),
             DomainGuard.Required(displayName, nameof(displayName), 200),
             role,
+            UserStatus.Active,
+            DomainGuard.UtcTimestamp(createdAt));
+    }
+
+    /// <summary>
+    /// Creates a pending invitation user inside a company tenant.
+    /// </summary>
+    /// <param name="companyId">The tenant identifier that owns the user.</param>
+    /// <param name="email">The user's email address.</param>
+    /// <param name="displayName">The user's display name.</param>
+    /// <param name="role">The user's initial workflow role.</param>
+    /// <param name="createdAt">Optional timestamp used for deterministic tests or imports.</param>
+    /// <returns>A new pending activation user.</returns>
+    /// <exception cref="DomainException">Thrown when tenant, email, display name, or role data is invalid.</exception>
+    public static User CreatePendingActivation(
+        CompanyId companyId,
+        string email,
+        string displayName,
+        UserRole role,
+        DateTimeOffset? createdAt = null)
+    {
+        DomainGuard.AgainstDefault(companyId, nameof(companyId));
+        DomainGuard.AgainstInvalidEnum(role, nameof(role));
+
+        if (role == UserRole.Owner)
+        {
+            throw new DomainException("Owner users cannot be created through invitations.");
+        }
+
+        return new User(
+            UserId.New(),
+            companyId,
+            NormalizeEmail(email),
+            DomainGuard.Required(displayName, nameof(displayName), 200),
+            role,
+            UserStatus.PendingActivation,
             DomainGuard.UtcTimestamp(createdAt));
     }
 
@@ -138,7 +181,7 @@ public sealed class User : ITenantScoped
     /// <exception cref="DomainException">Thrown when the user is inactive or the display name is invalid.</exception>
     public void Rename(string displayName)
     {
-        EnsureActive();
+        EnsureMutable();
         DisplayName = DomainGuard.Required(displayName, nameof(displayName), 200);
     }
 
@@ -149,7 +192,7 @@ public sealed class User : ITenantScoped
     /// <exception cref="DomainException">Thrown when the user is inactive or the role is invalid.</exception>
     public void ChangeRole(UserRole role)
     {
-        EnsureActive();
+        EnsureMutable();
         DomainGuard.AgainstInvalidEnum(role, nameof(role));
 
         if (Role == UserRole.Owner || role == UserRole.Owner)
@@ -171,6 +214,14 @@ public sealed class User : ITenantScoped
     }
 
     /// <summary>
+    /// Clears the stored credential hash so the user cannot authenticate.
+    /// </summary>
+    public void ClearPasswordHash()
+    {
+        PasswordHash = null;
+    }
+
+    /// <summary>
     /// Records a successful authentication timestamp.
     /// </summary>
     /// <param name="loggedInAt">Optional timestamp used for deterministic tests.</param>
@@ -178,6 +229,23 @@ public sealed class User : ITenantScoped
     {
         EnsureActive();
         LastLoginAt = DomainGuard.UtcTimestamp(loggedInAt);
+    }
+
+    /// <summary>
+    /// Activates a pending invitation after credentials are established.
+    /// </summary>
+    /// <param name="passwordHash">The opaque credential hash generated by the security layer.</param>
+    /// <exception cref="DomainException">Thrown when the account is deactivated.</exception>
+    public void ActivateWithPassword(string passwordHash)
+    {
+        if (Status == UserStatus.Deactivated)
+        {
+            throw new DomainException("Deactivated users cannot be activated through invitation setup.");
+        }
+
+        SetPasswordHash(passwordHash);
+        Status = UserStatus.Active;
+        DeactivatedAt = null;
     }
 
     /// <summary>
@@ -195,12 +263,12 @@ public sealed class User : ITenantScoped
             throw new DomainException("Owner users cannot be deactivated.");
         }
 
-        if (!IsActive)
+        if (Status == UserStatus.Deactivated)
         {
             return;
         }
 
-        IsActive = false;
+        Status = UserStatus.Deactivated;
         DeactivatedAt = DomainGuard.UtcTimestamp(deactivatedAt);
     }
 
@@ -209,7 +277,7 @@ public sealed class User : ITenantScoped
     /// </summary>
     public void Activate()
     {
-        IsActive = true;
+        Status = UserStatus.Active;
         DeactivatedAt = null;
     }
 
@@ -222,6 +290,18 @@ public sealed class User : ITenantScoped
         if (!IsActive)
         {
             throw new DomainException("Inactive users cannot perform this action.");
+        }
+    }
+
+    /// <summary>
+    /// Ensures the user can be administratively mutated.
+    /// </summary>
+    /// <exception cref="DomainException">Thrown when the user is deactivated.</exception>
+    private void EnsureMutable()
+    {
+        if (Status == UserStatus.Deactivated)
+        {
+            throw new DomainException("Deactivated users cannot be changed.");
         }
     }
 

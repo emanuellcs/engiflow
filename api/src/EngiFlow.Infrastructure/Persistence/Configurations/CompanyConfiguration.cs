@@ -32,6 +32,10 @@ internal sealed class CompanyConfiguration : IEntityTypeConfiguration<Company>
             .HasMaxLength(200)
             .IsRequired();
 
+        builder.Property(company => company.ContactEmail)
+            .HasColumnName("contact_email")
+            .HasMaxLength(320);
+
         builder.Property(company => company.IsActive)
             .HasColumnName("is_active")
             .IsRequired();

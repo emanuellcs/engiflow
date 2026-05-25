@@ -39,6 +39,18 @@ internal static class StronglyTypedIdConverters
         new(id => id.Value, value => Domain.ValueObjects.EcoEventId.From(value));
 
     /// <summary>
+    /// Converts <see cref="UserEventId"/> values to and from database UUID values.
+    /// </summary>
+    public static readonly ValueConverter<UserEventId, Guid> UserEventId =
+        new(id => id.Value, value => Domain.ValueObjects.UserEventId.From(value));
+
+    /// <summary>
+    /// Converts <see cref="PasswordSetupTokenId"/> values to and from database UUID values.
+    /// </summary>
+    public static readonly ValueConverter<PasswordSetupTokenId, Guid> PasswordSetupTokenId =
+        new(id => id.Value, value => Domain.ValueObjects.PasswordSetupTokenId.From(value));
+
+    /// <summary>
     /// Converts <see cref="EcoCommentId"/> values to and from database UUID values.
     /// </summary>
     public static readonly ValueConverter<EcoCommentId, Guid> EcoCommentId =
@@ -61,4 +73,10 @@ internal static class StronglyTypedIdConverters
     /// </summary>
     public static readonly ValueConverter<EcoAttachmentId, Guid> EcoAttachmentId =
         new(id => id.Value, value => Domain.ValueObjects.EcoAttachmentId.From(value));
+
+    /// <summary>
+    /// Converts <see cref="NotificationId"/> values to and from database UUID values.
+    /// </summary>
+    public static readonly ValueConverter<NotificationId, Guid> NotificationId =
+        new(id => id.Value, value => Domain.ValueObjects.NotificationId.From(value));
 }

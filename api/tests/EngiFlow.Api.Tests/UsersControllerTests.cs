@@ -18,7 +18,7 @@ public sealed class UsersControllerTests
     {
         var users = new UserSummaryDto[]
         {
-            new(Guid.NewGuid(), "Ada Lovelace", "ada@acme.example", nameof(UserRole.Administrator))
+            new(Guid.NewGuid(), "Ada Lovelace", "ada@acme.example", nameof(UserRole.Administrator), nameof(UserStatus.Active))
         };
         var mediator = new FakeApplicationMediator { Dispatch = _ => users };
         var controller = new UsersController(mediator);
@@ -37,7 +37,8 @@ public sealed class UsersControllerTests
             Guid.NewGuid(),
             "Grace Hopper",
             "grace@acme.example",
-            nameof(UserRole.Approver));
+            nameof(UserRole.Approver),
+            nameof(UserStatus.PendingActivation));
         var mediator = new FakeApplicationMediator { Dispatch = _ => createdUser };
         var controller = new UsersController(mediator);
 
@@ -45,7 +46,6 @@ public sealed class UsersControllerTests
             new CreateUserRequest(
                 "Grace Hopper",
                 "grace@acme.example",
-                "StrongPass123!",
                 UserRole.Approver),
             CancellationToken.None);
 
@@ -56,7 +56,6 @@ public sealed class UsersControllerTests
         var command = Assert.IsType<CreateUserCommand>(mediator.LastRequest);
         Assert.Equal("Grace Hopper", command.Name);
         Assert.Equal("grace@acme.example", command.Email);
-        Assert.Equal("StrongPass123!", command.Password);
         Assert.Equal(UserRole.Approver, command.Role);
     }
 
@@ -68,7 +67,8 @@ public sealed class UsersControllerTests
             userId,
             "Grace Hopper",
             "grace@acme.example",
-            nameof(UserRole.Viewer));
+            nameof(UserRole.Viewer),
+            nameof(UserStatus.Active));
         var mediator = new FakeApplicationMediator { Dispatch = _ => updatedUser };
         var controller = new UsersController(mediator);
 
@@ -133,7 +133,7 @@ public sealed class UsersControllerTests
         // We use the same mediator mock pattern.
         var users = new UserSummaryDto[]
         {
-            new(Guid.NewGuid(), "Owner User", "owner@acme.example", nameof(UserRole.Owner))
+            new(Guid.NewGuid(), "Owner User", "owner@acme.example", nameof(UserRole.Owner), nameof(UserStatus.Active))
         };
         var mediator = new FakeApplicationMediator { Dispatch = _ => users };
         var controller = new UsersController(mediator);

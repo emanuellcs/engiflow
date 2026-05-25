@@ -12,6 +12,13 @@ namespace EngiFlow.Application.Users;
 /// </summary>
 internal static class UserManagementRules
 {
+    /// <summary>
+    /// Gets the current active actor from tenant context.
+    /// </summary>
+    /// <param name="users">The user repository.</param>
+    /// <param name="tenantProvider">The tenant context provider.</param>
+    /// <param name="cancellationToken">A token that can cancel the lookup.</param>
+    /// <returns>The current active actor.</returns>
     public static async Task<User> GetActiveCurrentUserAsync(
         IUserRepository users,
         ITenantProvider tenantProvider,
@@ -29,6 +36,10 @@ internal static class UserManagementRules
         return actor;
     }
 
+    /// <summary>
+    /// Ensures the actor can manage tenant users.
+    /// </summary>
+    /// <param name="actor">The current actor.</param>
     public static void EnsureCanManageUsers(User actor)
     {
         if (actor.Role is not (UserRole.Owner or UserRole.Administrator))
@@ -37,6 +48,11 @@ internal static class UserManagementRules
         }
     }
 
+    /// <summary>
+    /// Ensures the actor can manage the target user.
+    /// </summary>
+    /// <param name="actor">The current actor.</param>
+    /// <param name="target">The target user.</param>
     public static void EnsureCanManageTarget(User actor, User target)
     {
         EnsureCanManageUsers(actor);
@@ -47,6 +63,12 @@ internal static class UserManagementRules
         }
     }
 
+    /// <summary>
+    /// Ensures the actor can change the target role.
+    /// </summary>
+    /// <param name="actor">The current actor.</param>
+    /// <param name="target">The target user.</param>
+    /// <param name="nextRole">The requested role.</param>
     public static void EnsureCanChangeTargetRole(User actor, User target, UserRole nextRole)
     {
         EnsureCanManageTarget(actor, target);
@@ -62,6 +84,11 @@ internal static class UserManagementRules
         }
     }
 
+    /// <summary>
+    /// Ensures the actor can deactivate the target user.
+    /// </summary>
+    /// <param name="actor">The current actor.</param>
+    /// <param name="target">The target user.</param>
     public static void EnsureCanDeactivateTarget(User actor, User target)
     {
         EnsureCanManageTarget(actor, target);
@@ -69,6 +96,21 @@ internal static class UserManagementRules
         if (actor.Id == target.Id)
         {
             throw new DomainException("A user cannot deactivate themselves.");
+        }
+    }
+
+    /// <summary>
+    /// Ensures the actor can reactivate the target user.
+    /// </summary>
+    /// <param name="actor">The current actor.</param>
+    /// <param name="target">The target user.</param>
+    public static void EnsureCanReactivateTarget(User actor, User target)
+    {
+        EnsureCanManageTarget(actor, target);
+
+        if (target.Status != UserStatus.Deactivated)
+        {
+            throw new DomainException("Only deactivated users can be reactivated.");
         }
     }
 }

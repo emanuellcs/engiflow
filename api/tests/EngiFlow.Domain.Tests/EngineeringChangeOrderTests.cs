@@ -73,19 +73,32 @@ public sealed class EngineeringChangeOrderTests
     }
 
     [Fact]
-    public void SubmitReviewDecision_ByEcoAuthor_ThrowsComplianceException()
+    public void SubmitReviewDecision_ByEcoAuthor_ThrowsGovernanceException_WhenSelfApprovalDisabled()
     {
         var eco = CreateEco();
         eco.SubmitForReview(RequesterId);
 
         var exception = Assert.Throws<DomainException>(() =>
-            eco.SubmitReviewDecision(RequesterId, EcoApprovalDecision.Approve, 1));
+            eco.SubmitReviewDecision(RequesterId, EcoApprovalDecision.Approve, 1, false));
 
         Assert.Equal(
-            "Compliance Rule: The author of the ECO cannot participate in its approval quorum",
+            "Governance Policy: Self-approval is disabled for this tenant. Authors cannot approve their own ECOs.",
             exception.Message);
         Assert.Equal(EcoStatus.UnderReview, eco.Status);
         Assert.Empty(eco.Approvals);
+    }
+
+    [Fact]
+    public void SubmitReviewDecision_ByEcoAuthor_Succeeds_WhenSelfApprovalEnabled()
+    {
+        var eco = CreateEco();
+        eco.SubmitForReview(RequesterId);
+
+        eco.SubmitReviewDecision(RequesterId, EcoApprovalDecision.Approve, 1, true);
+
+        Assert.Equal(EcoStatus.Approved, eco.Status);
+        Assert.Single(eco.Approvals);
+        Assert.Equal(RequesterId, eco.Approvals.First().ApproverUserId);
     }
 
     [Fact]
@@ -94,7 +107,7 @@ public sealed class EngineeringChangeOrderTests
         var eco = CreateEco();
         eco.SubmitForReview(RequesterId);
 
-        eco.Reject(ReviewerId, "Specification is incomplete.");
+        eco.SubmitReviewDecision(ReviewerId, EcoApprovalDecision.RequestChanges, 1, false, "Specification is incomplete.");
 
         Assert.Equal(EcoStatus.Draft, eco.Status);
         Assert.Equal(4, eco.Events.Count);
@@ -145,15 +158,15 @@ public sealed class EngineeringChangeOrderTests
     {
         var eco = CreateEco();
         eco.SubmitForReview(RequesterId);
-        eco.SubmitReviewDecision(ApproverId, EcoApprovalDecision.Approve, minApprovalsRequired: 2);
-        eco.SubmitReviewDecision(ReviewerId, EcoApprovalDecision.RequestChanges, minApprovalsRequired: 2, "Revise drawing.");
+        eco.SubmitReviewDecision(ApproverId, EcoApprovalDecision.Approve, minApprovalsRequired: 2, allowSelfApproval: false);
+        eco.SubmitReviewDecision(ReviewerId, EcoApprovalDecision.RequestChanges, minApprovalsRequired: 2, allowSelfApproval: false, "Revise drawing.");
 
         eco.SubmitForReview(RequesterId);
-        eco.SubmitReviewDecision(ReviewerId, EcoApprovalDecision.Approve, minApprovalsRequired: 2);
+        eco.SubmitReviewDecision(ReviewerId, EcoApprovalDecision.Approve, minApprovalsRequired: 2, allowSelfApproval: false);
 
         Assert.Equal(EcoStatus.UnderReview, eco.Status);
 
-        eco.SubmitReviewDecision(ApproverId, EcoApprovalDecision.Approve, minApprovalsRequired: 2);
+        eco.SubmitReviewDecision(ApproverId, EcoApprovalDecision.Approve, minApprovalsRequired: 2, allowSelfApproval: false);
 
         Assert.Equal(EcoStatus.Approved, eco.Status);
         Assert.Equal(2, eco.ReviewRound);

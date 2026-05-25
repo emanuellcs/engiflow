@@ -4,6 +4,7 @@ using EngiFlow.Application.Abstractions.Tenancy;
 using EngiFlow.Application.Exceptions;
 using EngiFlow.Application.Messaging;
 using EngiFlow.Application.Users.Notifications;
+using EngiFlow.Domain.Users;
 using EngiFlow.Domain.ValueObjects;
 using FluentValidation;
 
@@ -39,21 +40,29 @@ public sealed class DeactivateUserCommandHandler : ICommandHandler<DeactivateUse
     private readonly ITenantProvider _tenantProvider;
     private readonly IUnitOfWork _unitOfWork;
     private readonly IPostCommitNotificationQueue _notifications;
+    private readonly IUserEventRepository _userEvents;
     private readonly IUserRepository _users;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="DeactivateUserCommandHandler"/> class.
     /// </summary>
+    /// <param name="users">The user repository.</param>
+    /// <param name="unitOfWork">The unit of work used to save deactivation changes.</param>
+    /// <param name="tenantProvider">The current tenant provider.</param>
+    /// <param name="notifications">The post-commit notification queue.</param>
+    /// <param name="userEvents">The user lifecycle audit repository.</param>
     public DeactivateUserCommandHandler(
         IUserRepository users,
         IUnitOfWork unitOfWork,
         ITenantProvider tenantProvider,
-        IPostCommitNotificationQueue notifications)
+        IPostCommitNotificationQueue notifications,
+        IUserEventRepository userEvents)
     {
         _users = users;
         _unitOfWork = unitOfWork;
         _tenantProvider = tenantProvider;
         _notifications = notifications;
+        _userEvents = userEvents;
     }
 
     /// <inheritdoc />
@@ -76,6 +85,15 @@ public sealed class DeactivateUserCommandHandler : ICommandHandler<DeactivateUse
 
         UserManagementRules.EnsureCanDeactivateTarget(actor, target);
         target.Deactivate();
+        await _userEvents.AddAsync(
+                UserEvent.Create(
+                    target.CompanyId,
+                    target.Id,
+                    actor.Id,
+                    UserEventType.UserDeactivated,
+                    $"User deactivated by {actor.DisplayName}."),
+                cancellationToken)
+            .ConfigureAwait(false);
         await _unitOfWork.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
         _notifications.EnqueueUserDeactivated(target);
 

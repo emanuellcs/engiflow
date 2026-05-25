@@ -1,9 +1,10 @@
 "use client";
 
 import AddIcon from "@mui/icons-material/Add";
-import MoreVertIcon from "@mui/icons-material/MoreVert";
-import RefreshIcon from "@mui/icons-material/Refresh";
+import PersonOffIcon from "@mui/icons-material/PersonOff";
+import RestoreIcon from "@mui/icons-material/Restore";
 import SearchIcon from "@mui/icons-material/Search";
+import GroupIcon from "@mui/icons-material/Group";
 import Alert from "@mui/material/Alert";
 import Avatar from "@mui/material/Avatar";
 import Box from "@mui/material/Box";
@@ -14,44 +15,58 @@ import Dialog from "@mui/material/Dialog";
 import DialogActions from "@mui/material/DialogActions";
 import DialogContent from "@mui/material/DialogContent";
 import DialogTitle from "@mui/material/DialogTitle";
+import Divider from "@mui/material/Divider";
 import FormControl from "@mui/material/FormControl";
 import FormHelperText from "@mui/material/FormHelperText";
 import IconButton from "@mui/material/IconButton";
 import InputAdornment from "@mui/material/InputAdornment";
 import InputLabel from "@mui/material/InputLabel";
-import Menu from "@mui/material/Menu";
 import MenuItem from "@mui/material/MenuItem";
 import Select, { type SelectChangeEvent } from "@mui/material/Select";
 import Stack from "@mui/material/Stack";
 import TextField from "@mui/material/TextField";
 import Tooltip from "@mui/material/Tooltip";
 import Typography from "@mui/material/Typography";
-import { DataGrid, type GridColDef, type GridRenderCellParams } from "@mui/x-data-grid";
-import { type FormEvent, type MouseEvent, useCallback, useEffect, useMemo, useState } from "react";
+import { DataGrid, type GridColDef, type GridRenderCellParams, type GridToolbarProps } from "@mui/x-data-grid";
+import { type FormEvent, useCallback, useEffect, useMemo, useState } from "react";
+import DataGridCustomToolbar from "@/components/ui/DataGridCustomToolbar";
+import DataGridEmptyState from "@/components/ui/DataGridEmptyState";
 import PageHeader from "@/components/ui/PageHeader";
 import { ApiError, apiFetch } from "@/lib/api/client";
 import { useAuth } from "@/lib/auth/AuthContext";
 import { isAdminOrOwner } from "@/lib/auth/jwt";
+import { useTranslation } from "@/context/I18nContext";
 
+/** Defines all roles returned by the user-management API. */
 type UserRole = "Owner" | "Administrator" | "Approver" | "Requester" | "Viewer";
+
+/** Defines roles administrators can assign after tenant bootstrap. */
 type MutableUserRole = Exclude<UserRole, "Owner">;
+
+/** Defines user lifecycle states rendered in the admin user table. */
+type UserStatus = "PendingActivation" | "Active" | "Deactivated";
+
+/** Defines the role filter options available above the user grid. */
 type RoleFilter = "All" | UserRole;
 
+/** Describes the user summary returned by the admin user-management API. */
 type UserSummary = {
   id: string;
   name: string;
   email: string;
   role: UserRole;
+  status: UserStatus;
   lastLoginAt: string | null;
 };
 
+/** Stores the invite-user modal form values. */
 type InviteFormState = {
   name: string;
   email: string;
-  password: string;
   role: MutableUserRole;
 };
 
+/** Stores field-level invite-user validation errors. */
 type InviteFieldErrors = Partial<Record<keyof InviteFormState, string>>;
 
 const allRoles: UserRole[] = ["Owner", "Administrator", "Approver", "Requester", "Viewer"];
@@ -59,13 +74,15 @@ const mutableRoles: MutableUserRole[] = ["Administrator", "Approver", "Requester
 const initialInviteForm: InviteFormState = {
   name: "",
   email: "",
-  password: "",
   role: "Requester",
 };
 const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-const symbolPattern = /[^a-zA-Z0-9]/;
 
+/**
+ * Renders tenant user management, including invitation, status, deactivation, and reactivation workflows.
+ */
 export default function UserManagementPage() {
+  const { t, locale } = useTranslation();
   const { user } = useAuth();
   const [users, setUsers] = useState<UserSummary[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -77,6 +94,8 @@ export default function UserManagementPage() {
   const [roleUpdatingUserId, setRoleUpdatingUserId] = useState<string | null>(null);
   const [confirmDeactivateUser, setConfirmDeactivateUser] = useState<UserSummary | null>(null);
   const [isDeactivationPending, setIsDeactivationPending] = useState(false);
+  const [confirmReactivateUser, setConfirmReactivateUser] = useState<UserSummary | null>(null);
+  const [isReactivationPending, setIsReactivationPending] = useState(false);
   const isAdministrator = isAdminOrOwner(user?.role);
 
   const requestUsers = useCallback(async () => {
@@ -91,11 +110,23 @@ export default function UserManagementPage() {
       const response = await requestUsers();
       setUsers(response);
     } catch (error) {
-      setErrorMessage(getApiErrorMessage(error, "Unable to load users."));
+      setErrorMessage(getApiErrorMessage(error, t("users.list.error"), t));
     } finally {
       setIsLoading(false);
     }
-  }, [requestUsers]);
+  }, [requestUsers, t]);
+
+  const CustomToolbar = useMemo(() => {
+    return function UserCustomToolbar(props: GridToolbarProps) {
+      return (
+        <DataGridCustomToolbar
+          {...props}
+          isLoading={isLoading}
+          onRefresh={() => void loadUsers()}
+        />
+      );
+    };
+  }, [isLoading, loadUsers]);
 
   useEffect(() => {
     if (!isAdministrator) {
@@ -112,7 +143,7 @@ export default function UserManagementPage() {
       })
       .catch((error) => {
         if (isMounted) {
-          setErrorMessage(getApiErrorMessage(error, "Unable to load users."));
+          setErrorMessage(getApiErrorMessage(error, t("users.list.error"), t));
         }
       })
       .finally(() => {
@@ -124,7 +155,7 @@ export default function UserManagementPage() {
     return () => {
       isMounted = false;
     };
-  }, [isAdministrator, requestUsers]);
+  }, [isAdministrator, requestUsers, t]);
 
   const filteredUsers = useMemo(() => {
     const normalizedQuery = searchQuery.trim().toLowerCase();
@@ -135,11 +166,12 @@ export default function UserManagementPage() {
         !normalizedQuery ||
         workspaceUser.name.toLowerCase().includes(normalizedQuery) ||
         workspaceUser.email.toLowerCase().includes(normalizedQuery) ||
-        workspaceUser.role.toLowerCase().includes(normalizedQuery);
+        workspaceUser.role.toLowerCase().includes(normalizedQuery) ||
+        getStatusLabel(workspaceUser.status, t).toLowerCase().includes(normalizedQuery);
 
       return matchesRole && matchesQuery;
     });
-  }, [roleFilter, searchQuery, users]);
+  }, [roleFilter, searchQuery, users, t]);
 
   const handleRoleChange = useCallback(async (workspaceUser: UserSummary, role: MutableUserRole) => {
     if (workspaceUser.role === role) {
@@ -158,13 +190,13 @@ export default function UserManagementPage() {
       setUsers((current) =>
         current.map((item) => (item.id === updatedUser.id ? updatedUser : item)),
       );
-      setSuccessMessage(`${updatedUser.name}'s role was updated.`);
+      setSuccessMessage(t("users.roles.updateSuccess", { name: updatedUser.name }));
     } catch (error) {
-      setErrorMessage(getApiErrorMessage(error, "Unable to update the user's role."));
+      setErrorMessage(getApiErrorMessage(error, t("users.roles.updateError"), t));
     } finally {
       setRoleUpdatingUserId(null);
     }
-  }, []);
+  }, [t]);
 
   const handleDeactivateConfirmed = useCallback(async () => {
     if (!confirmDeactivateUser) {
@@ -179,25 +211,59 @@ export default function UserManagementPage() {
       await apiFetch<void>(`/api/users/${confirmDeactivateUser.id}/deactivate`, {
         method: "PUT",
       });
-      setUsers((current) => current.filter((item) => item.id !== confirmDeactivateUser.id));
-      setSuccessMessage(`${confirmDeactivateUser.name} was deactivated.`);
+      setUsers((current) =>
+        current.map((item) =>
+          item.id === confirmDeactivateUser.id
+            ? { ...item, status: "Deactivated" }
+            : item,
+        ),
+      );
+      setSuccessMessage(t("users.deactivate.success", { name: confirmDeactivateUser.name }));
       setConfirmDeactivateUser(null);
     } catch (error) {
-      setErrorMessage(getApiErrorMessage(error, "Unable to deactivate the user."));
+      setErrorMessage(getApiErrorMessage(error, t("users.deactivate.error"), t));
     } finally {
       setIsDeactivationPending(false);
     }
-  }, [confirmDeactivateUser]);
+  }, [confirmDeactivateUser, t]);
+
+  const handleReactivateConfirmed = useCallback(async (reason: string) => {
+    if (!confirmReactivateUser) {
+      return;
+    }
+
+    setIsReactivationPending(true);
+    setErrorMessage(null);
+    setSuccessMessage(null);
+
+    try {
+      const updatedUser = await apiFetch<UserSummary>(`/api/users/${confirmReactivateUser.id}/reactivate`, {
+        method: "PUT",
+        body: { reason },
+      });
+      setUsers((current) =>
+        current.map((item) => (item.id === updatedUser.id ? updatedUser : item)),
+      );
+      setSuccessMessage(t("users.reactivate.success", { name: updatedUser.name }));
+      setConfirmReactivateUser(null);
+    } catch (error) {
+      setErrorMessage(getApiErrorMessage(error, t("users.reactivate.error"), t));
+    } finally {
+      setIsReactivationPending(false);
+    }
+  }, [confirmReactivateUser, t]);
 
   const columns = useMemo<GridColDef<UserSummary>[]>(() => [
     {
       field: "name",
-      headerName: "Name",
+      headerName: t("users.list.columns.name"),
       minWidth: 240,
       flex: 1,
+      headerAlign: "left",
+      align: "left",
       renderCell: (params: GridRenderCellParams<UserSummary, string>) => (
-        <Stack direction="row" spacing={1.25} sx={{ alignItems: "center", minWidth: 0 }}>
-          <Avatar sx={{ width: 32, height: 32, bgcolor: "secondary.main" }}>
+        <Stack direction="row" spacing={1.25} sx={{ alignItems: "center", height: "100%", minWidth: 0 }}>
+          <Avatar sx={{ width: 32, height: 32, bgcolor: "secondary.main", fontSize: "0.8125rem", fontWeight: 600 }}>
             {getInitials(params.row.name)}
           </Avatar>
           <Typography variant="body2" sx={{ fontWeight: 500 }} noWrap>
@@ -208,29 +274,68 @@ export default function UserManagementPage() {
     },
     {
       field: "email",
-      headerName: "Email",
+      headerName: t("users.list.columns.email"),
       minWidth: 250,
       flex: 1,
+      headerAlign: "left",
+      align: "left",
+      renderCell: (params) => (
+        <Box sx={{ display: "flex", alignItems: "center", height: "100%" }}>
+          <Typography variant="body2" color="text.secondary" noWrap>
+            {params.value}
+          </Typography>
+        </Box>
+      ),
     },
     {
       field: "role",
-      headerName: "Role",
+      headerName: t("users.list.columns.role"),
       minWidth: 220,
+      headerAlign: "left",
+      align: "left",
       renderCell: (params: GridRenderCellParams<UserSummary, UserRole>) => (
-        <RoleSelectCell
-          workspaceUser={params.row}
-          currentUserId={user?.id}
-          isPending={roleUpdatingUserId === params.row.id}
-          onRoleChange={handleRoleChange}
-        />
+        <Box sx={{ display: "flex", alignItems: "center", height: "100%", width: "100%" }}>
+          <RoleSelectCell
+            workspaceUser={params.row}
+            currentUserId={user?.id}
+            isPending={roleUpdatingUserId === params.row.id}
+            onRoleChange={handleRoleChange}
+          />
+        </Box>
       ),
       sortComparator: (left, right) => allRoles.indexOf(left) - allRoles.indexOf(right),
     },
     {
       field: "lastLoginAt",
-      headerName: "Last Active",
+      headerName: t("users.list.columns.lastActive"),
       minWidth: 190,
-      valueFormatter: (value: string | null) => formatLastLogin(value),
+      headerAlign: "left",
+      align: "left",
+      renderCell: (params) => (
+        <Box sx={{ display: "flex", alignItems: "center", height: "100%" }}>
+          <Typography variant="body2" color="text.secondary">
+            {formatLastLogin(params.value, t, locale)}
+          </Typography>
+        </Box>
+      ),
+    },
+    {
+      field: "status",
+      headerName: t("users.list.columns.status"),
+      minWidth: 160,
+      headerAlign: "left",
+      align: "left",
+      renderCell: (params: GridRenderCellParams<UserSummary, UserStatus>) => (
+        <Box sx={{ display: "flex", alignItems: "center", height: "100%" }}>
+          <Chip
+            label={getStatusLabel(params.value ?? "PendingActivation", t)}
+            color={getStatusChipColor(params.value ?? "PendingActivation")}
+            size="small"
+            variant={params.value === "Deactivated" ? "outlined" : "filled"}
+            sx={{ fontWeight: 600 }}
+          />
+        </Box>
+      ),
     },
     {
       field: "actions",
@@ -239,35 +344,40 @@ export default function UserManagementPage() {
       sortable: false,
       filterable: false,
       disableColumnMenu: true,
+      headerAlign: "center",
+      align: "center",
       renderCell: (params: GridRenderCellParams<UserSummary>) => (
-        <UserRowActions
-          workspaceUser={params.row}
-          currentUserId={user?.id}
-          onDeactivate={setConfirmDeactivateUser}
-        />
+        <Box sx={{ display: "flex", alignItems: "center", justifyContent: "center", height: "100%" }}>
+          <UserRowActions
+            workspaceUser={params.row}
+            currentUserId={user?.id}
+            onDeactivate={setConfirmDeactivateUser}
+            onReactivate={setConfirmReactivateUser}
+          />
+        </Box>
       ),
     },
-  ], [handleRoleChange, roleUpdatingUserId, user?.id]);
+  ], [handleRoleChange, roleUpdatingUserId, user?.id, t, locale]);
 
   if (!isAdministrator) {
     return (
-      <Stack spacing={2.5}>
+      <Box sx={{ flexGrow: 1, display: "flex", flexDirection: "column", gap: 2.5 }}>
         <PageHeader
-          title="Team Management"
-          description="Manage workspace users, roles, and access policies."
+          title={t("users.list.title")}
+          description={t("users.list.subtitle")}
         />
         <Alert severity="warning">
-          Administrator access is required to manage workspace users.
+          {t("users.list.adminRequired")}
         </Alert>
-      </Stack>
+      </Box>
     );
   }
 
   return (
-    <Stack spacing={2.5}>
+    <Box sx={{ flexGrow: 1, display: "flex", flexDirection: "column", gap: 2.5, minHeight: 0 }}>
       <PageHeader
-        title="Team Management"
-        description="Manage workspace users, roles, and access policies."
+        title={t("users.list.title")}
+        description={t("users.list.subtitle")}
         actionButton={
           <Button
             variant="contained"
@@ -276,11 +386,19 @@ export default function UserManagementPage() {
               setSuccessMessage(null);
               setIsInviteOpen(true);
             }}
-            sx={{ textTransform: "none" }}
+            sx={{
+              flexGrow: { xs: 1, sm: 0 },
+              minWidth: 128,
+              textTransform: "none",
+              fontWeight: 600,
+              height: 36,
+            }}
           >
-            Invite User
+            {t("users.list.inviteButton")}
           </Button>
         }
+        onRefresh={() => void loadUsers()}
+        isLoading={isLoading}
       />
 
       {successMessage ? (
@@ -302,8 +420,8 @@ export default function UserManagementPage() {
         <TextField
           value={searchQuery}
           onChange={(event) => setSearchQuery(event.target.value)}
-          placeholder="Search by name, email, or role"
-          aria-label="Search team members"
+          placeholder={t("users.list.searchPlaceholder")}
+          aria-label={t("users.list.searchPlaceholder")}
           size="small"
           sx={{ width: { xs: "100%", lg: 360 } }}
           slotProps={{
@@ -322,43 +440,35 @@ export default function UserManagementPage() {
           sx={{ alignItems: "center", justifyContent: "flex-end" }}
         >
           <FormControl size="small" sx={{ minWidth: 164 }}>
-            <InputLabel id="role-filter-label">Role</InputLabel>
+            <InputLabel id="role-filter-label">{t("users.list.roleFilterLabel")}</InputLabel>
             <Select<RoleFilter>
               labelId="role-filter-label"
               id="role-filter"
               value={roleFilter}
-              label="Role"
+              label={t("users.list.roleFilterLabel")}
               onChange={(event) => setRoleFilter(event.target.value as RoleFilter)}
             >
-              <MenuItem value="All">All roles</MenuItem>
+              <MenuItem value="All">{t("users.list.allRoles")}</MenuItem>
               {allRoles.map((role) => (
-                <MenuItem key={role} value={role}>{role}</MenuItem>
+                <MenuItem key={role} value={role}>{getRoleLabel(role, t)}</MenuItem>
               ))}
             </Select>
           </FormControl>
-          <Chip label={`${filteredUsers.length} active`} size="small" variant="outlined" />
-          <Tooltip title="Refresh">
-            <span>
-              <IconButton
-                aria-label="Refresh team members"
-                size="small"
-                onClick={loadUsers}
-                disabled={isLoading}
-              >
-                <RefreshIcon fontSize="small" />
-              </IconButton>
-            </span>
-          </Tooltip>
+          <Chip
+            label={t("users.list.userCount", { count: filteredUsers.length })}
+            size="small"
+            variant="outlined"
+            sx={{ fontWeight: 500 }}
+          />
         </Stack>
       </Stack>
 
-      <Box sx={{ width: "100%", overflowX: "auto" }}>
+      <Box sx={{ flexGrow: 1, width: "100%", display: "flex", flexDirection: "column", minHeight: 440 }}>
         <DataGrid
           rows={filteredUsers}
           columns={columns}
           getRowId={(row) => row.id}
           loading={isLoading}
-          autoHeight
           rowHeight={64}
           disableRowSelectionOnClick
           pageSizeOptions={[10, 25, 50]}
@@ -367,15 +477,35 @@ export default function UserManagementPage() {
               paginationModel: { page: 0, pageSize: 10 },
             },
           }}
-          localeText={{
-            noRowsLabel: "No matching team members.",
+          slots={{
+            toolbar: CustomToolbar,
+            noRowsOverlay: () => (
+              <DataGridEmptyState
+                icon={<GroupIcon sx={{ fontSize: 48, color: "grey.400" }} />}
+                message={t("users.list.emptyMessage")}
+                description={t("users.list.emptyDescription")}
+              />
+            ),
           }}
           sx={{
-            minWidth: 920,
+            flex: 1,
             borderColor: "divider",
             bgcolor: "background.paper",
+            borderRadius: 2,
             "& .MuiDataGrid-columnHeaders": {
               bgcolor: "action.hover",
+              borderBottom: 1,
+              borderColor: "divider",
+            },
+            "& .MuiDataGrid-cell": {
+              borderColor: "divider",
+              display: "flex !important",
+              alignItems: "center !important",
+            },
+            "& .MuiDataGrid-footerContainer": {
+              borderTop: 1,
+              borderColor: "divider",
+              mt: "auto",
             },
           }}
         />
@@ -386,7 +516,7 @@ export default function UserManagementPage() {
         onClose={() => setIsInviteOpen(false)}
         onCreated={async () => {
           setIsInviteOpen(false);
-          setSuccessMessage("User invited successfully.");
+          setSuccessMessage(t("users.invite.success"));
           await loadUsers();
         }}
       />
@@ -401,10 +531,23 @@ export default function UserManagementPage() {
         }}
         onConfirm={handleDeactivateConfirmed}
       />
-    </Stack>
+
+      <ReactivateUserDialog
+        key={confirmReactivateUser?.id ?? "reactivation-dialog-empty"}
+        workspaceUser={confirmReactivateUser}
+        isPending={isReactivationPending}
+        onCancel={() => {
+          if (!isReactivationPending) {
+            setConfirmReactivateUser(null);
+          }
+        }}
+        onConfirm={handleReactivateConfirmed}
+      />
+    </Box>
   );
 }
 
+/** Describes props for the role select grid cell. */
 type RoleSelectCellProps = {
   workspaceUser: UserSummary;
   currentUserId: string | undefined;
@@ -412,19 +555,30 @@ type RoleSelectCellProps = {
   onRoleChange: (workspaceUser: UserSummary, role: MutableUserRole) => Promise<void>;
 };
 
+/**
+ * Renders an inline role selector for mutable tenant users.
+ */
 function RoleSelectCell({
   workspaceUser,
   currentUserId,
   isPending,
   onRoleChange,
 }: RoleSelectCellProps) {
-  const disabledReason = getMutationDisabledReason(workspaceUser, currentUserId);
-  const isDisabled = Boolean(disabledReason) || isPending;
+  const { t } = useTranslation();
+  const disabledReason = getMutationDisabledReason(workspaceUser, currentUserId, t);
+  const statusDisabledReason =
+    workspaceUser.status === "Deactivated"
+      ? t("users.list.actions.reactivationConstraint")
+      : null;
+  const isDisabled = Boolean(disabledReason || statusDisabledReason) || isPending;
 
   return (
-    <Tooltip title={disabledReason ?? ""} disableHoverListener={!disabledReason}>
-      <span>
-        <FormControl size="small" disabled={isDisabled} sx={{ minWidth: 176 }}>
+    <Tooltip
+      title={disabledReason ?? statusDisabledReason ?? ""}
+      disableHoverListener={!disabledReason && !statusDisabledReason}
+    >
+      <Box sx={{ display: "flex", alignItems: "center", height: "100%" }}>
+        <FormControl size="small" disabled={isDisabled} sx={{ minWidth: 150 }}>
           <Select<UserRole>
             value={workspaceUser.role}
             onClick={(event) => event.stopPropagation()}
@@ -432,81 +586,83 @@ function RoleSelectCell({
               const role = event.target.value as MutableUserRole;
               void onRoleChange(workspaceUser, role);
             }}
-            renderValue={(value) => (
-              <Chip
-                label={value}
-                size="small"
-                variant="outlined"
-                sx={{ minWidth: 116, fontWeight: 500, ...getRoleChipSx(value) }}
-              />
-            )}
+            sx={{
+              fontSize: "0.875rem",
+              "& .MuiSelect-select": {
+                py: 0.75,
+              },
+            }}
           >
             {allRoles.map((role) => (
               <MenuItem key={role} value={role} disabled={role === "Owner"}>
-                {role}
+                {getRoleLabel(role, t)}
               </MenuItem>
             ))}
           </Select>
         </FormControl>
+      </Box>
+    </Tooltip>
+  );
+}
+
+
+/** Describes props for the lifecycle action grid cell. */
+type UserRowActionsProps = {
+  workspaceUser: UserSummary;
+  currentUserId: string | undefined;
+  onDeactivate: (workspaceUser: UserSummary) => void;
+  onReactivate: (workspaceUser: UserSummary) => void;
+};
+
+/**
+ * Renders the correct user lifecycle action for the current row status.
+ */
+function UserRowActions({
+  workspaceUser,
+  currentUserId,
+  onDeactivate,
+  onReactivate,
+}: UserRowActionsProps) {
+  const { t } = useTranslation();
+  const disabledReason = getMutationDisabledReason(workspaceUser, currentUserId, t);
+  const action =
+    workspaceUser.status === "Deactivated"
+      ? {
+          label: t("users.list.actions.reactivate", { name: workspaceUser.name }),
+          icon: <RestoreIcon fontSize="small" />,
+          color: "success.main",
+          onClick: () => onReactivate(workspaceUser),
+        }
+      : workspaceUser.status === "Active"
+        ? {
+            label: t("users.list.actions.deactivate", { name: workspaceUser.name }),
+            icon: <PersonOffIcon fontSize="small" />,
+            color: "error.main",
+            onClick: () => onDeactivate(workspaceUser),
+          }
+        : null;
+
+  return (
+    <Tooltip title={disabledReason ?? action?.label ?? t("users.list.actions.noAction")}>
+      <span>
+        <IconButton
+          aria-label={action?.label ?? t("users.list.actions.noAction")}
+          size="small"
+          disabled={Boolean(disabledReason) || !action}
+          onClick={(event) => {
+            event.stopPropagation();
+            action?.onClick();
+          }}
+          sx={{ color: action?.color }}
+        >
+          {action?.icon ?? <RestoreIcon fontSize="small" />}
+        </IconButton>
       </span>
     </Tooltip>
   );
 }
 
-type UserRowActionsProps = {
-  workspaceUser: UserSummary;
-  currentUserId: string | undefined;
-  onDeactivate: (workspaceUser: UserSummary) => void;
-};
-
-function UserRowActions({ workspaceUser, currentUserId, onDeactivate }: UserRowActionsProps) {
-  const [anchorEl, setAnchorEl] = useState<HTMLElement | null>(null);
-  const disabledReason = getMutationDisabledReason(workspaceUser, currentUserId);
-  const isMenuOpen = Boolean(anchorEl);
-
-  function handleOpen(event: MouseEvent<HTMLButtonElement>) {
-    event.stopPropagation();
-    setAnchorEl(event.currentTarget);
-  }
-
-  function handleClose() {
-    setAnchorEl(null);
-  }
-
-  return (
-    <>
-      <Tooltip title={disabledReason ?? "Row actions"}>
-        <span>
-          <IconButton
-            aria-label={`Open actions for ${workspaceUser.name}`}
-            size="small"
-            disabled={Boolean(disabledReason)}
-            onClick={handleOpen}
-          >
-            <MoreVertIcon fontSize="small" />
-          </IconButton>
-        </span>
-      </Tooltip>
-      <Menu
-        anchorEl={anchorEl}
-        open={isMenuOpen}
-        onClose={handleClose}
-        onClick={(event) => event.stopPropagation()}
-      >
-        <MenuItem
-          onClick={() => {
-            handleClose();
-            onDeactivate(workspaceUser);
-          }}
-          sx={{ color: "error.main" }}
-        >
-          Deactivate
-        </MenuItem>
-      </Menu>
-    </>
-  );
-}
-
+/** Describes props for the user deactivation confirmation dialog. */
 type DeactivateUserDialogProps = {
   workspaceUser: UserSummary | null;
   isPending: boolean;
@@ -514,12 +670,16 @@ type DeactivateUserDialogProps = {
   onConfirm: () => Promise<void>;
 };
 
+/**
+ * Renders the confirmation dialog for user deactivation.
+ */
 function DeactivateUserDialog({
   workspaceUser,
   isPending,
   onCancel,
   onConfirm,
 }: DeactivateUserDialogProps) {
+  const { t } = useTranslation();
   const isAdministratorTarget = workspaceUser?.role === "Administrator";
 
   return (
@@ -533,31 +693,29 @@ function DeactivateUserDialog({
       }}
     >
       <DialogTitle>
-        {isAdministratorTarget ? "Deactivate Administrator" : "Deactivate User"}
+        {isAdministratorTarget ? t("users.deactivate.titleAdmin") : t("users.deactivate.titleUser")}
       </DialogTitle>
       <DialogContent>
         <Stack spacing={2} sx={{ pt: 0.5 }}>
           {isAdministratorTarget ? (
             <Alert severity="error">
-              This user has administrative access. Deactivation will immediately revoke their
-              tenant-management permissions and active sessions.
+              {t("users.deactivate.alertAdmin")}
             </Alert>
           ) : (
             <Alert severity="warning">
-              Deactivation immediately prevents this user from authenticating or taking
-              workflow actions.
+              {t("users.deactivate.alertUser")}
             </Alert>
           )}
           <Typography variant="body2">
             {workspaceUser
-              ? `Deactivate ${workspaceUser.name} (${workspaceUser.email})?`
+              ? t("users.deactivate.confirm", { name: workspaceUser.name, email: workspaceUser.email })
               : ""}
           </Typography>
         </Stack>
       </DialogContent>
       <DialogActions sx={{ px: 3, pb: 3 }}>
         <Button onClick={onCancel} disabled={isPending} sx={{ textTransform: "none" }}>
-          Cancel
+          {t("common.cancel")}
         </Button>
         <Button
           onClick={() => void onConfirm()}
@@ -566,29 +724,136 @@ function DeactivateUserDialog({
           disabled={isPending}
           sx={{ minWidth: 112, textTransform: "none" }}
         >
-          {isPending ? <CircularProgress color="inherit" size={18} thickness={5} /> : "Deactivate"}
+          {isPending ? <CircularProgress color="inherit" size={18} thickness={5} /> : t("common.confirm")}
         </Button>
       </DialogActions>
     </Dialog>
   );
 }
 
+/** Describes props for the compliance reactivation confirmation dialog. */
+type ReactivateUserDialogProps = {
+  workspaceUser: UserSummary | null;
+  isPending: boolean;
+  onCancel: () => void;
+  onConfirm: (reason: string) => Promise<void>;
+};
+
+/**
+ * Renders the mandatory-reason confirmation dialog for ISO-compliant reactivation.
+ */
+function ReactivateUserDialog({
+  workspaceUser,
+  isPending,
+  onCancel,
+  onConfirm,
+}: ReactivateUserDialogProps) {
+  const { t } = useTranslation();
+  const [reason, setReason] = useState("");
+  const [fieldError, setFieldError] = useState<string | null>(null);
+
+  /**
+   * Validates and submits the reactivation reason.
+   */
+  function handleConfirm() {
+    if (!reason.trim()) {
+      setFieldError(t("users.reactivate.reasonRequired"));
+      return;
+    }
+
+    void onConfirm(reason.trim());
+  }
+
+  /**
+   * Clears local dialog state before closing the reactivation prompt.
+   */
+  function handleCancel() {
+    setReason("");
+    setFieldError(null);
+    onCancel();
+  }
+
+  return (
+    <Dialog
+      open={Boolean(workspaceUser)}
+      onClose={handleCancel}
+      slotProps={{
+        paper: {
+          sx: { width: "100%", maxWidth: 560 },
+        },
+      }}
+    >
+      <DialogTitle>{t("users.reactivate.title")}</DialogTitle>
+      <DialogContent>
+        <Stack spacing={2} sx={{ pt: 0.5 }}>
+          <Alert severity="info">
+            {t("users.reactivate.alert")}
+          </Alert>
+          <Typography variant="body2">
+            {workspaceUser
+              ? t("users.reactivate.confirm", { name: workspaceUser.name, email: workspaceUser.email })
+              : ""}
+          </Typography>
+          <TextField
+            id="reactivation-reason"
+            label={t("users.reactivate.reasonLabel")}
+            value={reason}
+            onChange={(event) => {
+              setReason(event.target.value);
+              setFieldError(null);
+            }}
+            error={Boolean(fieldError)}
+            helperText={fieldError ?? " "}
+            required
+            multiline
+            minRows={3}
+            disabled={isPending}
+            fullWidth
+          />
+        </Stack>
+      </DialogContent>
+      <DialogActions sx={{ px: 3, pb: 3 }}>
+        <Button onClick={handleCancel} disabled={isPending} sx={{ textTransform: "none" }}>
+          {t("common.cancel")}
+        </Button>
+        <Button
+          onClick={handleConfirm}
+          variant="contained"
+          color="success"
+          disabled={isPending}
+          sx={{ minWidth: 112, textTransform: "none" }}
+        >
+          {isPending ? <CircularProgress color="inherit" size={18} thickness={5} /> : t("common.confirm")}
+        </Button>
+      </DialogActions>
+    </Dialog>
+  );
+}
+
+/** Describes props for the invite-user modal. */
 type InviteUserDialogProps = {
   open: boolean;
   onClose: () => void;
   onCreated: () => Promise<void>;
 };
 
+/**
+ * Renders the admin invitation modal without administrator-created passwords.
+ */
 function InviteUserDialog({ open, onClose, onCreated }: InviteUserDialogProps) {
+  const { t } = useTranslation();
   const [form, setForm] = useState<InviteFormState>(initialInviteForm);
   const [fieldErrors, setFieldErrors] = useState<InviteFieldErrors>({});
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [isPending, setIsPending] = useState(false);
 
+  /**
+   * Validates and submits the invitation form to create a pending activation user.
+   */
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
-    const nextErrors = validateInviteForm(form);
+    const nextErrors = validateInviteForm(form, t);
 
     if (hasErrors(nextErrors)) {
       setFieldErrors(nextErrors);
@@ -604,7 +869,6 @@ function InviteUserDialog({ open, onClose, onCreated }: InviteUserDialogProps) {
         body: {
           name: form.name.trim(),
           email: form.email.trim(),
-          password: form.password,
           role: form.role,
         },
       });
@@ -619,13 +883,16 @@ function InviteUserDialog({ open, onClose, onCreated }: InviteUserDialogProps) {
       }
 
       setSubmitError(
-        getApiErrorMessage(error, "Unable to invite user. Review the details and try again."),
+        getApiErrorMessage(error, t("users.invite.error"), t),
       );
     } finally {
       setIsPending(false);
     }
   }
 
+  /**
+   * Closes the invitation dialog and resets local form state when no request is pending.
+   */
   function handleClose() {
     if (isPending) {
       return;
@@ -637,6 +904,9 @@ function InviteUserDialog({ open, onClose, onCreated }: InviteUserDialogProps) {
     onClose();
   }
 
+  /**
+   * Updates a single invitation form field and clears its validation error.
+   */
   function handleFieldChange(field: keyof InviteFormState, value: string) {
     setForm((current) => ({
       ...current,
@@ -655,14 +925,23 @@ function InviteUserDialog({ open, onClose, onCreated }: InviteUserDialogProps) {
       onClose={handleClose}
       slotProps={{
         paper: {
-          sx: { width: "100%", maxWidth: 520 },
+          sx: { width: "100%", maxWidth: 560 },
         },
       }}
     >
       <Box component="form" noValidate onSubmit={handleSubmit}>
-        <DialogTitle>Invite User</DialogTitle>
-        <DialogContent>
-          <Stack spacing={2} sx={{ pt: 1 }}>
+        <DialogTitle>{t("users.invite.title")}</DialogTitle>
+        <DialogContent sx={{ p: 3 }}>
+          <Stack spacing={3} sx={{ pt: 1 }}>
+            <Stack spacing={1}>
+              <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>
+                {t("users.invite.activationFlowTitle")}
+              </Typography>
+              <Typography variant="body2" color="text.secondary">
+                {t("users.invite.activationFlowDesc")}
+              </Typography>
+            </Stack>
+            <Divider />
             {submitError ? (
               <Alert severity="error">
                 {submitError}
@@ -671,7 +950,7 @@ function InviteUserDialog({ open, onClose, onCreated }: InviteUserDialogProps) {
             <TextField
               id="invite-name"
               name="name"
-              label="Name"
+              label={t("users.list.columns.name")}
               value={form.name}
               onChange={(event) => handleFieldChange("name", event.target.value)}
               autoComplete="name"
@@ -685,7 +964,7 @@ function InviteUserDialog({ open, onClose, onCreated }: InviteUserDialogProps) {
             <TextField
               id="invite-email"
               name="email"
-              label="Email"
+              label={t("users.list.columns.email")}
               type="email"
               value={form.email}
               onChange={(event) => handleFieldChange("email", event.target.value)}
@@ -697,39 +976,21 @@ function InviteUserDialog({ open, onClose, onCreated }: InviteUserDialogProps) {
               fullWidth
               size="small"
             />
-            <TextField
-              id="invite-password"
-              name="password"
-              label="Password"
-              type="password"
-              value={form.password}
-              onChange={(event) => handleFieldChange("password", event.target.value)}
-              autoComplete="new-password"
-              disabled={isPending}
-              error={Boolean(fieldErrors.password)}
-              helperText={
-                fieldErrors.password ??
-                "At least 12 characters with uppercase, lowercase, number, and symbol."
-              }
-              required
-              fullWidth
-              size="small"
-            />
             <FormControl error={Boolean(fieldErrors.role)} fullWidth size="small">
-              <InputLabel id="invite-role-label">Role</InputLabel>
+              <InputLabel id="invite-role-label">{t("users.list.columns.role")}</InputLabel>
               <Select<MutableUserRole>
                 labelId="invite-role-label"
                 id="invite-role"
                 name="role"
                 value={form.role}
-                label="Role"
+                label={t("users.list.columns.role")}
                 onChange={(event: SelectChangeEvent<MutableUserRole>) =>
                   handleFieldChange("role", event.target.value)
                 }
                 disabled={isPending}
               >
                 {mutableRoles.map((role) => (
-                  <MenuItem key={role} value={role}>{role}</MenuItem>
+                  <MenuItem key={role} value={role}>{getRoleLabel(role, t)}</MenuItem>
                 ))}
               </Select>
               <FormHelperText>{fieldErrors.role ?? " "}</FormHelperText>
@@ -742,7 +1003,7 @@ function InviteUserDialog({ open, onClose, onCreated }: InviteUserDialogProps) {
             disabled={isPending}
             sx={{ textTransform: "none" }}
           >
-            Cancel
+            {t("common.cancel")}
           </Button>
           <Button
             type="submit"
@@ -753,7 +1014,7 @@ function InviteUserDialog({ open, onClose, onCreated }: InviteUserDialogProps) {
             {isPending ? (
               <CircularProgress color="inherit" size={18} thickness={5} />
             ) : (
-              "Invite User"
+              t("users.invite.title")
             )}
           </Button>
         </DialogActions>
@@ -762,109 +1023,71 @@ function InviteUserDialog({ open, onClose, onCreated }: InviteUserDialogProps) {
   );
 }
 
-function validateInviteForm(form: InviteFormState): InviteFieldErrors {
+/**
+ * Validates the invite-user form before submitting it to the API.
+ */
+function validateInviteForm(form: InviteFormState, t: (key: string) => string): InviteFieldErrors {
   const errors: InviteFieldErrors = {};
 
   if (!form.name.trim()) {
-    errors.name = "Name is required.";
+    errors.name = t("users.invite.validation.nameRequired");
   }
 
   if (!form.email.trim()) {
-    errors.email = "Email is required.";
+    errors.email = t("users.invite.validation.emailRequired");
   } else if (!emailPattern.test(form.email.trim())) {
-    errors.email = "Enter a valid email address.";
-  }
-
-  if (!form.password) {
-    errors.password = "Password is required.";
-  } else if (form.password.length < 12) {
-    errors.password = "Password must be at least 12 characters.";
-  } else if (!/[A-Z]/.test(form.password)) {
-    errors.password = "Password must include at least one uppercase letter.";
-  } else if (!/[a-z]/.test(form.password)) {
-    errors.password = "Password must include at least one lowercase letter.";
-  } else if (!/[0-9]/.test(form.password)) {
-    errors.password = "Password must include at least one number.";
-  } else if (!symbolPattern.test(form.password)) {
-    errors.password = "Password must include at least one symbol.";
+    errors.email = t("users.invite.validation.emailInvalid");
   }
 
   if (!mutableRoles.includes(form.role)) {
-    errors.role = "Role must be Administrator, Approver, Requester, or Viewer.";
+    errors.role = t("users.invite.validation.roleInvalid");
   }
 
   return errors;
 }
 
-function getMutationDisabledReason(workspaceUser: UserSummary, currentUserId: string | undefined): string | null {
+/**
+ * Returns the reason a user lifecycle or role mutation is disabled.
+ */
+function getMutationDisabledReason(
+  workspaceUser: UserSummary,
+  currentUserId: string | undefined,
+  t: (key: string) => string,
+): string | null {
   if (currentUserId && workspaceUser.id.toLowerCase() === currentUserId.toLowerCase()) {
-    return "You cannot modify your own account.";
+    return t("users.list.actions.selfMutationConstraint");
   }
 
   if (workspaceUser.role === "Owner") {
-    return "Owner accounts cannot be modified.";
+    return t("users.list.actions.ownerMutationConstraint");
   }
 
   return null;
 }
 
-function formatLastLogin(value: string | null): string {
+/**
+ * Formats a nullable login timestamp for the user grid.
+ */
+function formatLastLogin(value: string | null, t: (key: string) => string, locale: string): string {
   if (!value) {
-    return "Never";
+    return t("users.list.status.never");
   }
 
   const timestamp = new Date(value);
 
   if (Number.isNaN(timestamp.getTime())) {
-    return "Never";
+    return t("users.list.status.never");
   }
 
-  return new Intl.DateTimeFormat(undefined, {
+  return new Intl.DateTimeFormat(locale === "pt-BR" ? "pt-BR" : "en-US", {
     dateStyle: "medium",
     timeStyle: "short",
   }).format(timestamp);
 }
 
-function getRoleChipSx(role: string): object {
-  if (role === "Owner") {
-    return {
-      borderColor: "warning.main",
-      color: "warning.dark",
-      bgcolor: "rgba(237, 108, 2, 0.08)",
-    };
-  }
-
-  if (role === "Administrator") {
-    return {
-      borderColor: "primary.main",
-      color: "primary.dark",
-      bgcolor: "rgba(21, 101, 192, 0.08)",
-    };
-  }
-
-  if (role === "Approver") {
-    return {
-      borderColor: "success.main",
-      color: "success.dark",
-      bgcolor: "rgba(46, 125, 50, 0.08)",
-    };
-  }
-
-  if (role === "Requester") {
-    return {
-      borderColor: "info.main",
-      color: "info.dark",
-      bgcolor: "rgba(2, 136, 209, 0.08)",
-    };
-  }
-
-  return {
-    borderColor: "grey.400",
-    color: "text.secondary",
-    bgcolor: "grey.50",
-  };
-}
-
+/**
+ * Builds initials for the user avatar.
+ */
 function getInitials(name: string): string {
   const initials = name
     .split(/\s+/)
@@ -876,18 +1099,70 @@ function getInitials(name: string): string {
   return initials || "U";
 }
 
+/**
+ * Converts an API lifecycle status into a compact chip label.
+ */
+function getStatusLabel(status: UserStatus, t: (key: string) => string): string {
+  if (status === "PendingActivation") {
+    return t("users.list.status.pending");
+  }
+  if (status === "Active") {
+    return t("users.list.status.active");
+  }
+  if (status === "Deactivated") {
+    return t("users.list.status.deactivated");
+  }
+
+  return status;
+}
+
+function getRoleLabel(role: string, t: (key: string) => string): string {
+  const map: Record<string, string> = {
+    Owner: t("users.roles.owner"),
+    Administrator: t("users.roles.administrator"),
+    Approver: t("users.roles.approver"),
+    Requester: t("users.roles.requester"),
+    Viewer: t("users.roles.viewer"),
+  };
+  return map[role] || role;
+}
+
+/**
+ * Maps a lifecycle status to the MUI chip color palette.
+ */
+function getStatusChipColor(status: UserStatus): "success" | "warning" | "error" {
+  if (status === "Active") {
+    return "success";
+  }
+
+  if (status === "PendingActivation") {
+    return "warning";
+  }
+
+  return "error";
+}
+
+/**
+ * Indicates whether any invite form validation errors are present.
+ */
 function hasErrors(errors: InviteFieldErrors): boolean {
   return Object.values(errors).some(Boolean);
 }
 
-function getApiErrorMessage(error: unknown, fallback: string): string {
+/**
+ * Converts an API error into user-facing copy.
+ */
+function getApiErrorMessage(error: unknown, fallback: string, t: (key: string) => string): string {
   if (error instanceof ApiError) {
     return readProblemDetailsMessage(error.details) ?? fallback;
   }
 
-  return fallback;
+  return t(fallback) || fallback;
 }
 
+/**
+ * Reads server validation errors into invite form field errors.
+ */
 function readValidationFieldErrors(error: unknown): InviteFieldErrors {
   const details = error instanceof ApiError ? error.details : error;
 
@@ -904,7 +1179,6 @@ function readValidationFieldErrors(error: unknown): InviteFieldErrors {
   const fieldMap: Record<string, keyof InviteFormState> = {
     Name: "name",
     Email: "email",
-    Password: "password",
     Role: "role",
   };
   const errors: InviteFieldErrors = {};
@@ -928,6 +1202,9 @@ function readValidationFieldErrors(error: unknown): InviteFieldErrors {
   return errors;
 }
 
+/**
+ * Reads the best display message from RFC 7807 problem details.
+ */
 function readProblemDetailsMessage(details: unknown): string | null {
   if (!details || typeof details !== "object") {
     return null;
@@ -958,6 +1235,9 @@ function readProblemDetailsMessage(details: unknown): string | null {
   return null;
 }
 
+/**
+ * Reads the first validation error message from problem details.
+ */
 function readValidationMessage(details: object): string | null {
   if (
     !("errors" in details) ||

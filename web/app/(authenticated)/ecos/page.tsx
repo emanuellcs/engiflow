@@ -23,6 +23,8 @@ import { DataGrid, type GridColDef, type GridPaginationModel } from "@mui/x-data
 import { DatePicker } from "@mui/x-date-pickers/DatePicker";
 import type { Dayjs } from "dayjs";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import DataGridCustomToolbar from "@/components/ui/DataGridCustomToolbar";
+import DataGridEmptyState from "@/components/ui/DataGridEmptyState";
 import NextLink from "@/components/ui/NextLink";
 import PageHeader from "@/components/ui/PageHeader";
 import PriorityChip from "@/components/ui/PriorityChip";
@@ -30,6 +32,7 @@ import StatusChip from "@/components/ui/StatusChip";
 import { ApiError, apiFetch } from "@/lib/api/client";
 import { useAuth } from "@/lib/auth/AuthContext";
 import { isAdminOrOwner } from "@/lib/auth/jwt";
+import { useTranslation } from "@/context/I18nContext";
 import type {
   EcoPriority,
   EcoReviewContextDto,
@@ -87,6 +90,7 @@ export default function EcosPage() {
  * @returns The ECO dashboard content.
  */
 function EcoDashboard() {
+  const { t, locale } = useTranslation();
   const { user } = useAuth();
   const [rows, setRows] = useState<EcoSummaryDto[]>([]);
   const [rowCount, setRowCount] = useState(0);
@@ -122,7 +126,7 @@ function EcoDashboard() {
         setReviewContext(context);
       } catch (error) {
         if (!isAbortError(error)) {
-          setReviewContext({ minApprovalsRequired: 1, users: [] });
+          setReviewContext({ minApprovalsRequired: 1, allowSelfApproval: false, users: [] });
         }
       }
     }
@@ -134,44 +138,51 @@ function EcoDashboard() {
     };
   }, []);
 
+  const loadEcos = useCallback(async (signal?: AbortSignal) => {
+    setIsLoading(true);
+    setErrorMessage(null);
+
+    try {
+      const result = await apiFetch<PagedResult<EcoSummaryDto>>(
+        buildEcoListPath(paginationModel, filters),
+        { signal },
+      );
+
+      setRows(Array.isArray(result.items) ? result.items : []);
+      setRowCount(Number.isFinite(result.totalCount) ? result.totalCount : 0);
+    } catch (error) {
+      if (isAbortError(error)) {
+        return;
+      }
+
+      setRows([]);
+      setRowCount(0);
+      setErrorMessage(getEcoListErrorMessage(error, t));
+    } finally {
+      if (!signal?.aborted) {
+        setIsLoading(false);
+      }
+    }
+  }, [paginationModel, filters, t]);
+
   useEffect(() => {
     const controller = new AbortController();
     const searchDebounce = window.setTimeout(() => {
-      void loadEcos();
+      void loadEcos(controller.signal);
     }, 250);
-
-    async function loadEcos(): Promise<void> {
-      setIsLoading(true);
-      setErrorMessage(null);
-
-      try {
-        const result = await apiFetch<PagedResult<EcoSummaryDto>>(
-          buildEcoListPath(paginationModel, filters),
-          { signal: controller.signal },
-        );
-
-        setRows(Array.isArray(result.items) ? result.items : []);
-        setRowCount(Number.isFinite(result.totalCount) ? result.totalCount : 0);
-      } catch (error) {
-        if (isAbortError(error)) {
-          return;
-        }
-
-        setRows([]);
-        setRowCount(0);
-        setErrorMessage(getEcoListErrorMessage(error));
-      } finally {
-        if (!controller.signal.aborted) {
-          setIsLoading(false);
-        }
-      }
-    }
 
     return () => {
       window.clearTimeout(searchDebounce);
       controller.abort();
     };
-  }, [filters, paginationModel]);
+  }, [loadEcos]);
+
+  useEffect(() => {
+    const underReviewCount = rows.filter((row) => row.status === "UnderReview").length;
+    window.dispatchEvent(
+      new CustomEvent("engiflow:update-eco-count", { detail: { count: underReviewCount } }),
+    );
+  }, [rows]);
 
   const resetToFirstPage = useCallback(() => {
     setPaginationModel((current) => ({ ...current, page: 0 }));
@@ -181,187 +192,279 @@ function EcoDashboard() {
     () => [
       {
         field: "id",
-        headerName: "ECO",
-        minWidth: 170,
-        flex: 0.8,
+        headerName: t("ecos.list.columns.id"),
+        minWidth: 100,
+        flex: 0.5,
         sortable: false,
+        headerAlign: "left",
+        align: "left",
         renderCell: (params) => (
-          <Stack spacing={0.25} sx={{ minWidth: 0 }}>
+          <Box sx={{ display: "flex", alignItems: "center", height: "100%" }}>
             <Link
               component={NextLink}
               href={`/ecos/${params.row.id}`}
               underline="hover"
               color="primary"
-              sx={{ fontFamily: "monospace", fontWeight: 700 }}
+              sx={{ fontFamily: "monospace", fontWeight: 700, fontSize: "0.875rem" }}
             >
               {formatShortId(params.row.id)}
             </Link>
-            <Typography variant="caption" color="text.secondary" noWrap>
-              Round {params.row.reviewRound || 0}
+          </Box>
+        ),
+      },
+      {
+        field: "reviewRound",
+        headerName: t("ecos.list.columns.round"),
+        minWidth: 90,
+        flex: 0.4,
+        sortable: false,
+        headerAlign: "center",
+        align: "center",
+        renderCell: (params) => (
+          <Box sx={{ display: "flex", alignItems: "center", height: "100%", justifyContent: "center" }}>
+            <Typography variant="body2" color="text.secondary" sx={{ fontWeight: 500 }}>
+              {params.row.reviewRound || 0}
             </Typography>
-          </Stack>
+          </Box>
         ),
       },
       {
         field: "title",
-        headerName: "Title",
+        headerName: t("ecos.list.columns.title"),
         minWidth: 280,
         flex: 1.5,
         sortable: false,
+        headerAlign: "left",
+        align: "left",
         renderCell: (params) => (
-          <Link
-            component={NextLink}
-            href={`/ecos/${params.row.id}`}
-            underline="hover"
-            color="inherit"
-            sx={{
-              display: "block",
-              minWidth: 0,
-              overflow: "hidden",
-              textOverflow: "ellipsis",
-              whiteSpace: "nowrap",
-              width: "100%",
-            }}
-          >
-            {params.row.title}
-          </Link>
+          <Box sx={{ display: "flex", alignItems: "center", height: "100%", width: "100%" }}>
+            <Link
+              component={NextLink}
+              href={`/ecos/${params.row.id}`}
+              underline="hover"
+              color="inherit"
+              sx={{
+                display: "block",
+                minWidth: 0,
+                overflow: "hidden",
+                textOverflow: "ellipsis",
+                whiteSpace: "nowrap",
+                width: "100%",
+                fontWeight: 500,
+                fontSize: "0.875rem",
+              }}
+            >
+              {params.row.title}
+            </Link>
+          </Box>
         ),
       },
       {
         field: "createdByUserId",
-        headerName: "Requester",
+        headerName: t("ecos.list.columns.requester"),
         minWidth: 210,
         flex: 1,
         sortable: false,
+        headerAlign: "left",
+        align: "left",
         renderCell: (params) => {
           const requester = usersById.get(params.row.createdByUserId);
 
           return (
-            <UserCell
-              fallbackId={params.row.createdByUserId}
-              user={requester}
-            />
+            <Box sx={{ display: "flex", alignItems: "center", height: "100%", width: "100%" }}>
+              <UserCell
+                fallbackId={params.row.createdByUserId}
+                user={requester}
+              />
+            </Box>
           );
         },
       },
       {
         field: "review",
-        headerName: "Review",
+        headerName: t("ecos.list.columns.progress"),
         minWidth: 210,
         flex: 1,
         sortable: false,
+        headerAlign: "left",
+        align: "left",
         renderCell: (params) => (
-          <ReviewerProgressCell
-            approvalCount={params.row.currentRoundApprovalCount}
-            approvers={approvers}
-            minApprovalsRequired={minApprovalsRequired}
-            requestChangesCount={params.row.currentRoundRequestChangesCount}
-            status={params.row.status}
-          />
+          <Box sx={{ display: "flex", alignItems: "center", height: "100%", width: "100%" }}>
+            <ReviewerProgressCell
+              approvalCount={params.row.currentRoundApprovalCount}
+              approvers={approvers}
+              minApprovalsRequired={minApprovalsRequired}
+              requestChangesCount={params.row.currentRoundRequestChangesCount}
+              status={params.row.status}
+              t={t}
+            />
+          </Box>
         ),
       },
       {
         field: "priority",
-        headerName: "Priority",
+        headerName: t("ecos.list.columns.priority"),
         minWidth: 118,
         sortable: false,
-        renderCell: (params) => <PriorityChip priority={params.row.priority} />,
+        headerAlign: "center",
+        align: "center",
+        renderCell: (params) => (
+          <Box sx={{ display: "flex", alignItems: "center", height: "100%", justifyContent: "center" }}>
+            <PriorityChip priority={params.row.priority} />
+          </Box>
+        ),
       },
       {
         field: "status",
-        headerName: "Status",
+        headerName: t("ecos.list.columns.status"),
         minWidth: 138,
         sortable: false,
-        renderCell: (params) => <StatusChip status={params.row.status} />,
+        headerAlign: "center",
+        align: "center",
+        renderCell: (params) => (
+          <Box sx={{ display: "flex", alignItems: "center", height: "100%", justifyContent: "center" }}>
+            <StatusChip status={params.row.status} />
+          </Box>
+        ),
       },
       {
         field: "createdAt",
-        headerName: "Created",
+        headerName: t("ecos.list.columns.created"),
         minWidth: 150,
         sortable: false,
-        valueFormatter: (value) => formatDate(value as string),
+        headerAlign: "center",
+        align: "center",
+        renderCell: (params) => (
+          <Box sx={{ display: "flex", alignItems: "center", height: "100%", justifyContent: "center" }}>
+            <Typography variant="body2" color="text.secondary">
+              {formatDate(params.value as string, locale)}
+            </Typography>
+          </Box>
+        ),
       },
     ],
-    [approvers, minApprovalsRequired, usersById],
+    [approvers, minApprovalsRequired, usersById, t, locale],
   );
 
   return (
-    <Stack spacing={2.5}>
+    <Box sx={{ flexGrow: 1, display: "flex", flexDirection: "column", minHeight: 0, gap: 2.5 }}>
       <PageHeader
-        title="Engineering Change Orders"
-        description="Search, review, and triage engineering changes across the workspace."
-        actionButton={canCreateEco ? (
-          <Button
-            component={NextLink}
-            href="/ecos/new"
-            type="button"
-            variant="contained"
-            startIcon={<AddIcon />}
-            sx={{
-              width: { xs: "100%", sm: "auto" },
-              minWidth: 128,
-              textTransform: "none",
-            }}
-          >
-            Create ECO
-          </Button>
-        ) : undefined}
+        title={t("ecos.list.title")}
+        description={t("ecos.list.subtitle")}
+        actionButton={
+          <Stack direction="row" spacing={1} sx={{ width: { xs: "100%", sm: "auto" }, alignItems: "center" }}>
+            {canCreateEco ? (
+              <Button
+                component={NextLink}
+                href="/ecos/new"
+                type="button"
+                variant="contained"
+                startIcon={<AddIcon />}
+                sx={{
+                  flexGrow: { xs: 1, sm: 0 },
+                  minWidth: 128,
+                  textTransform: "none",
+                  fontWeight: 600,
+                  height: 36,
+                }}
+              >
+                {t("ecos.list.createButton")}
+              </Button>
+            ) : null}
+          </Stack>
+        }
+        onRefresh={() => void loadEcos()}
+        isLoading={isLoading}
       />
 
-      <Paper elevation={1} sx={{ p: { xs: 1.5, md: 2 } }}>
-        <Stack spacing={2}>
-          <EcoFilterBar
-            filters={filters}
-            onFiltersChange={(nextFilters) => {
-              setFilters(nextFilters);
-              resetToFirstPage();
-            }}
-          />
-          <Box sx={{ width: "100%", overflowX: "auto" }}>
-            <Box sx={{ minWidth: 980, height: 660 }}>
-              <DataGrid
-                rows={rows}
-                columns={columns}
-                getRowId={(row) => row.id}
-                rowCount={rowCount}
-                loading={isLoading}
-                paginationMode="server"
-                paginationModel={paginationModel}
-                onPaginationModelChange={setPaginationModel}
-                pageSizeOptions={[10, 20, 50, 100]}
-                disableRowSelectionOnClick
-                slots={{
-                  noRowsOverlay: EmptyGridOverlay,
-                }}
-                slotProps={{
-                  loadingOverlay: {
-                    variant: "linear-progress",
-                    noRowsVariant: "skeleton",
-                  },
-                }}
-                sx={{
-                  border: 0,
-                  "& .MuiDataGrid-columnHeaders": {
-                    bgcolor: "grey.100",
-                    borderRadius: 0,
-                  },
-                  "& .MuiDataGrid-cell": {
-                    alignItems: "center",
-                  },
-                }}
-              />
-            </Box>
+      <Paper
+        elevation={0}
+        sx={{
+          flexGrow: 1,
+          display: "flex",
+          flexDirection: "column",
+          minHeight: 0,
+          border: 1,
+          borderColor: "divider",
+          borderRadius: 2,
+          overflow: "hidden",
+        }}
+      >
+        <Stack spacing={0} sx={{ flexGrow: 1, minHeight: 0 }}>
+          <Box sx={{ p: { xs: 1.5, md: 2 }, borderBottom: 1, borderColor: "divider", bgcolor: "background.paper" }}>
+            <EcoFilterBar
+              filters={filters}
+              onFiltersChange={(nextFilters) => {
+                setFilters(nextFilters);
+                resetToFirstPage();
+              }}
+            />
           </Box>
+
+          <Box sx={{ flexGrow: 1, width: "100%", display: "flex", flexDirection: "column", minHeight: 440 }}>
+            <DataGrid
+              rows={rows}
+              columns={columns}
+              getRowId={(row) => row.id}
+              rowCount={rowCount}
+              loading={isLoading}
+              paginationMode="server"
+              paginationModel={paginationModel}
+              onPaginationModelChange={setPaginationModel}
+              pageSizeOptions={[10, 20, 50, 100]}
+              disableRowSelectionOnClick
+              slots={{
+                toolbar: DataGridCustomToolbar,
+                noRowsOverlay: () => (
+                  <DataGridEmptyState
+                    icon={<AssignmentOutlinedIcon sx={{ fontSize: 48, color: "grey.400" }} />}
+                    message={t("ecos.list.emptyMessage")}
+                    description={t("ecos.list.emptyDescription")}
+                  />
+                ),
+              }}
+              slotProps={{
+                loadingOverlay: {
+                  variant: "linear-progress",
+                  noRowsVariant: "skeleton",
+                },
+              }}
+              sx={{
+                flex: 1,
+                border: 0,
+                borderRadius: 0,
+                "& .MuiDataGrid-columnHeaders": {
+                  bgcolor: "action.hover",
+                  borderBottom: 1,
+                  borderColor: "divider",
+                },
+                "& .MuiDataGrid-cell": {
+                  borderColor: "divider",
+                  display: "flex !important",
+                  alignItems: "center !important",
+                },
+                "& .MuiDataGrid-footerContainer": {
+                  borderTop: 1,
+                  borderColor: "divider",
+                  mt: "auto",
+                },
+              }}
+            />
+          </Box>
+
           {errorMessage ? (
-            <Typography variant="body2" color="error">
-              {errorMessage}
-            </Typography>
+            <Box sx={{ p: 2, borderTop: 1, borderColor: "divider" }}>
+              <Typography variant="body2" color="error">
+                {errorMessage}
+              </Typography>
+            </Box>
           ) : null}
         </Stack>
       </Paper>
-    </Stack>
+    </Box>
   );
 }
+
 
 type EcoFilterBarProps = {
   filters: EcoListFilters;
@@ -375,6 +478,7 @@ type EcoFilterBarProps = {
  * @returns Filter controls used by the ECO DataGrid.
  */
 function EcoFilterBar({ filters, onFiltersChange }: EcoFilterBarProps) {
+  const { t } = useTranslation();
   function patchFilters(patch: Partial<EcoListFilters>): void {
     onFiltersChange({ ...filters, ...patch });
   }
@@ -387,7 +491,7 @@ function EcoFilterBar({ filters, onFiltersChange }: EcoFilterBarProps) {
         sx={{ alignItems: { xs: "stretch", lg: "center" } }}
       >
         <TextField
-          label="Search ECOs"
+          label={t("ecos.list.filters.searchLabel")}
           value={filters.search}
           onChange={(event) => patchFilters({ search: event.target.value })}
           size="small"
@@ -403,49 +507,49 @@ function EcoFilterBar({ filters, onFiltersChange }: EcoFilterBarProps) {
           }}
         />
         <FormControl size="small" sx={{ minWidth: 150 }}>
-          <InputLabel id="eco-status-filter-label">Status</InputLabel>
+          <InputLabel id="eco-status-filter-label">{t("ecos.list.filters.statusLabel")}</InputLabel>
           <Select
             labelId="eco-status-filter-label"
-            label="Status"
+            label={t("ecos.list.filters.statusLabel")}
             value={filters.status}
             onChange={(event: SelectChangeEvent) =>
               patchFilters({ status: event.target.value as EcoListFilters["status"] })
             }
           >
-            <MenuItem value="All">All</MenuItem>
+            <MenuItem value="All">{t("ecos.list.filters.all")}</MenuItem>
             {statusOptions.map((status) => (
               <MenuItem key={status} value={status}>
-                {formatStatusLabel(status)}
+                {formatStatusLabel(status, t)}
               </MenuItem>
             ))}
           </Select>
         </FormControl>
         <FormControl size="small" sx={{ minWidth: 150 }}>
-          <InputLabel id="eco-priority-filter-label">Priority</InputLabel>
+          <InputLabel id="eco-priority-filter-label">{t("ecos.list.filters.priorityLabel")}</InputLabel>
           <Select
             labelId="eco-priority-filter-label"
-            label="Priority"
+            label={t("ecos.list.filters.priorityLabel")}
             value={filters.priority}
             onChange={(event: SelectChangeEvent) =>
               patchFilters({ priority: event.target.value as EcoListFilters["priority"] })
             }
           >
-            <MenuItem value="All">All</MenuItem>
+            <MenuItem value="All">{t("ecos.list.filters.all")}</MenuItem>
             {priorityOptions.map((priority) => (
               <MenuItem key={priority} value={priority}>
-                {priority}
+                {getPriorityLabel(priority, t)}
               </MenuItem>
             ))}
           </Select>
         </FormControl>
         <DatePicker
-          label="Created from"
+          label={t("ecos.list.filters.createdFrom")}
           value={filters.createdFrom}
           onChange={(value) => patchFilters({ createdFrom: value })}
           slotProps={{ textField: { size: "small", sx: { minWidth: 170 } } }}
         />
         <DatePicker
-          label="Created to"
+          label={t("ecos.list.filters.createdTo")}
           value={filters.createdTo}
           onChange={(value) => patchFilters({ createdTo: value })}
           slotProps={{ textField: { size: "small", sx: { minWidth: 170 } } }}
@@ -457,7 +561,7 @@ function EcoFilterBar({ filters, onFiltersChange }: EcoFilterBarProps) {
           onClick={() => onFiltersChange(initialFilters)}
           sx={{ minWidth: 128, textTransform: "none" }}
         >
-          Clear
+          {t("ecos.list.filters.clearButton")}
         </Button>
       </Stack>
       <Stack direction={{ xs: "column", sm: "row" }} spacing={1}>
@@ -469,7 +573,7 @@ function EcoFilterBar({ filters, onFiltersChange }: EcoFilterBarProps) {
               size="small"
             />
           }
-          label="Created by me"
+          label={t("ecos.list.filters.createdByMe")}
         />
         <FormControlLabel
           control={
@@ -481,7 +585,7 @@ function EcoFilterBar({ filters, onFiltersChange }: EcoFilterBarProps) {
               size="small"
             />
           }
-          label="Awaiting my review"
+          label={t("ecos.list.filters.awaitingReview")}
         />
       </Stack>
     </Stack>
@@ -539,7 +643,8 @@ function ReviewerProgressCell({
   minApprovalsRequired,
   requestChangesCount,
   status,
-}: ReviewerProgressCellProps) {
+  t,
+}: ReviewerProgressCellProps & { t: (key: string, params?: Record<string, string | number>) => string }) {
   return (
     <Stack spacing={0.5} sx={{ minWidth: 0 }}>
       <Stack direction="row" spacing={0.5} sx={{ alignItems: "center" }}>
@@ -560,34 +665,9 @@ function ReviewerProgressCell({
       </Stack>
       <Typography variant="caption" color="text.secondary" noWrap>
         {status === "UnderReview"
-          ? `${approvalCount}/${minApprovalsRequired} approved`
-          : formatStatusLabel(status)}
-        {requestChangesCount > 0 ? ` • ${requestChangesCount} changes` : ""}
-      </Typography>
-    </Stack>
-  );
-}
-
-/**
- * Renders the empty DataGrid overlay.
- *
- * @returns Empty grid overlay.
- */
-function EmptyGridOverlay() {
-  return (
-    <Stack
-      spacing={1.5}
-      sx={{
-        alignItems: "center",
-        justifyContent: "center",
-        minHeight: "100%",
-        p: 3,
-        textAlign: "center",
-      }}
-    >
-      <AssignmentOutlinedIcon sx={{ fontSize: 48, color: "grey.500" }} />
-      <Typography variant="body2" color="text.secondary">
-        No Engineering Change Orders match the current filters.
+          ? t("status.reviewProgress", { current: approvalCount, total: minApprovalsRequired })
+          : formatStatusLabel(status, t)}
+        {requestChangesCount > 0 ? t("status.requestChangesCount", { count: requestChangesCount }) : ""}
       </Typography>
     </Stack>
   );
@@ -641,22 +721,40 @@ function formatShortId(id: string): string {
   return id.length > 8 ? id.slice(0, 8).toUpperCase() : id.toUpperCase();
 }
 
-function formatDate(value: string): string {
+function formatDate(value: string, locale: string): string {
   const timestamp = Date.parse(value);
 
   if (Number.isNaN(timestamp)) {
     return "-";
   }
 
-  return new Intl.DateTimeFormat("en-US", {
+  return new Intl.DateTimeFormat(locale === "pt-BR" ? "pt-BR" : "en-US", {
     year: "numeric",
     month: "short",
     day: "2-digit",
   }).format(timestamp);
 }
 
-function formatStatusLabel(value: string): string {
-  return value.replace(/([a-z])([A-Z])/g, "$1 $2");
+function formatStatusLabel(value: string, t: (key: string) => string): string {
+  const map: Record<string, string> = {
+    Draft: t("status.draft"),
+    UnderReview: t("status.underReview"),
+    Approved: t("status.approved"),
+    Canceled: t("status.canceled"),
+    Rejected: t("status.rejected"),
+    Implemented: t("status.implemented"),
+  };
+  return map[value] || value;
+}
+
+function getPriorityLabel(value: string, t: (key: string) => string): string {
+  const map: Record<string, string> = {
+    Low: t("priority.low"),
+    Medium: t("priority.medium"),
+    High: t("priority.high"),
+    Critical: t("priority.critical"),
+  };
+  return map[value] || value;
 }
 
 function getInitials(value: string): string {
@@ -666,12 +764,12 @@ function getInitials(value: string): string {
   return initials || "?";
 }
 
-function getEcoListErrorMessage(error: unknown): string {
+function getEcoListErrorMessage(error: unknown, t: (key: string) => string): string {
   if (error instanceof ApiError) {
-    return "Unable to load Engineering Change Orders. Refresh the page or try again later.";
+    return t("ecos.list.loadingError");
   }
 
-  return "Unable to load Engineering Change Orders. Check your connection and try again.";
+  return t("ecos.list.connectionError");
 }
 
 function isAbortError(error: unknown): boolean {

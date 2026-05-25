@@ -41,13 +41,17 @@ public sealed class GetEcoReviewContextQueryHandler : IQueryHandler<GetEcoReview
         var settings = await _settings
             .GetByCompanyIdAsync(_tenantProvider.CurrentCompanyId, cancellationToken)
             .ConfigureAwait(false);
-        var minApprovalsRequired =
-            settings?.MinApprovalsRequired ??
-            CompanySettings.CreateDefault(_tenantProvider.CurrentCompanyId).MinApprovalsRequired;
+
+        if (settings is null)
+        {
+            settings = CompanySettings.CreateDefault(_tenantProvider.CurrentCompanyId);
+        }
+
         var users = await _users.ListActiveAsync(cancellationToken).ConfigureAwait(false);
 
         return new EcoReviewContextDto(
-            minApprovalsRequired,
+            settings.MinApprovalsRequired,
+            settings.AllowSelfApproval,
             users
                 .Select(user => new EcoUserDto(
                     user.Id.Value,

@@ -74,7 +74,23 @@ internal sealed class EngineeringChangeOrderRepository : IEngineeringChangeOrder
             .CountAsync(cancellationToken);
     }
 
-    private static IQueryable<EngineeringChangeOrder> ApplyFilter(
+    /// <inheritdoc />
+    public async Task<IReadOnlyList<EcoActivityDto>> ListRecentActivityAsync(int limit, CancellationToken cancellationToken = default)
+    {
+        // We join events with users to get the actor display name.
+        // Since EcoEvent doesn't have a direct navigation to User (Clean Architecture aggregate boundaries),
+        // we use a join in the query.
+        return await (from eco in _dbContext.EngineeringChangeOrders.AsNoTracking()
+                      from e in eco.Events
+                      join user in _dbContext.Users.AsNoTracking() on e.ActorUserId equals user.Id
+                      orderby e.OccurredAt descending
+                      select new EcoActivityDto(e, user.DisplayName, eco.Title))
+            .Take(limit)
+            .ToArrayAsync(cancellationToken)
+            .ConfigureAwait(false);
+    }
+
+    private IQueryable<EngineeringChangeOrder> ApplyFilter(
         IQueryable<EngineeringChangeOrder> query,
         EcoListFilter? filter)
     {
@@ -87,9 +103,22 @@ internal sealed class EngineeringChangeOrderRepository : IEngineeringChangeOrder
         if (!string.IsNullOrWhiteSpace(normalizedSearch))
         {
             var pattern = $"%{normalizedSearch}%";
-            query = query.Where(eco =>
-                EF.Functions.ILike(eco.Title, pattern) ||
-                EF.Functions.ILike(eco.Description, pattern));
+            var isGuid = Guid.TryParse(normalizedSearch, out var guid);
+
+            if (_dbContext.Database.IsNpgsql())
+            {
+                query = query.Where(eco =>
+                    EF.Functions.ILike(eco.Title, pattern) ||
+                    EF.Functions.ILike(eco.Description, pattern) ||
+                    (isGuid && eco.Id == EngineeringChangeOrderId.From(guid)));
+            }
+            else
+            {
+                query = query.Where(eco =>
+                    eco.Title.Contains(normalizedSearch) ||
+                    eco.Description.Contains(normalizedSearch) ||
+                    (isGuid && eco.Id == EngineeringChangeOrderId.From(guid)));
+            }
         }
 
         if (filter.Status is not null)

@@ -18,6 +18,7 @@ using EngiFlow.Application.Users.Dtos;
 using EngiFlow.Application.Users.Notifications;
 using EngiFlow.Application.Users.Queries;
 using EngiFlow.Domain.Companies;
+using Microsoft.Extensions.Configuration;
 using EngiFlow.Domain.Ecos;
 using EngiFlow.Domain.Exceptions;
 using EngiFlow.Domain.Users;
@@ -101,7 +102,8 @@ public sealed class EcoApplicationTests
             new FakeCompanyRepository(company),
             users,
             passwordHashService,
-            jwtTokenService);
+            jwtTokenService,
+            new FakePreAuthTokenService());
 
         var result = await handler.HandleAsync(new LoginQuery(
             " ADMIN@ENGIFLOW.LOCAL ",
@@ -132,7 +134,8 @@ public sealed class EcoApplicationTests
             new FakeCompanyRepository(company),
             new FakeUserRepository(user),
             passwordHashService,
-            new FakeJwtTokenService());
+            new FakeJwtTokenService(),
+            new FakePreAuthTokenService());
 
         await Assert.ThrowsAsync<AuthenticationFailedException>(() =>
             handler.HandleAsync(new LoginQuery("admin@engiflow.local", "wrong-password")));
@@ -153,7 +156,8 @@ public sealed class EcoApplicationTests
             new FakeCompanyRepository(company),
             new FakeUserRepository(user),
             passwordHashService,
-            new FakeJwtTokenService());
+            new FakeJwtTokenService(),
+            new FakePreAuthTokenService());
 
         await Assert.ThrowsAsync<AuthenticationFailedException>(() =>
             handler.HandleAsync(new LoginQuery("admin@engiflow.local", "EngiFlow_Admin_123!")));
@@ -166,7 +170,8 @@ public sealed class EcoApplicationTests
             new FakeCompanyRepository(),
             new FakeUserRepository(),
             new FakePasswordHashService(),
-            new FakeJwtTokenService());
+            new FakeJwtTokenService(),
+            new FakePreAuthTokenService());
 
         await Assert.ThrowsAsync<AuthenticationFailedException>(() =>
             handler.HandleAsync(new LoginQuery("missing@engiflow.local", "EngiFlow_Admin_123!")));
@@ -175,13 +180,13 @@ public sealed class EcoApplicationTests
     [Fact]
     public async Task LoginQueryValidator_WhenCredentialsAreMissing_ThrowsValidationException()
     {
-        var behavior = new ValidationBehavior<LoginQuery, LoginResultDto>(
+        var behavior = new ValidationBehavior<LoginQuery, LoginResponseDto>(
             new IValidator<LoginQuery>[] { new LoginQueryValidator() });
 
         var exception = await Assert.ThrowsAsync<AppValidationException>(() =>
             behavior.HandleAsync(
                 new LoginQuery(string.Empty, string.Empty),
-                () => Task.FromResult(default(LoginResultDto)!)));
+                () => Task.FromResult(default(LoginResponseDto)!)));
 
         Assert.Contains(nameof(LoginQuery.Email), exception.Errors.Keys);
         Assert.Contains(nameof(LoginQuery.Password), exception.Errors.Keys);
@@ -191,14 +196,30 @@ public sealed class EcoApplicationTests
     public async Task ForgotPasswordCommandHandler_SendsResetEmail()
     {
         var resetEmailSender = new FakePasswordResetEmailSender();
-        var handler = new ForgotPasswordCommandHandler(resetEmailSender);
+        var company = Company.Create("Acme Engineering");
+        var user = company.RegisterUser("ada@acme.example", "Ada Lovelace", UserRole.Administrator);
+        user.SetPasswordHash("hash");
+        var configuration = new FakeConfiguration(new Dictionary<string, string>
+        {
+            ["App:FrontendBaseUrl"] = "https://acme.example"
+        });
+        var handler = new ForgotPasswordCommandHandler(
+            resetEmailSender,
+            configuration,
+            new FakeUserRepository(user),
+            new FakeCompanyRepository(company),
+            new FakePasswordSetupTokenRepository(),
+            new FakePasswordSetupTokenService(),
+            new FakeUserEventRepository(),
+            new FakeUnitOfWork());
 
         await handler.HandleAsync(new ForgotPasswordCommand(" ADA@ACME.EXAMPLE "));
 
         Assert.Equal("ada@acme.example", resetEmailSender.Email);
         Assert.NotNull(resetEmailSender.ResetLink);
+        Assert.StartsWith("https://acme.example/auth/setup-password", resetEmailSender.ResetLink);
         Assert.Contains("ada%40acme.example", resetEmailSender.ResetLink, StringComparison.Ordinal);
-        Assert.Contains("mock-", resetEmailSender.ResetLink, StringComparison.Ordinal);
+        Assert.Contains("fake-token", resetEmailSender.ResetLink, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -219,14 +240,12 @@ public sealed class EcoApplicationTests
     public async Task RegisterCompanyCommandHandler_CreatesCompanyAdministratorAndReturnsBearerToken()
     {
         var companies = new FakeCompanyRepository();
-        var users = new FakeUserRepository();
         var passwordHashService = new FakePasswordHashService();
         var jwtTokenService = new FakeJwtTokenService();
         var unitOfWork = new FakeUnitOfWork();
         var settings = new FakeCompanySettingsRepository();
         var handler = new RegisterCompanyCommandHandler(
             companies,
-            users,
             passwordHashService,
             jwtTokenService,
             settings,
@@ -258,7 +277,7 @@ public sealed class EcoApplicationTests
     }
 
     [Fact]
-    public async Task RegisterCompanyCommandHandler_WhenEmailAlreadyExists_ThrowsValidationExceptionAndDoesNotSave()
+    public async Task RegisterCompanyCommandHandler_WhenEmailExistsInAnotherTenant_AllowsRegistration()
     {
         var existingUser = User.Create(
             CompanyId.New(),
@@ -269,22 +288,19 @@ public sealed class EcoApplicationTests
         var unitOfWork = new FakeUnitOfWork();
         var handler = new RegisterCompanyCommandHandler(
             companies,
-            new FakeUserRepository(existingUser),
             new FakePasswordHashService(),
             new FakeJwtTokenService(),
             new FakeCompanySettingsRepository(),
             unitOfWork);
 
-        var exception = await Assert.ThrowsAsync<AppValidationException>(() =>
-            handler.HandleAsync(new RegisterCompanyCommand(
+        await handler.HandleAsync(new RegisterCompanyCommand(
                 "Acme Engineering",
                 "Ada Lovelace",
                 " ADA@ACME.EXAMPLE ",
-                "StrongPass123!")));
+                "StrongPass123!"));
 
-        Assert.Contains(nameof(RegisterCompanyCommand.AdminEmail), exception.Errors.Keys);
-        Assert.Empty(companies.Companies);
-        Assert.Equal(0, unitOfWork.SaveCount);
+        Assert.Single(companies.Companies);
+        Assert.Equal(1, unitOfWork.SaveCount);
     }
 
     [Fact]
@@ -324,7 +340,7 @@ public sealed class EcoApplicationTests
     }
 
     [Fact]
-    public async Task ListUsersQueryHandler_ReturnsActiveUserSummaries()
+    public async Task ListUsersQueryHandler_ReturnsAllUserSummariesForAdministration()
     {
         var company = Company.Create("Acme Engineering");
         var admin = company.RegisterUser(
@@ -344,34 +360,40 @@ public sealed class EcoApplicationTests
 
         var result = await handler.HandleAsync(new ListUsersQuery());
 
-        Assert.Equal(2, result.Count);
+        Assert.Equal(3, result.Count);
         Assert.Contains(result, user => user.Email == "admin@acme.example");
         Assert.Contains(result, user => user.Email == "requester@acme.example");
-        Assert.DoesNotContain(result, user => user.Email == "inactive@acme.example");
+        Assert.Contains(result, user => user.Email == "inactive@acme.example" && user.Status == nameof(UserStatus.Deactivated));
     }
 
     [Fact]
-    public async Task CreateUserCommandHandler_CreatesTenantUserWithPasswordHash()
+    public async Task CreateUserCommandHandler_CreatesPendingTenantUserAndSendsSetupLink()
     {
         var company = Company.Create("Acme Engineering");
         var owner = company.RegisterUser(
             "owner@acme.example",
             "Tenant Owner",
             UserRole.Owner);
-        var users = new FakeUserRepository();
-        var passwordHashService = new FakePasswordHashService();
         var unitOfWork = new FakeUnitOfWork();
+        var setupTokens = new FakePasswordSetupTokenRepository();
+        var emailSender = new FakePasswordResetEmailSender();
         var handler = new CreateUserCommandHandler(
             new FakeCompanyRepository(company),
             new FakeUserRepository(owner),
-            passwordHashService,
+            setupTokens,
+            new FakePasswordSetupTokenService(),
+            emailSender,
+            new FakeUserEventRepository(),
             new FakeTenantProvider(company.Id, owner.Id),
-            unitOfWork);
+            unitOfWork,
+            new FakeConfiguration(new Dictionary<string, string>
+            {
+                ["App:FrontendBaseUrl"] = "https://acme.example"
+            }));
 
         var result = await handler.HandleAsync(new CreateUserCommand(
             "Grace Hopper",
             " GRACE@ACME.EXAMPLE ",
-            "StrongPass123!",
             UserRole.Approver));
 
         var createdUser = Assert.Single(company.Users, user => user.Email == "grace@acme.example");
@@ -380,7 +402,10 @@ public sealed class EcoApplicationTests
         Assert.Equal("grace@acme.example", createdUser.Email);
         Assert.Equal("Grace Hopper", createdUser.DisplayName);
         Assert.Equal(UserRole.Approver, createdUser.Role);
-        Assert.Equal(passwordHashService.HashPassword(createdUser, "StrongPass123!"), createdUser.PasswordHash);
+        Assert.Equal(UserStatus.PendingActivation, createdUser.Status);
+        Assert.Null(createdUser.PasswordHash);
+        Assert.Single(setupTokens.Tokens);
+        Assert.StartsWith("https://acme.example/auth/setup-password", emailSender.ResetLink);
         Assert.Equal(1, unitOfWork.SaveCount);
     }
 
@@ -400,15 +425,18 @@ public sealed class EcoApplicationTests
         var handler = new CreateUserCommandHandler(
             new FakeCompanyRepository(company),
             new FakeUserRepository(owner, existingUser),
-            new FakePasswordHashService(),
+            new FakePasswordSetupTokenRepository(),
+            new FakePasswordSetupTokenService(),
+            new FakePasswordResetEmailSender(),
+            new FakeUserEventRepository(),
             new FakeTenantProvider(company.Id, owner.Id),
-            unitOfWork);
+            unitOfWork,
+            new FakeConfiguration(new Dictionary<string, string>()));
 
         var exception = await Assert.ThrowsAsync<AppValidationException>(() =>
             handler.HandleAsync(new CreateUserCommand(
                 "Grace Hopper",
                 " GRACE@ACME.EXAMPLE ",
-                "StrongPass123!",
                 UserRole.Approver)));
 
         Assert.Contains(nameof(CreateUserCommand.Email), exception.Errors.Keys);
@@ -426,7 +454,6 @@ public sealed class EcoApplicationTests
                 new CreateUserCommand(
                     "Review User",
                     "reviewer@acme.example",
-                    "StrongPass123!",
                     UserRole.Owner),
                 () => Task.FromResult(default(UserSummaryDto)!)));
 
@@ -434,7 +461,7 @@ public sealed class EcoApplicationTests
     }
 
     [Fact]
-    public async Task CreateUserCommandValidator_WhenPasswordMissesComplexity_ThrowsValidationException()
+    public async Task CreateUserCommandValidator_WhenEmailIsInvalid_ThrowsValidationException()
     {
         var behavior = new ValidationBehavior<CreateUserCommand, UserSummaryDto>(
             new IValidator<CreateUserCommand>[] { new CreateUserCommandValidator() });
@@ -443,12 +470,11 @@ public sealed class EcoApplicationTests
             behavior.HandleAsync(
                 new CreateUserCommand(
                     "Grace Hopper",
-                    "grace@acme.example",
-                    "longpassword",
+                    "not-an-email",
                     UserRole.Requester),
                 () => Task.FromResult(default(UserSummaryDto)!)));
 
-        Assert.Contains(nameof(CreateUserCommand.Password), exception.Errors.Keys);
+        Assert.Contains(nameof(CreateUserCommand.Email), exception.Errors.Keys);
     }
 
     [Fact]
@@ -511,7 +537,7 @@ public sealed class EcoApplicationTests
                 null)));
 
         Assert.Equal(
-            "Compliance Rule: The author of the ECO cannot participate in its approval quorum",
+            "Governance Policy: Self-approval is disabled for this tenant. Authors cannot approve their own ECOs.",
             exception.Message);
         Assert.Equal(0, unitOfWork.SaveCount);
     }
@@ -532,7 +558,7 @@ public sealed class EcoApplicationTests
         Assert.Equal(1, unitOfWork.SaveCount);
 
         var updateHandler = new UpdateCompanySettingsCommandHandler(repository, tenantProvider, unitOfWork);
-        var updated = await updateHandler.HandleAsync(new UpdateCompanySettingsCommand(3));
+        var updated = await updateHandler.HandleAsync(new UpdateCompanySettingsCommand(3, 5, false));
 
         Assert.Equal(3, updated.MinApprovalsRequired);
         Assert.Equal(2, unitOfWork.SaveCount);
@@ -571,7 +597,8 @@ public sealed class EcoApplicationTests
             new FakeUserRepository(admin),
             unitOfWork,
             new FakeTenantProvider(companyId, admin.Id),
-            notifications);
+            notifications,
+            new FakeUserEventRepository());
 
         var exception = await Assert.ThrowsAsync<DomainException>(() =>
             handler.HandleAsync(new DeactivateUserCommand(admin.Id.Value)));
@@ -593,7 +620,8 @@ public sealed class EcoApplicationTests
             new FakeUserRepository(admin, target),
             new FakeUnitOfWork(),
             new FakeTenantProvider(companyId, admin.Id),
-            notifications);
+            notifications,
+            new FakeUserEventRepository());
 
         await handler.HandleAsync(new DeactivateUserCommand(target.Id.Value));
 
@@ -774,7 +802,7 @@ public sealed class EcoApplicationTests
             UserRole.Approver);
         inactive.Deactivate();
         var settings = CompanySettings.CreateDefault(companyId);
-        settings.SetMinApprovalsRequired(2);
+        settings.UpdatePolicies(2, 5, false);
         var handler = new GetEcoReviewContextQueryHandler(
             new FakeUserRepository(currentUser, approver, inactive),
             new FakeCompanySettingsRepository(settings),
@@ -950,6 +978,17 @@ public sealed class EcoApplicationTests
             return Task.FromResult(ApplyFilter(Ecos, filter).Count());
         }
 
+        public Task<IReadOnlyList<EcoActivityDto>> ListRecentActivityAsync(int limit, CancellationToken cancellationToken = default)
+        {
+            var activity = Ecos
+                .SelectMany(eco => eco.Events.Select(e => new EcoActivityDto(e, "Test User", eco.Title)))
+                .OrderByDescending(a => a.Event.OccurredAt)
+                .Take(limit)
+                .ToList();
+
+            return Task.FromResult<IReadOnlyList<EcoActivityDto>>(activity);
+        }
+
         private static IEnumerable<EngineeringChangeOrder> ApplyFilter(
             IEnumerable<EngineeringChangeOrder> ecos,
             EcoListFilter? filter)
@@ -983,6 +1022,11 @@ public sealed class EcoApplicationTests
             return Task.FromResult(Companies.SingleOrDefault(company => company.Id == id));
         }
 
+        public Task<Company?> GetByIdForAuthenticationAsync(CompanyId id, CancellationToken cancellationToken = default)
+        {
+            return GetByIdAsync(id, cancellationToken);
+        }
+
         public Task AddAsync(Company company, CancellationToken cancellationToken = default)
         {
             Companies.Add(company);
@@ -1013,11 +1057,15 @@ public sealed class EcoApplicationTests
             return Task.FromResult(_users.SingleOrDefault(user => user.Id == id));
         }
 
-        public Task<User?> GetByEmailForAuthenticationAsync(
+        public Task<IReadOnlyList<User>> ListByEmailForAuthenticationAsync(
             string normalizedEmail,
             CancellationToken cancellationToken = default)
         {
-            return Task.FromResult(_users.SingleOrDefault(user => user.Email == normalizedEmail));
+            IReadOnlyList<User> users = _users
+                .Where(user => user.Email == normalizedEmail)
+                .ToArray();
+
+            return Task.FromResult(users);
         }
 
         public Task<User?> GetByIdForAuthenticationAsync(UserId id, CancellationToken cancellationToken = default)
@@ -1035,6 +1083,16 @@ public sealed class EcoApplicationTests
             return Task.CompletedTask;
         }
 
+        public Task SetPasswordAndActivateAsync(
+            UserId id,
+            string passwordHash,
+            CancellationToken cancellationToken = default)
+        {
+            var user = _users.Single(user => user.Id == id);
+            user.ActivateWithPassword(passwordHash);
+            return Task.CompletedTask;
+        }
+
         public Task<IReadOnlyList<User>> ListActiveAsync(CancellationToken cancellationToken = default)
         {
             IReadOnlyList<User> users = _users
@@ -1044,6 +1102,40 @@ public sealed class EcoApplicationTests
                 .ToArray();
 
             return Task.FromResult(users);
+        }
+
+        public Task<IReadOnlyList<User>> ListForAdministrationAsync(CancellationToken cancellationToken = default)
+        {
+            IReadOnlyList<User> users = _users
+                .OrderBy(user => user.DisplayName)
+                .ThenBy(user => user.Email)
+                .ToArray();
+
+            return Task.FromResult(users);
+        }
+
+        public Task<IReadOnlyList<User>> SearchAsync(string term, int limit, CancellationToken cancellationToken = default)
+        {
+            return Task.FromResult<IReadOnlyList<User>>(
+                _users.Where(u => u.DisplayName.Contains(term, StringComparison.OrdinalIgnoreCase) || 
+                                u.Email.Contains(term, StringComparison.OrdinalIgnoreCase))
+                    .Take(limit)
+                    .ToList());
+        }
+
+        public Task<int> CountAsync(UserStatus? status = null, CancellationToken cancellationToken = default)
+        {
+            return Task.FromResult(status.HasValue
+                ? _users.Count(u => u.Status == status.Value)
+                : _users.Count);
+        }
+
+        public Task<User?> GetOwnerByCompanyIdForAuthenticationAsync(
+            CompanyId companyId,
+            CancellationToken cancellationToken = default)
+        {
+            return Task.FromResult(_users.SingleOrDefault(user =>
+                user.CompanyId == companyId && user.Role == UserRole.Owner));
         }
     }
 
@@ -1070,19 +1162,93 @@ public sealed class EcoApplicationTests
         }
     }
 
+    private sealed class FakePreAuthTokenService : IPreAuthTokenService
+    {
+        public PreAuthTokenResult CreatePreAuthToken(
+            string normalizedEmail,
+            IReadOnlyCollection<CompanyId> tenantIds,
+            TimeSpan lifetime)
+        {
+            return new PreAuthTokenResult("pre-auth-token", DateTimeOffset.UtcNow.Add(lifetime));
+        }
+
+        public PreAuthTokenPayload ValidatePreAuthToken(string token)
+        {
+            throw new NotSupportedException("Validation is not used by these tests.");
+        }
+    }
+
+    private sealed class FakePasswordSetupTokenService : IPasswordSetupTokenService
+    {
+        public string GenerateToken()
+        {
+            return "fake-token";
+        }
+
+        public string HashToken(string token)
+        {
+            return $"hash:{token}";
+        }
+    }
+
+    private sealed class FakePasswordSetupTokenRepository : IPasswordSetupTokenRepository
+    {
+        public List<PasswordSetupToken> Tokens { get; } = [];
+
+        public Task AddAsync(PasswordSetupToken token, CancellationToken cancellationToken = default)
+        {
+            Tokens.Add(token);
+            return Task.CompletedTask;
+        }
+
+        public Task<PasswordSetupToken?> GetByHashAsync(
+            string tokenHash,
+            CancellationToken cancellationToken = default)
+        {
+            return Task.FromResult(Tokens.SingleOrDefault(token => token.TokenHash == tokenHash));
+        }
+    }
+
+    private sealed class FakeUserEventRepository : IUserEventRepository
+    {
+        public List<UserEvent> Events { get; } = [];
+
+        public Task AddAsync(UserEvent userEvent, CancellationToken cancellationToken = default)
+        {
+            Events.Add(userEvent);
+            return Task.CompletedTask;
+        }
+    }
+
     private sealed class FakePasswordResetEmailSender : IPasswordResetEmailSender
     {
         public string? Email { get; private set; }
 
         public string? ResetLink { get; private set; }
 
+        public string? CompanyName { get; private set; }
+
         public Task SendPasswordResetAsync(
             string email,
             string resetLink,
+            string? companyName = null,
             CancellationToken cancellationToken = default)
         {
             Email = email;
             ResetLink = resetLink;
+            CompanyName = companyName;
+            return Task.CompletedTask;
+        }
+
+        public Task SendPasswordSetupAsync(
+            string email,
+            string setupLink,
+            string companyName,
+            string invitedByName,
+            CancellationToken cancellationToken = default)
+        {
+            Email = email;
+            ResetLink = setupLink;
             return Task.CompletedTask;
         }
     }
@@ -1162,5 +1328,24 @@ public sealed class EcoApplicationTests
             SaveCount++;
             return Task.FromResult(1);
         }
+    }
+
+    private sealed class FakeConfiguration : IConfiguration
+    {
+        private readonly Dictionary<string, string> _values;
+
+        public FakeConfiguration(Dictionary<string, string> values) => _values = values;
+
+        public string? this[string key]
+        {
+            get => _values.GetValueOrDefault(key);
+            set => throw new NotSupportedException();
+        }
+
+        public IEnumerable<IConfigurationSection> GetChildren() => throw new NotSupportedException();
+
+        public Microsoft.Extensions.Primitives.IChangeToken GetReloadToken() => throw new NotSupportedException();
+
+        public IConfigurationSection GetSection(string key) => throw new NotSupportedException();
     }
 }

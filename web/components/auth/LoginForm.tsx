@@ -1,0 +1,735 @@
+"use client";
+
+import Visibility from "@mui/icons-material/Visibility";
+import VisibilityOff from "@mui/icons-material/VisibilityOff";
+import Alert from "@mui/material/Alert";
+import Box from "@mui/material/Box";
+import Button from "@mui/material/Button";
+import Checkbox from "@mui/material/Checkbox";
+import CircularProgress from "@mui/material/CircularProgress";
+import Dialog from "@mui/material/Dialog";
+import DialogActions from "@mui/material/DialogActions";
+import DialogContent from "@mui/material/DialogContent";
+import DialogContentText from "@mui/material/DialogContentText";
+import DialogTitle from "@mui/material/DialogTitle";
+import FormControlLabel from "@mui/material/FormControlLabel";
+import IconButton from "@mui/material/IconButton";
+import InputAdornment from "@mui/material/InputAdornment";
+import Link from "@mui/material/Link";
+import Fade from "@mui/material/Fade";
+import Stack from "@mui/material/Stack";
+import TextField from "@mui/material/TextField";
+import Typography from "@mui/material/Typography";
+import { type TransitionProps } from "@mui/material/transitions";
+import ArrowBackIcon from "@mui/icons-material/ArrowBack";
+import { useRouter } from "next/navigation";
+import { type CSSProperties, type FormEvent, useState, forwardRef } from "react";
+import Card from "@mui/material/Card";
+
+/**
+ * Orchestrates a professional, fluid fade-in and fade-out transition for dialogs.
+ */
+const FadeTransition = forwardRef(function Transition(
+  props: TransitionProps & {
+    children: React.ReactElement;
+  },
+  ref: React.Ref<unknown>
+) {
+  return <Fade ref={ref} {...props} timeout={{ enter: 400, exit: 300 }} />;
+});
+import NextLink from "@/components/ui/NextLink";
+import TenantList from "./TenantList";
+import { ApiError, apiFetch } from "@/lib/api/client";
+import { type AuthSessionResult, useAuth } from "@/lib/auth/AuthContext";
+import { useTranslation } from "@/context/I18nContext";
+
+/**
+ * Describes client-side login validation errors.
+ */
+type LoginFieldErrors = {
+  email?: string;
+  password?: string;
+};
+
+/**
+ * Describes a tenant option returned by the login API.
+ */
+export type WorkspaceTenantOption = {
+  tenantId: string;
+  companyName: string;
+  companyEmail: string;
+  ownerName: string;
+  ownerEmail: string;
+};
+
+/**
+ * Describes the multi-tenant challenge kept while the user picks a workspace.
+ */
+export type WorkspaceSelectionChallenge = {
+  preAuthToken: string;
+  preAuthExpiresAtUtc: string;
+  tenants: WorkspaceTenantOption[];
+  rememberMe: boolean;
+};
+
+/**
+ * Describes the login API response for either final auth or tenant selection.
+ */
+type LoginResponse = AuthSessionResult & {
+  requiresTenantSelection?: unknown;
+  preAuthToken?: unknown;
+  preAuthExpiresAtUtc?: unknown;
+  tenants?: unknown;
+  status?: string;
+};
+
+/**
+ * Describes props accepted by the login form.
+ */
+interface LoginFormProps {
+  style?: CSSProperties;
+  onWorkspaceSelectionRequired?: (challenge: WorkspaceSelectionChallenge) => void;
+}
+
+const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+/**
+ * Renders the sign-in form and raises a workspace picker challenge when needed.
+ */
+const LoginForm = forwardRef<HTMLDivElement, LoginFormProps>(
+  ({ style, onWorkspaceSelectionRequired }, ref) => {
+    const { t } = useTranslation();
+    const router = useRouter();
+    const { login } = useAuth();
+    const [email, setEmail] = useState("");
+    const [password, setPassword] = useState("");
+    const [showPassword, setShowPassword] = useState(false);
+    const [rememberMe, setRememberMe] = useState(true);
+    const [fieldErrors, setFieldErrors] = useState<LoginFieldErrors>({});
+    const [isPending, setIsPending] = useState(false);
+    const [errorMessage, setErrorMessage] = useState<string | null>(null);
+    const [successMessage, setSuccessMessage] = useState<string | null>(null);
+    const [isForgotPasswordOpen, setIsForgotPasswordOpen] = useState(false);
+
+    async function handleSubmit(event: FormEvent<HTMLFormElement>) {
+      event.preventDefault();
+
+      if (isPending) {
+        return;
+      }
+
+      const nextErrors = validateLogin(email, password, t);
+
+      if (hasErrors(nextErrors)) {
+        setFieldErrors(nextErrors);
+        return;
+      }
+
+      setIsPending(true);
+      setErrorMessage(null);
+      setSuccessMessage(null);
+
+      try {
+        const response = await apiFetch<LoginResponse>("/api/auth/login", {
+          method: "POST",
+          skipAuth: true,
+          body: {
+            email: email.trim(),
+            password,
+          },
+        });
+
+        if (response.status === "PendingActivation") {
+          setErrorMessage(t("auth.login.errors.pendingActivation"));
+          return;
+        }
+
+        const workspaceChallenge = readWorkspaceSelectionChallenge(response, rememberMe, t);
+
+        if (workspaceChallenge) {
+          onWorkspaceSelectionRequired?.(workspaceChallenge);
+          return;
+        }
+
+        login(response, rememberMe);
+        router.replace("/");
+      } catch (error) {
+        setErrorMessage(getLoginErrorMessage(error, t));
+      } finally {
+        setIsPending(false);
+      }
+    }
+
+    /**
+     * Updates a field and clears its stale validation error.
+     */
+    function handleFieldChange(field: "email" | "password", value: string) {
+      if (field === "email") {
+        setEmail(value);
+      } else {
+        setPassword(value);
+      }
+
+      setFieldErrors((current) => {
+        const next = { ...current };
+        delete next[field];
+        return next;
+      });
+    }
+
+    return (
+      <Card
+        ref={ref}
+        style={style}
+        variant="outlined"
+        sx={{
+          width: "100%",
+          p: { xs: 3, sm: 4 },
+          boxShadow: 3,
+          borderRadius: 2,
+        }}
+      >
+        <Box
+          component="form"
+          noValidate
+          onSubmit={handleSubmit}
+          sx={{ width: "100%" }}
+        >
+          <Stack spacing={2}>
+            <Stack spacing={0.75}>
+              <Typography variant="h4" component="h1">
+                {t("auth.login.title")}
+              </Typography>
+              <Typography variant="body2" color="text.secondary">
+                {t("auth.login.subtitle")}
+              </Typography>
+            </Stack>
+
+            {errorMessage ? (
+              <Alert severity="error">{errorMessage}</Alert>
+            ) : null}
+            {successMessage ? (
+              <Alert severity="success">{successMessage}</Alert>
+            ) : null}
+
+            <Stack spacing={1}>
+              <TextField
+                id="outlined-basic-email"
+                name="email"
+                label={t("auth.login.emailLabel")}
+                variant="outlined"
+                type="email"
+                value={email}
+                onChange={(event) =>
+                  handleFieldChange("email", event.target.value)
+                }
+                autoComplete="email"
+                autoFocus
+                disabled={isPending}
+                required
+                fullWidth
+                size="small"
+                error={Boolean(fieldErrors.email)}
+                helperText={fieldErrors.email}
+              />
+              <TextField
+                id="outlined-basic-password"
+                name="password"
+                label={t("auth.login.passwordLabel")}
+                variant="outlined"
+                type={showPassword ? "text" : "password"}
+                value={password}
+                onChange={(event) =>
+                  handleFieldChange("password", event.target.value)
+                }
+                autoComplete="current-password"
+                disabled={isPending}
+                required
+                fullWidth
+                size="small"
+                error={Boolean(fieldErrors.password)}
+                helperText={fieldErrors.password}
+                slotProps={{
+                  input: {
+                    endAdornment: (
+                      <InputAdornment position="end">
+                        <IconButton
+                          aria-label="toggle password visibility"
+                          onClick={() => setShowPassword((show) => !show)}
+                          onMouseDown={(event) => event.preventDefault()}
+                          onMouseUp={(event) => event.preventDefault()}
+                          edge="end"
+                          size="small"
+                        >
+                          {showPassword ? (
+                            <VisibilityOff fontSize="small" />
+                          ) : (
+                            <Visibility fontSize="small" />
+                          )}
+                        </IconButton>
+                      </InputAdornment>
+                    ),
+                  },
+                }}
+              />
+              <Box
+                sx={{
+                  display: "flex",
+                  flexDirection: { xs: "column", sm: "row" },
+                  alignItems: { xs: "flex-start", sm: "center" },
+                  justifyContent: "space-between",
+                  gap: { xs: 1, sm: 2 },
+                }}
+              >
+                <FormControlLabel
+                  control={
+                    <Checkbox
+                      checked={rememberMe}
+                      onChange={(event) => setRememberMe(event.target.checked)}
+                      size="small"
+                    />
+                  }
+                  label={t("auth.login.rememberMe")}
+                  slotProps={{
+                    typography: { variant: "body2" },
+                  }}
+                  sx={{ m: 0 }}
+                />
+                <Box sx={{ display: "flex", gap: 1, flexWrap: "wrap" }}>
+                  <Link
+                    component="button"
+                    type="button"
+                    variant="body2"
+                    onClick={() => {
+                      setSuccessMessage(null);
+                      setIsForgotPasswordOpen(true);
+                    }}
+                    sx={{ whiteSpace: "nowrap" }}
+                  >
+                    {t("auth.login.forgotPassword")}
+                  </Link>
+                </Box>
+              </Box>
+            </Stack>
+
+            <Button
+              type="submit"
+              variant="contained"
+              disabled={isPending}
+              fullWidth
+              sx={{ minHeight: 40, textTransform: "none" }}
+            >
+              {isPending ? (
+                <CircularProgress color="inherit" size={20} thickness={5} />
+              ) : (
+                t("auth.login.submitButton")
+              )}
+            </Button>
+
+            <Typography variant="body2" color="text.secondary" align="center">
+              {t("auth.login.noAccount")}{" "}
+              <Link component={NextLink} href="/auth?mode=register" underline="hover">
+                {t("auth.login.registerLink")}
+              </Link>
+            </Typography>
+          </Stack>
+        </Box>
+
+        <ForgotPasswordDialog
+          open={isForgotPasswordOpen}
+          initialEmail={email}
+          onClose={() => setIsForgotPasswordOpen(false)}
+          onSuccess={() => {
+            setIsForgotPasswordOpen(false);
+            setSuccessMessage(t("auth.forgotPassword.successMessage"));
+            setErrorMessage(null);
+          }}
+        />
+      </Card>
+    );
+  }
+);
+
+LoginForm.displayName = "LoginForm";
+
+export default LoginForm;
+
+/**
+ * Describes props accepted by the forgot-password dialog.
+ */
+type ForgotPasswordDialogProps = {
+  open: boolean;
+  initialEmail: string;
+  onClose: () => void;
+  onSuccess: () => void;
+};
+
+/**
+ * Renders the forgot-password request dialog.
+ */
+function ForgotPasswordDialog({
+  open,
+  initialEmail,
+  onClose,
+  onSuccess,
+}: ForgotPasswordDialogProps) {
+  const { t } = useTranslation();
+  const [email, setEmail] = useState(initialEmail);
+  const [tenants, setTenants] = useState<WorkspaceTenantOption[] | null>(null);
+  const [selectedTenantId, setSelectedTenantId] = useState<string | null>(null);
+  const [fieldError, setFieldError] = useState<string | null>(null);
+  const [submitError, setSubmitError] = useState<string | null>(null);
+  const [isPending, setIsPending] = useState(false);
+
+  /**
+   * Resets the dialog to the email input state.
+   */
+  function handleBack() {
+    setTenants(null);
+    setSelectedTenantId(null);
+    setSubmitError(null);
+  }
+
+  /**
+   * Submits a password reset request.
+   */
+  async function handleSubmit(event?: FormEvent<HTMLFormElement>, tenantId?: string) {
+    event?.preventDefault();
+
+    if (!tenantId) {
+      const nextError = validateEmail(email, t);
+      if (nextError) {
+        setFieldError(nextError);
+        return;
+      }
+    }
+
+    setIsPending(true);
+    setFieldError(null);
+    setSubmitError(null);
+
+    if (tenantId) {
+      setSelectedTenantId(tenantId);
+    }
+
+    try {
+      const response = await apiFetch<{
+        requiresTenantSelection?: boolean;
+        tenants?: unknown[];
+      }>("/api/auth/forgot-password", {
+        method: "POST",
+        skipAuth: true,
+        body: {
+          email: email.trim(),
+          tenantId: tenantId ?? null,
+        },
+      });
+
+      if (response.requiresTenantSelection && Array.isArray(response.tenants)) {
+        const options = response.tenants
+          .map(readWorkspaceTenantOption)
+          .filter((t): t is WorkspaceTenantOption => t !== null);
+
+        setTenants(options);
+      } else {
+        onSuccess();
+      }
+    } catch (error) {
+      setSubmitError(
+        readProblemDetailsMessage(error) ?? t("auth.forgotPassword.submitError"),
+      );
+      setSelectedTenantId(null);
+    } finally {
+      setIsPending(false);
+    }
+  }
+
+  return (
+    <Dialog
+      open={open}
+      onClose={isPending ? undefined : onClose}
+      slots={{ transition: FadeTransition }}
+      slotProps={{
+        paper: {
+          sx: { width: "100%", maxWidth: 440 },
+        },
+      }}
+    >
+      <Box
+        component={tenants ? "div" : "form"}
+        noValidate
+        onSubmit={(e: FormEvent<HTMLFormElement>) => void handleSubmit(e)}
+      >
+        <DialogTitle>{t("auth.forgotPassword.title")}</DialogTitle>
+        <DialogContent sx={{ display: "flex", flexDirection: "column", gap: 2 }}>
+          {tenants ? (
+            <>
+              <DialogContentText>
+                {t("auth.forgotPassword.multipleWorkspaces")}
+              </DialogContentText>
+              {submitError ? (
+                <Alert severity="error">{submitError}</Alert>
+              ) : null}
+              <TenantList
+                tenants={tenants}
+                selectedTenantId={selectedTenantId}
+                onSelect={(id) => void handleSubmit(undefined, id)}
+              />
+            </>
+          ) : (
+            <>
+              <DialogContentText>
+                {t("auth.forgotPassword.subtitle")}
+              </DialogContentText>
+              {submitError ? (
+                <Alert severity="error">{submitError}</Alert>
+              ) : null}
+              <TextField
+                autoFocus
+                required
+                id="forgot-password-email"
+                name="email"
+                label={t("auth.login.emailLabel")}
+                variant="outlined"
+                type="email"
+                value={email}
+                onChange={(event) => {
+                  setEmail(event.target.value);
+                  setFieldError(null);
+                }}
+                error={Boolean(fieldError)}
+                helperText={fieldError ?? " "}
+                disabled={isPending}
+                fullWidth
+                size="small"
+              />
+            </>
+          )}
+        </DialogContent>
+        <DialogActions sx={{ px: 3, pb: 3, justifyContent: "space-between" }}>
+          {tenants ? (
+            <Button
+              type="button"
+              variant="text"
+              startIcon={<ArrowBackIcon />}
+              onClick={handleBack}
+              disabled={isPending}
+              sx={{ textTransform: "none" }}
+            >
+              {t("common.back")}
+            </Button>
+          ) : (
+            <Button
+              onClick={onClose}
+              disabled={isPending}
+              sx={{ textTransform: "none" }}
+            >
+              {t("common.cancel")}
+            </Button>
+          )}
+          {!tenants && (
+            <Button
+              type="submit"
+              variant="contained"
+              disabled={isPending}
+              sx={{ minWidth: 96, textTransform: "none" }}
+            >
+              {isPending ? (
+                <CircularProgress color="inherit" size={18} thickness={5} />
+              ) : (
+                t("auth.forgotPassword.continue")
+              )}
+            </Button>
+          )}
+        </DialogActions>
+      </Box>
+    </Dialog>
+  );
+}
+
+/**
+ * Validates the login form fields.
+ */
+function validateLogin(email: string, password: string, t: (key: string) => string): LoginFieldErrors {
+  const errors: LoginFieldErrors = {};
+  const emailError = validateEmail(email, t);
+
+  if (emailError) {
+    errors.email = emailError;
+  }
+
+  if (!password) {
+    errors.password = t("auth.login.validation.passwordRequired");
+  }
+
+  return errors;
+}
+
+/**
+ * Validates an email address for public auth dialogs.
+ */
+function validateEmail(email: string, t: (key: string) => string): string | null {
+  if (!email.trim()) {
+    return t("auth.login.validation.emailRequired");
+  }
+
+  if (!emailPattern.test(email.trim())) {
+    return t("auth.login.validation.invalidEmail");
+  }
+
+  return null;
+}
+
+/**
+ * Checks whether a validation result contains at least one error.
+ */
+function hasErrors(errors: LoginFieldErrors): boolean {
+  return Object.values(errors).some(Boolean);
+}
+
+/**
+ * Converts a login failure into user-facing copy.
+ */
+function getLoginErrorMessage(error: unknown, t: (key: string) => string): string {
+  if (error instanceof ApiError) {
+    return readProblemDetailsMessage(error) ?? t("auth.login.errors.default");
+  }
+
+  if (
+    error instanceof Error &&
+    error.message === "The server returned an invalid authentication response."
+  ) {
+    return t("auth.login.errors.invalidResponse");
+  }
+
+  return t("auth.login.errors.default");
+}
+
+/**
+ * Reads and validates a workspace selection challenge from the login response.
+ */
+function readWorkspaceSelectionChallenge(
+  response: LoginResponse,
+  rememberMe: boolean,
+  t: (key: string) => string,
+): WorkspaceSelectionChallenge | null {
+  if (!response.requiresTenantSelection) {
+    return null;
+  }
+
+  if (
+    typeof response.preAuthToken !== "string" ||
+    typeof response.preAuthExpiresAtUtc !== "string" ||
+    !Array.isArray(response.tenants)
+  ) {
+    throw new Error(t("auth.login.errors.invalidResponse"));
+  }
+
+  const tenants = response.tenants
+    .map(readWorkspaceTenantOption)
+    .filter((tenant): tenant is WorkspaceTenantOption => tenant !== null);
+
+  if (tenants.length === 0) {
+    throw new Error(t("auth.login.errors.invalidResponse"));
+  }
+
+  return {
+    preAuthToken: response.preAuthToken,
+    preAuthExpiresAtUtc: response.preAuthExpiresAtUtc,
+    tenants,
+    rememberMe,
+  };
+}
+
+/**
+ * Reads one workspace tenant option from an unknown API payload.
+ */
+function readWorkspaceTenantOption(value: unknown): WorkspaceTenantOption | null {
+  if (!value || typeof value !== "object") {
+    return null;
+  }
+
+  const tenant = value as Record<string, unknown>;
+
+  if (
+    typeof tenant.tenantId !== "string" ||
+    typeof tenant.companyName !== "string" ||
+    typeof tenant.companyEmail !== "string" ||
+    typeof tenant.ownerName !== "string" ||
+    typeof tenant.ownerEmail !== "string"
+  ) {
+    return null;
+  }
+
+  return {
+    tenantId: tenant.tenantId,
+    companyName: tenant.companyName,
+    companyEmail: tenant.companyEmail,
+    ownerName: tenant.ownerName,
+    ownerEmail: tenant.ownerEmail,
+  };
+}
+
+/**
+ * Extracts a problem-details message from an API error.
+ */
+function readProblemDetailsMessage(error: unknown): string | null {
+  const details = error instanceof ApiError ? error.details : error;
+
+  if (!details || typeof details !== "object") {
+    return null;
+  }
+
+  const validationMessage = readValidationMessage(details);
+
+  if (validationMessage) {
+    return validationMessage;
+  }
+
+  if (
+    "detail" in details &&
+    typeof details.detail === "string" &&
+    details.detail.trim().length > 0
+  ) {
+    return details.detail;
+  }
+
+  if (
+    "title" in details &&
+    typeof details.title === "string" &&
+    details.title.trim().length > 0
+  ) {
+    return details.title;
+  }
+
+  return null;
+}
+
+/**
+ * Reads the first validation message from problem-details payloads.
+ */
+function readValidationMessage(details: object): string | null {
+  if (
+    !("errors" in details) ||
+    !details.errors ||
+    typeof details.errors !== "object"
+  ) {
+    return null;
+  }
+
+  for (const messages of Object.values(details.errors)) {
+    if (!Array.isArray(messages)) {
+      continue;
+    }
+
+    const message = messages.find(
+      (item): item is string => typeof item === "string" && item.length > 0,
+    );
+
+    if (message) {
+      return message;
+    }
+  }
+
+  return null;
+}

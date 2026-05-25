@@ -25,6 +25,7 @@ import CircularProgress from "@mui/material/CircularProgress";
 import Dialog from "@mui/material/Dialog";
 import DialogActions from "@mui/material/DialogActions";
 import DialogContent from "@mui/material/DialogContent";
+import DialogContentText from "@mui/material/DialogContentText";
 import DialogTitle from "@mui/material/DialogTitle";
 import Divider from "@mui/material/Divider";
 import Drawer from "@mui/material/Drawer";
@@ -47,7 +48,9 @@ import Tabs from "@mui/material/Tabs";
 import TextField from "@mui/material/TextField";
 import Tooltip from "@mui/material/Tooltip";
 import Typography from "@mui/material/Typography";
-import { DataGrid, type GridColDef } from "@mui/x-data-grid";
+import { DataGrid, type GridColDef, type GridToolbarProps } from "@mui/x-data-grid";
+import DataGridCustomToolbar from "@/components/ui/DataGridCustomToolbar";
+import DataGridEmptyState from "@/components/ui/DataGridEmptyState";
 import { useParams } from "next/navigation";
 import {
   type ChangeEvent,
@@ -63,6 +66,7 @@ import { useEcoHub } from "@/components/ecos/useEcoHub";
 import NextLink from "@/components/ui/NextLink";
 import PriorityChip from "@/components/ui/PriorityChip";
 import StatusChip from "@/components/ui/StatusChip";
+import { useTranslation } from "@/context/I18nContext";
 import { ApiError, apiFetch } from "@/lib/api/client";
 import { useAuth } from "@/lib/auth/AuthContext";
 import type {
@@ -98,7 +102,6 @@ type TimelineEntry =
   | { type: "comment"; occurredAt: string; comment: EcoCommentDto };
 type AffectedItemFormState = AddAffectedItemRequest;
 
-const authorRoles = ["Owner", "Administrator", "Requester"] as const;
 const reviewerRoles = ["Owner", "Administrator", "Approver"] as const;
 const approverRoles = new Set<string>(reviewerRoles);
 const minimumRequestChangesLength = 10;
@@ -110,28 +113,24 @@ const initialAffectedItemForm: AffectedItemFormState = {
   newRevision: "",
   action: "Modify",
 };
-const eventLabelByType: Record<EcoEventType, string> = {
-  AffectedItemAdded: "Affected item added",
-  AffectedItemRemoved: "Affected item removed",
-  Approved: "Approved",
-  AttachmentAdded: "Attachment added",
-  Canceled: "Canceled",
-  ChangesRequested: "Changes requested",
-  CommentAdded: "Comment added",
-  Created: "Created",
-  DetailsUpdated: "Details updated",
-  Implemented: "Implemented",
-  Rejected: "Rejected",
-  ReviewDecisionSubmitted: "Review decision submitted",
-  SubmittedForReview: "Submitted for review",
+
+import PageHeader from "@/components/ui/PageHeader";
+
+const RECENTLY_VIEWED_STORAGE_KEY = "engiflow.recently_viewed.ecos";
+
+type RecentlyViewedItem = {
+  id: string;
+  title: string;
+  timestamp: string;
 };
 
 /**
- * Renders the authenticated ECO detail route.
+ * Renders the authenticated ECO detail route with a GitHub-style PR experience.
  *
  * @returns The PR-like ECO detail shell.
  */
 export default function EcoDetailsPage() {
+  const { t, locale } = useTranslation();
   const params = useParams();
   const ecoId = readRouteEcoId(params?.id);
   const { token, user } = useAuth();
@@ -144,6 +143,29 @@ export default function EcoDetailsPage() {
   const [actionErrorMessage, setActionErrorMessage] = useState<string | null>(null);
   const [pendingAction, setPendingAction] = useState<PendingAction | null>(null);
   const [isConflictAlertOpen, setIsConflictAlertOpen] = useState(false);
+
+  const trackRecentlyViewed = useCallback((id: string, title: string) => {
+    try {
+      const stored = localStorage.getItem(RECENTLY_VIEWED_STORAGE_KEY);
+      let items: RecentlyViewedItem[] = stored ? JSON.parse(stored) : [];
+      
+      // Remove existing if present to move to top
+      items = items.filter(i => i.id !== id);
+      
+      // Add current to front
+      items.unshift({
+        id,
+        title,
+        timestamp: new Date().toISOString()
+      });
+
+      // Limit to 5
+      localStorage.setItem(RECENTLY_VIEWED_STORAGE_KEY, JSON.stringify(items.slice(0, 5)));
+    } catch {
+      // Ignore storage errors
+    }
+  }, []);
+
   const usersById = useMemo(
     () => createUserLookup(reviewContext?.users ?? []),
     [reviewContext],
@@ -153,7 +175,6 @@ export default function EcoDetailsPage() {
     [reviewContext],
   );
   const minApprovalsRequired = reviewContext?.minApprovalsRequired ?? 1;
-  const canAuthor = roleAllows(user?.role, authorRoles);
   const canReview = roleAllows(user?.role, reviewerRoles);
 
   const loadEcoDetails = useCallback(
@@ -175,16 +196,17 @@ export default function EcoDetailsPage() {
 
         setEco(normalizeEcoDetails(details));
         setReviewContext(context);
+        trackRecentlyViewed(details.id, details.title);
       } catch (error) {
         setEco(null);
-        setLoadErrorMessage(getLoadEcoErrorMessage(error));
+        setLoadErrorMessage(getLoadEcoErrorMessage(error, t));
       } finally {
         if (options.showLoading !== false) {
           setIsLoading(false);
         }
       }
     },
-    [ecoId],
+    [ecoId, trackRecentlyViewed, t],
   );
 
   useEffect(() => {
@@ -230,10 +252,6 @@ export default function EcoDetailsPage() {
 
   /**
    * Runs an ECO workflow request and handles concurrency conflicts consistently.
-   *
-   * @param action - Pending action identifier.
-   * @param request - Request that returns the updated ECO.
-   * @returns A promise that resolves after the action attempt.
    */
   async function runEcoAction(
     action: PendingAction,
@@ -253,7 +271,7 @@ export default function EcoDetailsPage() {
       if (error instanceof ApiError && error.status === 409) {
         await handleConflict();
       } else {
-        setActionErrorMessage(getActionErrorMessage(error));
+        setActionErrorMessage(getActionErrorMessage(error, t));
       }
     } finally {
       setPendingAction(null);
@@ -273,7 +291,7 @@ export default function EcoDetailsPage() {
   if (!ecoId) {
     return (
       <Stack spacing={2.5}>
-        <Alert severity="error">The ECO identifier in the route is invalid.</Alert>
+        <Alert severity="error">{t("ecos.details.invalidId")}</Alert>
         <Button
           component={NextLink}
           href="/ecos"
@@ -281,7 +299,7 @@ export default function EcoDetailsPage() {
           startIcon={<ArrowBackIcon />}
           sx={{ alignSelf: "flex-start", textTransform: "none" }}
         >
-          Back to ECOs
+          {t("ecos.details.backToEcos")}
         </Button>
       </Stack>
     );
@@ -295,7 +313,7 @@ export default function EcoDetailsPage() {
     return (
       <Stack spacing={2.5}>
         <Alert severity="error">
-          {loadErrorMessage ?? "Unable to load the Engineering Change Order."}
+          {loadErrorMessage ?? t("ecos.details.loadError")}
         </Alert>
         <Button
           component={NextLink}
@@ -304,128 +322,65 @@ export default function EcoDetailsPage() {
           startIcon={<ArrowBackIcon />}
           sx={{ alignSelf: "flex-start", textTransform: "none" }}
         >
-          Back to ECOs
+          {t("ecos.details.backToEcos")}
         </Button>
       </Stack>
     );
   }
 
   const requester = usersById.get(eco.createdByUserId);
+  const isCreator = user?.id === eco.createdByUserId;
+  const allowSelfApproval = reviewContext?.allowSelfApproval ?? false;
 
   return (
     <Stack spacing={2.5}>
-      <Stack spacing={1.5}>
-        <Button
-          component={NextLink}
-          href="/ecos"
-          variant="text"
-          startIcon={<ArrowBackIcon />}
-          sx={{ alignSelf: "flex-start", textTransform: "none" }}
-        >
-          Back to ECOs
-        </Button>
-        <Stack
-          direction={{ xs: "column", md: "row" }}
-          spacing={1.5}
-          sx={{
-            alignItems: { xs: "flex-start", md: "center" },
-            justifyContent: "space-between",
-          }}
-        >
-          <Stack spacing={1} sx={{ minWidth: 0 }}>
-            <Stack
-              direction={{ xs: "column", sm: "row" }}
-              spacing={1}
-              sx={{ alignItems: { xs: "flex-start", sm: "center" } }}
+      {/* 1. Header & Navigation */}
+      <PageHeader
+        title={eco.title}
+        description={t("ecos.details.submittedBy", {
+          name: requester?.name ?? "Unknown",
+          date: formatDateTime(eco.createdAt, locale),
+        })}
+        actionButton={
+          <Stack direction="row" spacing={1} sx={{ alignItems: "center" }}>
+            <Button
+              component={NextLink}
+              href="/ecos"
+              variant="outlined"
+              startIcon={<ArrowBackIcon />}
+              size="small"
+              sx={{ textTransform: "none" }}
             >
-              <Typography variant="h4" component="h1" sx={{ overflowWrap: "anywhere" }}>
-                {eco.title}
-              </Typography>
-              <StatusChip status={eco.status} />
-            </Stack>
-            <Typography variant="body2" color="text.secondary">
-              {requester?.name ?? formatShortId(eco.createdByUserId)} submitted this change
-              {" • "}
-              Review Round {eco.reviewRound || 0}
-              {" • "}
-              {formatDateTime(eco.createdAt)}
-            </Typography>
-          </Stack>
-          <Stack direction="row" spacing={1} sx={{ flexWrap: "wrap" }}>
+              {t("ecos.details.backToEcos")}
+            </Button>
+            <StatusChip status={eco.status} />
             <PriorityChip priority={eco.priority} />
-            <Chip size="small" label={`ECO ${formatShortId(eco.id)}`} variant="outlined" />
           </Stack>
-        </Stack>
-      </Stack>
-
-      <StickyActionBar
-        canAuthor={canAuthor}
-        canReview={canReview}
-        eco={eco}
-        isBlocked={isConflictRefreshing}
-        pendingAction={pendingAction}
-        onApprove={() =>
-          runEcoAction("approve", () =>
-            submitReviewDecision(eco.id, { decision: "Approve" }),
-          )
         }
-        onCancel={() =>
-          runEcoAction("cancel", () =>
-            apiFetch<EcoDetailsDto>(`/api/ecos/${encodeURIComponent(eco.id)}/cancel`, {
-              method: "PUT",
-            }),
-          )
-        }
-        onRequestChanges={(comment) =>
-          runEcoAction("requestChanges", () =>
-            submitReviewDecision(eco.id, {
-              decision: "RequestChanges",
-              comment,
-            }),
-          )
-        }
-        onSubmit={() =>
-          runEcoAction("submit", () =>
-            apiFetch<EcoDetailsDto>(`/api/ecos/${encodeURIComponent(eco.id)}/submit`, {
-              method: "PUT",
-            }),
-          )
-        }
+        onRefresh={() => void loadEcoDetails()}
+        isLoading={isLoading}
       />
 
       {actionErrorMessage ? <Alert severity="error">{actionErrorMessage}</Alert> : null}
       {hub.status === "reconnecting" || hub.status === "disconnected" ? (
         <Alert severity="warning" variant="outlined">
-          Real-time ECO updates are {hub.status}. {hub.errorMessage ?? ""}
+          {hub.status === "reconnecting" ? t("ecos.details.realtimeReconnecting") : t("ecos.details.realtimeDisconnected")} {hub.errorMessage ?? ""}
         </Alert>
       ) : null}
 
-      <Grid container spacing={2.5}>
-        <Grid size={{ xs: 12, lg: 8 }}>
-          <Card elevation={1}>
-            <CardContent>
-              <Stack spacing={2}>
-                <Typography variant="h6" component="h2">
-                  Change Summary
-                </Typography>
-                <Divider />
-                <RichTextRenderer value={eco.description} />
-              </Stack>
-            </CardContent>
-          </Card>
-        </Grid>
-        <Grid size={{ xs: 12, lg: 4 }}>
-          <ReviewersWidget
-            approvals={eco.approvals}
-            approvers={approvers}
-            minApprovalsRequired={minApprovalsRequired}
-            reviewRound={eco.reviewRound}
-            usersById={usersById}
-          />
-        </Grid>
-      </Grid>
-
-      <Paper elevation={1}>
+      {/* 2. Tabs Shell */}
+      <Paper
+        elevation={0}
+        variant="outlined"
+        sx={{
+          display: "flex",
+          flexDirection: "column",
+          flexGrow: 1,
+          minHeight: 0,
+          border: 1,
+          borderColor: "divider",
+        }}
+      >
         <Tabs
           value={activeTab}
           onChange={(_, value: TabKey) => setActiveTab(value)}
@@ -433,15 +388,45 @@ export default function EcoDetailsPage() {
           scrollButtons="auto"
           sx={{ borderBottom: 1, borderColor: "divider" }}
         >
-          <Tab value="conversation" label="Conversation" />
-          <Tab value="items" label="Affected Items" />
-          <Tab value="files" label="Files & Attachments" />
+          <Tab value="conversation" label={t("ecos.details.tabs.conversation")} />
+          <Tab value="items" label={t("ecos.details.tabs.items")} />
+          <Tab value="files" label={t("ecos.details.tabs.files")} />
         </Tabs>
-        <Box sx={{ p: { xs: 1.5, md: 2.5 } }}>
+        <Box sx={{ p: { xs: 1.5, md: 2.5 }, flexGrow: 1, minHeight: 0 }}>
           {activeTab === "conversation" ? (
             <ConversationTab
               eco={eco}
               isBlocked={Boolean(pendingAction) || isConflictRefreshing}
+              isCreator={isCreator}
+              canReview={canReview}
+              allowSelfApproval={allowSelfApproval}
+              onApprove={() =>
+                runEcoAction("approve", () =>
+                  submitReviewDecision(eco.id, { decision: "Approve" }),
+                )
+              }
+              onCancel={() =>
+                runEcoAction("cancel", () =>
+                  apiFetch<EcoDetailsDto>(`/api/ecos/${encodeURIComponent(eco.id)}/cancel`, {
+                    method: "PUT",
+                  }),
+                )
+              }
+              onRequestChanges={(comment) =>
+                runEcoAction("requestChanges", () =>
+                  submitReviewDecision(eco.id, {
+                    decision: "RequestChanges",
+                    comment,
+                  }),
+                )
+              }
+              onSubmit={() =>
+                runEcoAction("submit", () =>
+                  apiFetch<EcoDetailsDto>(`/api/ecos/${encodeURIComponent(eco.id)}/submit`, {
+                    method: "PUT",
+                  }),
+                )
+              }
               onCommentSubmit={(body) =>
                 runEcoAction("comment", () =>
                   apiFetch<EcoDetailsDto>(
@@ -458,14 +443,18 @@ export default function EcoDetailsPage() {
               }
               pendingAction={pendingAction}
               usersById={usersById}
+              approvers={approvers}
+              minApprovalsRequired={minApprovalsRequired}
             />
           ) : null}
           {activeTab === "items" ? (
-            <AffectedItemsTab
-              canEdit={eco.status === "Draft" && canAuthor}
-              eco={eco}
-              isBlocked={Boolean(pendingAction) || isConflictRefreshing}
-              onAddItem={(item) =>
+           <AffectedItemsTab
+             canEdit={eco.status === "Draft" && isCreator}
+             eco={eco}
+             isBlocked={Boolean(pendingAction) || isConflictRefreshing}
+             isLoading={isLoading}
+             loadEcoDetails={loadEcoDetails}
+             onAddItem={(item) =>
                 runEcoAction("addItem", () =>
                   apiFetch<EcoDetailsDto>(
                     `/api/ecos/${encodeURIComponent(eco.id)}/affected-items`,
@@ -507,335 +496,52 @@ export default function EcoDetailsPage() {
           onClose={() => setIsConflictAlertOpen(false)}
           sx={{ width: "100%" }}
         >
-          ECO state changed by another user. The latest data has been loaded.
+          {t("ecos.details.conflicts.alert")}
         </Alert>
       </Snackbar>
     </Stack>
   );
 }
 
-type StickyActionBarProps = {
-  canAuthor: boolean;
-  canReview: boolean;
+type ConversationTabProps = {
   eco: EcoDetailsDto;
   isBlocked: boolean;
-  pendingAction: PendingAction | null;
+  isCreator: boolean;
+  canReview: boolean;
+  allowSelfApproval: boolean;
   onApprove: () => void;
   onCancel: () => void;
   onRequestChanges: (comment: string) => void;
   onSubmit: () => void;
-};
-
-/**
- * Renders sticky workflow controls for the ECO state machine.
- *
- * @param props - Action bar options.
- * @returns Sticky action bar.
- */
-function StickyActionBar({
-  canAuthor,
-  canReview,
-  eco,
-  isBlocked,
-  pendingAction,
-  onApprove,
-  onCancel,
-  onRequestChanges,
-  onSubmit,
-}: StickyActionBarProps) {
-  const [isRequestChangesOpen, setIsRequestChangesOpen] = useState(false);
-  const canSubmit = eco.status === "Draft" && canAuthor;
-  const canCancel = (eco.status === "Draft" || eco.status === "UnderReview") && canAuthor;
-  const canApprove = eco.status === "UnderReview" && canReview;
-  const disableActions = isBlocked || Boolean(pendingAction);
-
-  return (
-    <Paper
-      elevation={2}
-      sx={{
-        position: "sticky",
-        top: 72,
-        zIndex: 10,
-        p: 1.5,
-      }}
-    >
-      <Stack
-        direction={{ xs: "column", md: "row" }}
-        spacing={1}
-        sx={{
-          alignItems: { xs: "stretch", md: "center" },
-          justifyContent: "space-between",
-        }}
-      >
-        <Typography variant="body2" color="text.secondary">
-          State actions are locked to the current ECO lifecycle and role.
-        </Typography>
-        <Stack direction={{ xs: "column", sm: "row" }} spacing={1}>
-          {canSubmit || pendingAction === "submit" ? (
-            <ActionButton
-              color="primary"
-              disabled={disableActions}
-              icon={<SendIcon />}
-              isPending={pendingAction === "submit"}
-              label="Submit"
-              onClick={onSubmit}
-              variant="contained"
-            />
-          ) : null}
-          {canApprove || pendingAction === "approve" ? (
-            <ActionButton
-              color="success"
-              disabled={disableActions}
-              icon={<CheckCircleIcon />}
-              isPending={pendingAction === "approve"}
-              label="Approve"
-              onClick={onApprove}
-              variant="contained"
-            />
-          ) : null}
-          {canApprove || pendingAction === "requestChanges" ? (
-            <ActionButton
-              color="warning"
-              disabled={disableActions}
-              icon={<ErrorOutlineIcon />}
-              isPending={pendingAction === "requestChanges"}
-              label="Request Changes"
-              onClick={() => setIsRequestChangesOpen(true)}
-              variant="outlined"
-            />
-          ) : null}
-          {canCancel || pendingAction === "cancel" ? (
-            <ActionButton
-              color="error"
-              disabled={disableActions}
-              icon={<CancelIcon />}
-              isPending={pendingAction === "cancel"}
-              label="Cancel"
-              onClick={onCancel}
-              variant="outlined"
-            />
-          ) : null}
-        </Stack>
-      </Stack>
-      <RequestChangesDialog
-        key={isRequestChangesOpen ? "request-changes-open" : "request-changes-closed"}
-        open={isRequestChangesOpen}
-        isPending={pendingAction === "requestChanges"}
-        onClose={() => setIsRequestChangesOpen(false)}
-        onConfirm={(comment) => {
-          setIsRequestChangesOpen(false);
-          onRequestChanges(comment);
-        }}
-      />
-    </Paper>
-  );
-}
-
-type ActionButtonProps = {
-  color: "primary" | "success" | "warning" | "error";
-  disabled: boolean;
-  icon: ReactNode;
-  isPending: boolean;
-  label: string;
-  onClick: () => void;
-  variant: "contained" | "outlined";
-};
-
-function ActionButton({
-  color,
-  disabled,
-  icon,
-  isPending,
-  label,
-  onClick,
-  variant,
-}: ActionButtonProps) {
-  return (
-    <Button
-      type="button"
-      color={color}
-      disabled={disabled}
-      onClick={onClick}
-      startIcon={isPending ? undefined : icon}
-      variant={variant}
-      sx={{ minWidth: 120, textTransform: "none" }}
-    >
-      {isPending ? <CircularProgress color="inherit" size={20} thickness={5} /> : label}
-    </Button>
-  );
-}
-
-type RequestChangesDialogProps = {
-  open: boolean;
-  isPending: boolean;
-  onClose: () => void;
-  onConfirm: (comment: string) => void;
-};
-
-/**
- * Renders the request-changes dialog used by reviewers.
- *
- * @param props - Dialog options.
- * @returns Request changes dialog.
- */
-function RequestChangesDialog({
-  open,
-  isPending,
-  onClose,
-  onConfirm,
-}: RequestChangesDialogProps) {
-  const [comment, setComment] = useState("");
-  const normalizedComment = comment.trim();
-  const isTooShort =
-    normalizedComment.length > 0 &&
-    normalizedComment.length < minimumRequestChangesLength;
-
-  return (
-    <Dialog open={open} onClose={onClose} fullWidth maxWidth="sm">
-      <DialogTitle>Request Changes</DialogTitle>
-      <DialogContent>
-        <TextField
-          label="Reason"
-          value={comment}
-          onChange={(event) => setComment(event.target.value)}
-          error={isTooShort}
-          helperText={
-            isTooShort
-              ? `Enter at least ${minimumRequestChangesLength} characters.`
-              : `${comment.length}/${maximumCommentLength} characters`
-          }
-          multiline
-          minRows={4}
-          fullWidth
-          required
-          size="small"
-          sx={{ mt: 1 }}
-          slotProps={{ htmlInput: { maxLength: maximumCommentLength } }}
-        />
-      </DialogContent>
-      <DialogActions sx={{ px: 3, pb: 2 }}>
-        <Button disabled={isPending} onClick={onClose} sx={{ textTransform: "none" }}>
-          Cancel
-        </Button>
-        <Button
-          color="warning"
-          disabled={isPending || normalizedComment.length < minimumRequestChangesLength}
-          onClick={() => onConfirm(normalizedComment)}
-          variant="contained"
-          sx={{ textTransform: "none" }}
-        >
-          Request Changes
-        </Button>
-      </DialogActions>
-    </Dialog>
-  );
-}
-
-type ReviewersWidgetProps = {
-  approvals: EcoDetailsDto["approvals"];
-  approvers: EcoUserDto[];
-  minApprovalsRequired: number;
-  reviewRound: number;
-  usersById: Map<string, EcoUserDto>;
-};
-
-/**
- * Renders quorum progress and approver status rows.
- *
- * @param props - Reviewer widget props.
- * @returns Reviewers widget.
- */
-function ReviewersWidget({
-  approvals,
-  approvers,
-  minApprovalsRequired,
-  reviewRound,
-  usersById,
-}: ReviewersWidgetProps) {
-  const currentRoundApprovals = approvals.filter(
-    (approval) => approval.reviewRound === reviewRound,
-  );
-  const approvedCount = currentRoundApprovals.filter(
-    (approval) => approval.decision === "Approve",
-  ).length;
-
-  return (
-    <Card elevation={1}>
-      <CardContent>
-        <Stack spacing={2}>
-          <Stack spacing={0.5}>
-            <Typography variant="h6" component="h2">
-              Reviewers
-            </Typography>
-            <Typography variant="body2" color="text.secondary">
-              {approvedCount}/{minApprovalsRequired} approvals required
-            </Typography>
-          </Stack>
-          <Divider />
-          <List dense disablePadding>
-            {approvers.map((approver) => {
-              const decision = currentRoundApprovals.find(
-                (approval) => approval.approverUserId === approver.id,
-              );
-
-              return (
-                <ListItem key={approver.id} disableGutters>
-                  <ListItemIcon sx={{ minWidth: 36 }}>
-                    {renderDecisionIcon(decision?.decision)}
-                  </ListItemIcon>
-                  <ListItemText
-                    primary={approver.name}
-                    secondary={decision ? formatDateTime(decision.updatedAt) : "Pending"}
-                  />
-                </ListItem>
-              );
-            })}
-            {approvers.length === 0 ? (
-              <Typography variant="body2" color="text.secondary">
-                No active approvers are configured for this tenant.
-              </Typography>
-            ) : null}
-          </List>
-          {currentRoundApprovals
-            .filter((approval) => !usersById.has(approval.approverUserId))
-            .map((approval) => (
-              <Chip
-                key={approval.id}
-                size="small"
-                label={`${formatShortId(approval.approverUserId)}: ${formatDecisionLabel(
-                  approval.decision,
-                )}`}
-              />
-            ))}
-        </Stack>
-      </CardContent>
-    </Card>
-  );
-}
-
-type ConversationTabProps = {
-  eco: EcoDetailsDto;
-  isBlocked: boolean;
   onCommentSubmit: (body: string) => Promise<void> | void;
   onUpload: (file: File) => Promise<void> | void;
   pendingAction: PendingAction | null;
   usersById: Map<string, EcoUserDto>;
+  approvers: EcoUserDto[];
+  minApprovalsRequired: number;
 };
 
 /**
- * Renders the conversation timeline and markdown comment composer.
- *
- * @param props - Conversation tab props.
- * @returns Conversation tab content.
+ * Renders the GitHub-style conversation grid.
  */
 function ConversationTab({
   eco,
   isBlocked,
+  isCreator,
+  canReview,
+  allowSelfApproval,
+  onApprove,
+  onCancel,
+  onRequestChanges,
+  onSubmit,
   onCommentSubmit,
   onUpload,
   pendingAction,
   usersById,
+  approvers,
+  minApprovalsRequired,
 }: ConversationTabProps) {
+  const { t, locale } = useTranslation();
   const [highlightedCommentId, setHighlightedCommentId] = useState<string | null>(null);
   const timeline = useMemo(() => createTimeline(eco.events, eco.comments), [
     eco.events,
@@ -866,54 +572,638 @@ function ConversationTab({
   }, [eco.comments]);
 
   return (
-    <Stack spacing={2.5}>
-      <Stack spacing={1.5}>
-        {timeline.map((entry) =>
-          entry.type === "comment" ? (
-            <CommentCard
-              key={`comment-${entry.comment.id}`}
-              comment={entry.comment}
-              highlighted={highlightedCommentId === entry.comment.id}
-              user={usersById.get(entry.comment.authorUserId)}
-            />
-          ) : (
-            <SystemEventRow
-              key={`event-${entry.event.id}`}
-              event={entry.event}
-              user={usersById.get(entry.event.actorUserId)}
-            />
-          ),
-        )}
+    <Grid container spacing={2.5}>
+      {/* Left Column: Context, Timeline, and Action */}
+      <Grid size={{ xs: 12, md: 8 }}>
+        <Stack spacing={3}>
+          {/* A. Change Summary */}
+          <Card elevation={0} variant="outlined" sx={{ border: 1, borderColor: "divider" }}>
+            <CardContent>
+              <Stack spacing={2}>
+                <Typography variant="h6" component="h2" sx={{ fontSize: "1.1rem", fontWeight: 600 }}>
+                  {t("ecos.details.summary.title")}
+                </Typography>
+                <Divider />
+                <RichTextRenderer value={eco.description} />
+              </Stack>
+            </CardContent>
+          </Card>
+
+          {/* B. Vertical Timeline */}
+          <Stack spacing={0} sx={{ position: "relative" }}>
+            {timeline.map((entry) => (
+              <TimelineItemContainer
+                key={entry.type === "comment" ? `comment-${entry.comment.id}` : `event-${entry.event.id}`}
+                icon={
+                  entry.type === "comment" ? (
+                    <Avatar sx={{ width: 20, height: 20, fontSize: 10 }}>
+                      {getInitials(usersById.get(entry.comment.authorUserId)?.name ?? "U")}
+                    </Avatar>
+                  ) : (
+                    <TimelineIcon sx={{ fontSize: 14, color: "text.secondary" }} />
+                  )
+                }
+              >
+                {entry.type === "comment" ? (
+                  <CommentCard
+                    comment={entry.comment}
+                    highlighted={highlightedCommentId === entry.comment.id}
+                    user={usersById.get(entry.comment.authorUserId)}
+                    t={t}
+                    locale={locale}
+                  />
+                ) : (
+                  <SystemEventRow
+                    event={entry.event}
+                    user={usersById.get(entry.event.actorUserId)}
+                    t={t}
+                    locale={locale}
+                  />
+                )}
+              </TimelineItemContainer>
+            ))}
+          </Stack>
+
+          {/* C. Action Area (Composer + Workflow Actions) */}
+          <ActionArea
+            eco={eco}
+            isBlocked={isBlocked}
+            isCreator={isCreator}
+            canReview={canReview}
+            allowSelfApproval={allowSelfApproval}
+            onApprove={onApprove}
+            onCancel={onCancel}
+            onRequestChanges={onRequestChanges}
+            onSubmit={onSubmit}
+            onCommentSubmit={onCommentSubmit}
+            onUpload={onUpload}
+            pendingAction={pendingAction}
+          />
+        </Stack>
+      </Grid>
+      {/* Right Column: Sticky Metadata Sidebar */}
+      <Grid size={{ xs: 12, md: 4 }}>
+        <Stack spacing={2.5} sx={{ position: "sticky", top: 24 }}>
+          <ReviewersWidget
+            approvals={eco.approvals}
+            approvers={approvers}
+            minApprovalsRequired={minApprovalsRequired}
+            reviewRound={eco.reviewRound}
+            usersById={usersById}
+          />
+          <Card elevation={0} variant="outlined" sx={{ border: 1, borderColor: "divider" }}>
+            <CardContent>
+              <Typography variant="overline" color="text.secondary" sx={{ fontWeight: 600 }}>
+                {t("ecos.details.metadata.title")}
+              </Typography>
+              <Stack spacing={1.5} sx={{ mt: 1 }}>
+                <DetailRow label={t("ecos.details.metadata.created")}>
+                  <Typography variant="body2">{formatDateTime(eco.createdAt, locale)}</Typography>
+                </DetailRow>
+                <DetailRow label={t("ecos.details.metadata.priority")}>
+                  <PriorityChip priority={eco.priority} />
+                </DetailRow>
+                <DetailRow label={t("ecos.details.metadata.status")}>
+                  <StatusChip status={eco.status} />
+                </DetailRow>
+              </Stack>
+            </CardContent>
+          </Card>
+        </Stack>
+      </Grid>
+    </Grid>
+  );
+}
+
+/**
+ * A container that handles the visual timeline separator (dot + connector).
+ */
+function TimelineItemContainer({ children, icon }: { children: ReactNode; icon?: ReactNode }) {
+  return (
+    <Stack direction="row" spacing={2}>
+      <Stack sx={{ alignItems: "center", width: 24, flexShrink: 0 }}>
+        <Box sx={{ width: 2, height: 12, bgcolor: "divider" }} />
+        <Box
+          sx={{
+            width: 24,
+            height: 24,
+            borderRadius: "50%",
+            bgcolor: "background.paper",
+            border: 1,
+            borderColor: "divider",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            flexShrink: 0,
+            zIndex: 1,
+            boxShadow: 1,
+          }}
+        >
+          {icon ?? <Box sx={{ width: 8, height: 8, borderRadius: "50%", bgcolor: "divider" }} />}
+        </Box>
+        <Box sx={{ width: 2, flexGrow: 1, bgcolor: "divider" }} />
       </Stack>
-      <CommentComposer
-        ecoId={eco.id}
-        isBlocked={isBlocked}
-        isSubmitting={pendingAction === "comment"}
-        isUploading={pendingAction === "upload"}
-        onSubmit={onCommentSubmit}
-        onUpload={onUpload}
-      />
+      <Box sx={{ flexGrow: 1, pb: 3, pt: 1.5 }}>{children}</Box>
     </Stack>
   );
 }
 
-type CommentCardProps = {
+type ActionAreaProps = {
+  eco: EcoDetailsDto;
+  isBlocked: boolean;
+  isCreator: boolean;
+  canReview: boolean;
+  allowSelfApproval: boolean;
+  onApprove: () => void;
+  onCancel: () => void;
+  onRequestChanges: (comment: string) => void;
+  onSubmit: () => void;
+  onCommentSubmit: (body: string) => Promise<void> | void;
+  onUpload: (file: File) => Promise<void> | void;
+  pendingAction: PendingAction | null;
+};
+
+/**
+ * Combines workflow actions and the comment composer.
+ */
+function ActionArea({
+  eco,
+  isBlocked,
+  isCreator,
+  canReview,
+  allowSelfApproval,
+  onApprove,
+  onCancel,
+  onRequestChanges,
+  onSubmit,
+  onCommentSubmit,
+  onUpload,
+  pendingAction,
+}: ActionAreaProps) {
+  const { t } = useTranslation();
+  const { user } = useAuth();
+  const [isRequestChangesOpen, setIsRequestChangesOpen] = useState(false);
+  const [wantsToChangeVote, setWantsToChangeVote] = useState(false);
+  const [confirmation, setConfirmation] = useState<{
+    open: boolean;
+    title: string;
+    message: string;
+    onConfirm: () => void;
+    color?: "primary" | "error" | "success";
+  }>({ open: false, title: "", message: "", onConfirm: () => {} });
+
+  const currentVote = useMemo(() => {
+    return eco.approvals?.find(
+      (a) => a.reviewRound === eco.reviewRound && a.approverUserId === user?.id,
+    );
+  }, [eco.approvals, eco.reviewRound, user?.id]);
+
+  const canSubmit = eco.status === "Draft" && isCreator;
+  const canCancel = (eco.status === "Draft" || eco.status === "UnderReview") && isCreator;
+  const canVote = eco.status === "UnderReview" && canReview && (!isCreator || allowSelfApproval);
+  const showVoteButtons = canVote && (!currentVote || wantsToChangeVote);
+  const showVoteIndicator = canVote && currentVote && !wantsToChangeVote;
+
+  const showWorkflowArea =
+    canSubmit ||
+    canCancel ||
+    showVoteButtons ||
+    showVoteIndicator ||
+    (eco.status === "UnderReview" && !canVote) ||
+    (eco.status === "Draft" && !isCreator);
+
+  const disableActions = isBlocked || Boolean(pendingAction);
+
+  const confirmAction = (
+    title: string,
+    message: string,
+    onConfirm: () => void,
+    color: "primary" | "error" | "success" = "primary",
+  ) => {
+    setConfirmation({ open: true, title, message, onConfirm, color });
+  };
+
+  return (
+    <Card elevation={0} variant="outlined" sx={{ borderTop: 4, borderTopColor: "primary.main", border: 1, borderColor: "divider" }}>
+      <CardContent>
+        <Stack spacing={2.5}>
+          {/* Workflow Buttons Area */}
+          {showWorkflowArea && (
+            <>
+              <Stack
+                direction={{ xs: "column", sm: "row" }}
+                spacing={1.5}
+                sx={{
+                  alignItems: { xs: "stretch", sm: "center" },
+                  justifyContent: "space-between",
+                }}
+              >
+                <Box>
+                  {isCreator && eco.status === "UnderReview" && !allowSelfApproval && (
+                    <Typography variant="body2" color="text.secondary">
+                      {t("ecos.details.actions.authorConstraint")}
+                    </Typography>
+                  )}
+                  {eco.status === "UnderReview" && !canVote && !isCreator && (
+                    <Typography variant="body2" color="text.secondary">
+                      {t("ecos.details.actions.permissionConstraint")}
+                    </Typography>
+                  )}
+                  {eco.status === "Draft" && !isCreator && (
+                    <Typography variant="body2" color="text.secondary">
+                      {t("ecos.details.actions.creatorConstraint")}
+                    </Typography>
+                  )}
+                </Box>
+
+                <Stack direction={{ xs: "column", sm: "row" }} spacing={1}>
+                  {canSubmit ? (
+                    <ActionButton
+                      color="primary"
+                      disabled={disableActions}
+                      icon={<SendIcon />}
+                      isPending={pendingAction === "submit"}
+                      label={t("ecos.details.actions.submit")}
+                      onClick={() =>
+                        confirmAction(
+                          t("ecos.details.confirmations.submitTitle"),
+                          t("ecos.details.confirmations.submitMessage"),
+                          onSubmit,
+                        )
+                      }
+                      variant="contained"
+                    />
+                  ) : null}
+
+                  {showVoteIndicator && currentVote && (
+                    <Stack direction="row" spacing={1} sx={{ alignItems: "center" }}>
+                      <Chip
+                        size="small"
+                        icon={currentVote.decision === "Approve" ? <CheckCircleIcon /> : <ErrorOutlineIcon />}
+                        label={currentVote.decision === "Approve" ? t("ecos.details.actions.approved") : t("ecos.details.actions.changesRequested")}
+                        color={currentVote.decision === "Approve" ? "success" : "warning"}
+                        variant="outlined"
+                        sx={{ border: 1, borderColor: "divider" }}
+                      />
+                      <Button
+                        size="small"
+                        onClick={() => setWantsToChangeVote(true)}
+                        sx={{ textTransform: "none" }}
+                      >
+                        {t("ecos.details.actions.changeVote")}
+                      </Button>
+                    </Stack>
+                  )}
+
+                  {showVoteButtons && (
+                    <>
+                      <ActionButton
+                        color="success"
+                        disabled={disableActions || currentVote?.decision === "Approve"}
+                        icon={<CheckCircleIcon />}
+                        isPending={pendingAction === "approve"}
+                        label={t("ecos.details.actions.approve")}
+                        onClick={() => {
+                          confirmAction(
+                            t("ecos.details.confirmations.approveTitle"),
+                            t("ecos.details.confirmations.approveMessage"),
+                            () => {
+                              onApprove();
+                              setWantsToChangeVote(false);
+                            },
+                            "success",
+                          );
+                        }}
+                        variant="contained"
+                      />
+                      <ActionButton
+                        color="warning"
+                        disabled={disableActions || currentVote?.decision === "RequestChanges"}
+                        icon={<ErrorOutlineIcon />}
+                        isPending={pendingAction === "requestChanges"}
+                        label={t("ecos.details.actions.requestChanges")}
+                        onClick={() => setIsRequestChangesOpen(true)}
+                        variant="outlined"
+                      />
+                      {wantsToChangeVote && (
+                        <Button
+                          size="small"
+                          color="inherit"
+                          onClick={() => setWantsToChangeVote(false)}
+                          sx={{ textTransform: "none" }}
+                        >
+                          {t("common.cancel")}
+                        </Button>
+                      )}
+                    </>
+                  )}
+
+                  {canCancel ? (
+                    <ActionButton
+                      color="error"
+                      disabled={disableActions}
+                      icon={<CancelIcon />}
+                      isPending={pendingAction === "cancel"}
+                      label={t("ecos.details.actions.cancel")}
+                      onClick={() =>
+                        confirmAction(
+                          t("ecos.details.confirmations.cancelTitle"),
+                          t("ecos.details.confirmations.cancelMessage"),
+                          onCancel,
+                          "error",
+                        )
+                      }
+                      variant="outlined"
+                    />
+                  ) : null}
+                </Stack>
+              </Stack>
+
+              <Divider />
+            </>
+          )}
+
+          {/* Comment Composer */}
+          <CommentComposer
+            ecoId={eco.id}
+            isBlocked={isBlocked}
+            isSubmitting={pendingAction === "comment"}
+            isUploading={pendingAction === "upload"}
+            onSubmit={onCommentSubmit}
+            onUpload={onUpload}
+          />
+        </Stack>
+      </CardContent>
+
+      <RequestChangesDialog
+        open={isRequestChangesOpen}
+        isPending={pendingAction === "requestChanges"}
+        onClose={() => setIsRequestChangesOpen(false)}
+        onConfirm={(comment) => {
+          setIsRequestChangesOpen(false);
+          onRequestChanges(comment);
+          setWantsToChangeVote(false);
+        }}
+      />
+
+      <ConfirmationDialog
+        open={confirmation.open}
+        title={confirmation.title}
+        message={confirmation.message}
+        onClose={() => setConfirmation({ ...confirmation, open: false })}
+        onConfirm={() => {
+          setConfirmation({ ...confirmation, open: false });
+          confirmation.onConfirm();
+        }}
+        color={confirmation.color}
+      />
+    </Card>
+  );
+}
+
+type ActionButtonProps = {
+  color: "primary" | "success" | "warning" | "error";
+  disabled: boolean;
+  icon: ReactNode;
+  isPending: boolean;
+  label: string;
+  onClick: () => void;
+  variant: "contained" | "outlined";
+};
+
+function ActionButton({
+  color,
+  disabled,
+  icon,
+  isPending,
+  label,
+  onClick,
+  variant,
+}: ActionButtonProps) {
+  return (
+    <Button
+      type="button"
+      color={color}
+      disabled={disabled}
+      onClick={onClick}
+      startIcon={isPending ? undefined : icon}
+      variant={variant}
+      sx={{ minWidth: 120, textTransform: "none", fontWeight: 600 }}
+    >
+      {isPending ? <CircularProgress color="inherit" size={20} thickness={5} /> : label}
+    </Button>
+  );
+}
+
+function ConfirmationDialog({
+  open,
+  title,
+  message,
+  onClose,
+  onConfirm,
+  color = "primary",
+}: {
+  open: boolean;
+  title: string;
+  message: string;
+  onClose: () => void;
+  onConfirm: () => void;
+  color?: "primary" | "error" | "success";
+}) {
+  const { t } = useTranslation();
+  return (
+    <Dialog open={open} onClose={onClose}>
+      <DialogTitle>{title}</DialogTitle>
+      <DialogContent>
+        <DialogContentText>{message}</DialogContentText>
+      </DialogContent>
+      <DialogActions sx={{ px: 3, pb: 2 }}>
+        <Button onClick={onClose} sx={{ textTransform: "none" }}>{t("common.cancel")}</Button>
+        <Button
+          onClick={onConfirm}
+          color={color}
+          variant="contained"
+          sx={{ textTransform: "none" }}
+          autoFocus
+        >
+          {t("common.confirm")}
+        </Button>
+      </DialogActions>
+    </Dialog>
+  );
+}
+
+type RequestChangesDialogProps = {
+  open: boolean;
+  isPending: boolean;
+  onClose: () => void;
+  onConfirm: (comment: string) => void;
+};
+
+/**
+ * Renders the request-changes dialog used by reviewers.
+ */
+function RequestChangesDialog({
+  open,
+  isPending,
+  onClose,
+  onConfirm,
+}: RequestChangesDialogProps) {
+  const { t } = useTranslation();
+  const [comment, setComment] = useState("");
+  const normalizedComment = comment.trim();
+  const isTooShort =
+    normalizedComment.length > 0 &&
+    normalizedComment.length < minimumRequestChangesLength;
+
+  return (
+    <Dialog open={open} onClose={onClose} fullWidth maxWidth="sm">
+      <DialogTitle>{t("ecos.details.confirmations.requestChangesTitle")}</DialogTitle>
+      <DialogContent>
+        <TextField
+          label={t("ecos.details.confirmations.requestChangesReason")}
+          value={comment}
+          onChange={(event) => setComment(event.target.value)}
+          error={isTooShort}
+          helperText={
+            isTooShort
+              ? t("ecos.details.confirmations.requestChangesMinLength", { count: minimumRequestChangesLength })
+              : `${comment.length}/${maximumCommentLength}`
+          }
+          multiline
+          minRows={4}
+          fullWidth
+          required
+          size="small"
+          sx={{ mt: 1 }}
+          slotProps={{ htmlInput: { maxLength: maximumCommentLength } }}
+        />
+      </DialogContent>
+      <DialogActions sx={{ px: 3, pb: 2 }}>
+        <Button disabled={isPending} onClick={onClose} sx={{ textTransform: "none" }}>
+          {t("common.cancel")}
+        </Button>
+        <Button
+          color="warning"
+          disabled={isPending || normalizedComment.length < minimumRequestChangesLength}
+          onClick={() => onConfirm(normalizedComment)}
+          variant="contained"
+          sx={{ textTransform: "none" }}
+        >
+          {t("ecos.details.actions.requestChanges")}
+        </Button>
+      </DialogActions>
+    </Dialog>
+  );
+}
+
+type ReviewersWidgetProps = {
+  approvals: EcoDetailsDto["approvals"];
+  approvers: EcoUserDto[];
+  minApprovalsRequired: number;
+  reviewRound: number;
+  usersById: Map<string, EcoUserDto>;
+};
+
+/**
+ * Renders quorum progress and approver status rows.
+ */
+function ReviewersWidget({
+  approvals,
+  approvers,
+  minApprovalsRequired,
+  reviewRound,
+  usersById,
+}: ReviewersWidgetProps) {
+  const { t, locale } = useTranslation();
+  const currentRoundApprovals = approvals.filter(
+    (approval) => approval.reviewRound === reviewRound,
+  );
+  const approvedCount = currentRoundApprovals.filter(
+    (approval) => approval.decision === "Approve",
+  ).length;
+
+  return (
+    <Card elevation={0} variant="outlined" sx={{ border: 1, borderColor: "divider" }}>
+      <CardContent>
+        <Stack spacing={2}>
+          <Stack spacing={0.5}>
+            <Typography variant="h6" component="h2" sx={{ fontSize: "1rem", fontWeight: 600 }}>
+              {t("ecos.details.reviewers.title")}
+            </Typography>
+            <Typography variant="body2" color="text.secondary">
+              {t("ecos.details.reviewers.approvalsRequired", { count: approvedCount, total: minApprovalsRequired })}
+            </Typography>
+          </Stack>
+          <Divider />
+          <List dense disablePadding>
+            {approvers.map((approver) => {
+              const decision = currentRoundApprovals.find(
+                (approval) => approval.approverUserId === approver.id,
+              );
+
+              return (
+                <ListItem key={approver.id} disableGutters>
+                  <ListItemIcon sx={{ minWidth: 36 }}>
+                    {renderDecisionIcon(decision?.decision)}
+                  </ListItemIcon>
+                  <ListItemText
+                    primary={approver.name}
+                    secondary={decision ? formatDateTime(decision.updatedAt, locale) : t("ecos.details.reviewers.pending")}
+                  />
+                </ListItem>
+              );
+            })}
+            {approvers.length === 0 ? (
+              <Typography variant="body2" color="text.secondary">
+                {t("ecos.details.reviewers.noApprovers")}
+              </Typography>
+            ) : null}
+          </List>
+          {currentRoundApprovals
+            .filter((approval) => !usersById.has(approval.approverUserId))
+            .map((approval) => (
+              <Chip
+                key={approval.id}
+                size="small"
+                label={`${formatShortId(approval.approverUserId)}: ${formatDecisionLabel(
+                  approval.decision,
+                  t
+                )}`}
+                sx={{ border: 1, borderColor: "divider" }}
+              />
+            ))}
+        </Stack>
+      </CardContent>
+    </Card>
+  );
+}
+
+function CommentCard({
+  comment,
+  highlighted,
+  user,
+  t,
+  locale
+}: {
   comment: EcoCommentDto;
   highlighted: boolean;
   user: EcoUserDto | undefined;
-};
-
-function CommentCard({ comment, highlighted, user }: CommentCardProps) {
+  t: (key: string) => string;
+  locale: string;
+}) {
   const authorName = user?.name ?? formatShortId(comment.authorUserId);
 
   return (
     <Card
       id={`comment-${comment.id}`}
-      elevation={highlighted ? 3 : 1}
+      elevation={0}
+      variant="outlined"
       sx={{
-        border: highlighted ? 1 : undefined,
-        borderColor: highlighted ? "primary.main" : undefined,
+        border: 1,
+        borderColor: highlighted ? "primary.main" : "divider",
         scrollMarginTop: 128,
+        zIndex: 1,
       }}
     >
       <CardContent>
@@ -924,7 +1214,7 @@ function CommentCard({ comment, highlighted, user }: CommentCardProps) {
             sx={{ alignItems: "center", justifyContent: "space-between" }}
           >
             <Stack direction="row" spacing={1} sx={{ alignItems: "center", minWidth: 0 }}>
-              <Avatar sx={{ width: 32, height: 32, fontSize: 13 }}>
+              <Avatar sx={{ width: 32, height: 32, fontSize: 13, border: 1, borderColor: "divider" }}>
                 {getInitials(authorName)}
               </Avatar>
               <Stack sx={{ minWidth: 0 }}>
@@ -932,11 +1222,11 @@ function CommentCard({ comment, highlighted, user }: CommentCardProps) {
                   {authorName}
                 </Typography>
                 <Typography variant="caption" color="text.secondary">
-                  {formatDateTime(comment.createdAt)}
+                  {formatDateTime(comment.createdAt, locale)}
                 </Typography>
               </Stack>
             </Stack>
-            <Tooltip title="Copy link">
+            <Tooltip title={t("ecos.details.comments.copyLink")}>
               <IconButton size="small" onClick={() => copyCommentLink(comment.id)}>
                 <ContentCopyIcon fontSize="small" />
               </IconButton>
@@ -949,31 +1239,54 @@ function CommentCard({ comment, highlighted, user }: CommentCardProps) {
   );
 }
 
-type SystemEventRowProps = {
+function SystemEventRow({
+  event,
+  user,
+  t,
+  locale
+}: {
   event: EcoEventDto;
   user: EcoUserDto | undefined;
-};
+  t: (key: string) => string;
+  locale: string;
+}) {
+  const eventLabelByType: Record<EcoEventType, string> = {
+    AffectedItemAdded: t("events.affectedItemAdded"),
+    AffectedItemRemoved: t("events.affectedItemRemoved"),
+    Approved: t("events.approved"),
+    AttachmentAdded: t("events.attachmentAdded"),
+    Canceled: t("events.canceled"),
+    ChangesRequested: t("events.changesRequested"),
+    CommentAdded: t("events.commentAdded"),
+    Created: t("events.created"),
+    DetailsUpdated: t("events.detailsUpdated"),
+    Implemented: t("events.implemented"),
+    Rejected: t("events.rejected"),
+    ReviewDecisionSubmitted: t("events.reviewDecisionSubmitted"),
+    SubmittedForReview: t("events.submittedForReview"),
+  };
 
-function SystemEventRow({ event, user }: SystemEventRowProps) {
   return (
     <Stack
       direction="row"
-      spacing={1}
+      spacing={1.5}
       sx={{
-        alignItems: "flex-start",
+        alignItems: "center",
         color: "text.secondary",
-        px: { xs: 0.5, md: 2 },
+        py: 0.5,
+        zIndex: 1,
+        position: "relative",
       }}
     >
-      <TimelineIcon fontSize="small" sx={{ mt: 0.25 }} />
-      <Typography variant="body2">
+      <Typography variant="body2" sx={{ flexGrow: 1 }}>
         <strong>{eventLabelByType[event.eventType]}</strong>
         {" by "}
         {user?.name ?? formatShortId(event.actorUserId)}
         {" • "}
         {event.description}
-        {" • "}
-        {formatDateTime(event.occurredAt)}
+      </Typography>
+      <Typography variant="caption" sx={{ whiteSpace: "nowrap" }}>
+        {formatDateTime(event.occurredAt, locale)}
       </Typography>
     </Stack>
   );
@@ -989,10 +1302,7 @@ type CommentComposerProps = {
 };
 
 /**
- * Renders the write/preview comment form with localStorage draft persistence.
- *
- * @param props - Composer props.
- * @returns Comment composer.
+ * Renders the write/preview comment form with account-namespaced draft persistence.
  */
 function CommentComposer({
   ecoId,
@@ -1002,16 +1312,20 @@ function CommentComposer({
   onSubmit,
   onUpload,
 }: CommentComposerProps) {
+  const { t } = useTranslation();
+  const { user } = useAuth();
   const [mode, setMode] = useState<"write" | "preview">("write");
   const fileInputRef = useRef<HTMLInputElement | null>(null);
-  const draftKey = `eco-${ecoId}-draft`;
+  const draftKey = `eco-${ecoId}-${user?.id}-draft`;
   const [draft, setDraft] = useState(() =>
     typeof window === "undefined" ? "" : window.localStorage.getItem(draftKey) ?? "",
   );
 
   useEffect(() => {
-    window.localStorage.setItem(draftKey, draft);
-  }, [draft, draftKey]);
+    if (user?.id) {
+      window.localStorage.setItem(draftKey, draft);
+    }
+  }, [draft, draftKey, user?.id]);
 
   async function handleSubmit(): Promise<void> {
     const body = draft.trim();
@@ -1035,77 +1349,74 @@ function CommentComposer({
   }
 
   return (
-    <Card elevation={1}>
-      <CardContent>
-        <Stack spacing={1.5}>
-          <Tabs value={mode} onChange={(_, value: "write" | "preview") => setMode(value)}>
-            <Tab value="write" label="Write" />
-            <Tab value="preview" label="Preview" />
-          </Tabs>
-          {mode === "write" ? (
-            <TextField
-              value={draft}
-              onChange={(event) => setDraft(event.target.value)}
-              placeholder="Leave a comment"
-              multiline
-              minRows={5}
-              fullWidth
-              disabled={isBlocked || isSubmitting}
-              slotProps={{ htmlInput: { maxLength: maximumCommentLength } }}
-            />
+    <Stack spacing={1.5}>
+      <Tabs value={mode} onChange={(_, value: "write" | "preview") => setMode(value)}>
+        <Tab value="write" label={t("ecos.details.comments.write")} />
+        <Tab value="preview" label={t("ecos.details.comments.preview")} />
+      </Tabs>
+      {mode === "write" ? (
+        <TextField
+          value={draft}
+          onChange={(event) => setDraft(event.target.value)}
+          placeholder={t("ecos.details.comments.placeholder")}
+          multiline
+          minRows={5}
+          fullWidth
+          disabled={isBlocked || isSubmitting}
+          slotProps={{ htmlInput: { maxLength: maximumCommentLength } }}
+          sx={{ "& .MuiOutlinedInput-root": { border: 1, borderColor: "divider" } }}
+        />
+      ) : (
+        <Paper variant="outlined" sx={{ minHeight: 148, p: 2, border: 1, borderColor: "divider" }}>
+          {draft.trim() ? (
+            <RichTextRenderer value={draft} />
           ) : (
-            <Paper variant="outlined" sx={{ minHeight: 148, p: 2 }}>
-              {draft.trim() ? (
-                <RichTextRenderer value={draft} />
-              ) : (
-                <Typography variant="body2" color="text.secondary">
-                  Nothing to preview.
-                </Typography>
-              )}
-            </Paper>
+            <Typography variant="body2" color="text.secondary">
+              {t("ecos.details.comments.nothingToPreview")}
+            </Typography>
           )}
-          <Stack
-            direction={{ xs: "column", sm: "row" }}
-            spacing={1}
-            sx={{ justifyContent: "space-between" }}
+        </Paper>
+      )}
+      <Stack
+        direction={{ xs: "column", sm: "row" }}
+        spacing={1}
+        sx={{ justifyContent: "space-between" }}
+      >
+        <Box>
+          <input
+            ref={fileInputRef}
+            hidden
+            type="file"
+            onChange={handleFileChange}
+            accept=".pdf,.png,.jpg,.jpeg,.csv,.xlsx,.step,.stp,.dwg"
+          />
+          <Button
+            type="button"
+            variant="outlined"
+            startIcon={<AttachFileIcon />}
+            disabled={isBlocked || isUploading}
+            onClick={() => fileInputRef.current?.click()}
+            sx={{ textTransform: "none", border: 1, borderColor: "divider" }}
           >
-            <Box>
-              <input
-                ref={fileInputRef}
-                hidden
-                type="file"
-                onChange={handleFileChange}
-                accept=".pdf,.png,.jpg,.jpeg,.csv,.xlsx,.step,.stp,.dwg"
-              />
-              <Button
-                type="button"
-                variant="outlined"
-                startIcon={<AttachFileIcon />}
-                disabled={isBlocked || isUploading}
-                onClick={() => fileInputRef.current?.click()}
-                sx={{ textTransform: "none" }}
-              >
-                {isUploading ? "Uploading" : "Attach file"}
-              </Button>
-            </Box>
-            <Button
-              type="button"
-              variant="contained"
-              startIcon={isSubmitting ? undefined : <SendIcon />}
-              disabled={isBlocked || isSubmitting || draft.trim().length === 0}
-              onClick={() => void handleSubmit()}
-              sx={{ minWidth: 132, textTransform: "none" }}
-            >
-              {isSubmitting ? (
-                <CircularProgress color="inherit" size={20} thickness={5} />
-              ) : (
-                "Comment"
-              )}
-            </Button>
-          </Stack>
-        </Stack>
-      </CardContent>
-    </Card>
+            {isUploading ? t("ecos.details.comments.uploading") : t("ecos.details.comments.attachFile")}
+          </Button>
+        </Box>
+        <Button
+          type="button"
+          variant="contained"
+          startIcon={isSubmitting ? undefined : <SendIcon />}
+          disabled={isBlocked || isSubmitting || draft.trim().length === 0}
+          onClick={() => void handleSubmit()}
+          sx={{ minWidth: 132, textTransform: "none" }}
+        >
+          {isSubmitting ? (
+            <CircularProgress color="inherit" size={20} thickness={5} />
+          ) : (
+            t("ecos.details.comments.commentButton")
+          )}
+        </Button>
+      </Stack>
+    </Stack>
   );
 }
 
@@ -1113,6 +1424,8 @@ type AffectedItemsTabProps = {
   canEdit: boolean;
   eco: EcoDetailsDto;
   isBlocked: boolean;
+  isLoading: boolean;
+  loadEcoDetails: () => Promise<void>;
   onAddItem: (item: AddAffectedItemRequest) => Promise<void> | void;
   onRemoveItem: (itemId: string) => Promise<void> | void;
   pendingAction: PendingAction | null;
@@ -1122,57 +1435,152 @@ function AffectedItemsTab({
   canEdit,
   eco,
   isBlocked,
+  isLoading,
+  loadEcoDetails,
   onAddItem,
   onRemoveItem,
   pendingAction,
 }: AffectedItemsTabProps) {
+  const { t } = useTranslation();
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
-  const columns = useMemo<GridColDef<EcoAffectedItemDto>[]>(
-    () => [
-      { field: "partNumber", headerName: "Part Number", minWidth: 160, flex: 1 },
-      { field: "description", headerName: "Description", minWidth: 240, flex: 1.5 },
-      { field: "currentRevision", headerName: "Current Rev", minWidth: 130 },
+  const [confirmation, setConfirmation] = useState<{ open: boolean; itemId: string | null }>({
+    open: false,
+    itemId: null,
+  });
+
+  const CustomToolbar = useMemo(() => {
+    return function AffectedItemsCustomToolbar(props: GridToolbarProps) {
+      return (
+        <DataGridCustomToolbar
+          {...props}
+          isLoading={isLoading}
+          onRefresh={() => void loadEcoDetails()}
+        />
+      );
+    };
+  }, [isLoading, loadEcoDetails]);
+
+  const columns = useMemo<GridColDef<EcoAffectedItemDto>[]>(() => {
+    const baseColumns: GridColDef<EcoAffectedItemDto>[] = [
       {
-        field: "arrow",
-        headerName: "",
-        width: 72,
-        sortable: false,
-        renderCell: () => (
-          <Typography variant="body2" color="text.secondary">
-            {"->"}
-          </Typography>
+        field: "partNumber",
+        headerName: t("ecos.details.affectedItems.columns.partNumber"),
+        width: 160,
+        headerAlign: "left",
+        align: "left",
+        renderCell: (params) => (
+          <Box sx={{ display: "flex", alignItems: "center", height: "100%" }}>
+            <Typography variant="body2" sx={{ fontWeight: 600, fontFamily: "monospace" }}>
+              {params.value}
+            </Typography>
+          </Box>
         ),
       },
-      { field: "newRevision", headerName: "New Rev", minWidth: 120 },
       {
-        field: "action",
-        headerName: "Action",
-        minWidth: 130,
-        renderCell: (params) => <AffectedItemActionChip action={params.row.action} />,
+        field: "description",
+        headerName: t("ecos.details.affectedItems.columns.description"),
+        minWidth: 200,
+        flex: 1,
+        headerAlign: "left",
+        align: "left",
+        renderCell: (params) => (
+          <Box sx={{ display: "flex", alignItems: "center", height: "100%", width: "100%" }}>
+            <Typography variant="body2" noWrap sx={{ width: "100%" }}>
+              {params.value}
+            </Typography>
+          </Box>
+        ),
       },
       {
+        field: "currentRevision",
+        headerName: t("ecos.details.affectedItems.columns.currentRev"),
+        width: 110,
+        headerAlign: "center",
+        align: "center",
+        renderCell: (params) => (
+          <Box sx={{ display: "flex", alignItems: "center", height: "100%" }}>
+            <Typography variant="body2" color="text.secondary">
+              {params.value}
+            </Typography>
+          </Box>
+        ),
+      },
+      {
+        field: "newRevision",
+        headerName: t("ecos.details.affectedItems.columns.newRev"),
+        width: 130,
+        headerAlign: "center",
+        align: "center",
+        renderCell: (params) => (
+          <Box
+            sx={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              height: "100%",
+              width: "100%",
+              gap: 1.5,
+            }}
+          >
+            <Typography variant="body2" color="text.secondary" sx={{ opacity: 0.5 }}>
+              {"->"}
+            </Typography>
+            <Typography variant="body2" sx={{ fontWeight: 600 }}>
+              {params.value}
+            </Typography>
+          </Box>
+        ),
+      },
+      {
+        field: "action",
+        headerName: t("ecos.details.affectedItems.columns.action"),
+        width: 140,
+        headerAlign: "center",
+        align: "center",
+        renderCell: (params) => (
+          <Box sx={{ display: "flex", alignItems: "center", height: "100%" }}>
+            <AffectedItemActionChip action={params.row.action} />
+          </Box>
+        ),
+      },
+    ];
+
+    if (canEdit) {
+      baseColumns.push({
         field: "remove",
-        headerName: "",
-        width: 76,
+        headerName: t("ecos.details.affectedItems.columns.actions"),
+        width: 100,
         sortable: false,
-        renderCell: (params) =>
-          canEdit ? (
-            <Tooltip title="Remove item">
+        headerAlign: "center",
+        align: "center",
+        renderCell: (params) => (
+          <Box
+            sx={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              height: "100%",
+              width: "100%",
+            }}
+          >
+            <Tooltip title={t("ecos.details.affectedItems.dialog.removeTitle")}>
               <span>
                 <IconButton
                   size="small"
                   disabled={isBlocked || pendingAction === "removeItem"}
-                  onClick={() => onRemoveItem(params.row.id)}
+                  onClick={() => setConfirmation({ open: true, itemId: params.row.id })}
                 >
                   <DeleteIcon fontSize="small" />
                 </IconButton>
               </span>
             </Tooltip>
-          ) : null,
-      },
-    ],
-    [canEdit, isBlocked, onRemoveItem, pendingAction],
-  );
+          </Box>
+        ),
+      });
+    }
+
+    return baseColumns;
+  }, [canEdit, isBlocked, pendingAction, t]);
 
   return (
     <Stack spacing={2}>
@@ -1183,32 +1591,53 @@ function AffectedItemsTab({
           startIcon={<AddIcon />}
           disabled={isBlocked}
           onClick={() => setIsAddDialogOpen(true)}
-          sx={{ alignSelf: "flex-start", textTransform: "none" }}
+          sx={{ alignSelf: "flex-start", textTransform: "none", fontWeight: 600 }}
         >
-          Add Item
+          {t("ecos.details.affectedItems.addButton")}
         </Button>
       ) : null}
-      <Box sx={{ width: "100%", overflowX: "auto" }}>
-        <Box sx={{ minWidth: 900, height: 460 }}>
-          <DataGrid
-            rows={eco.affectedItems}
-            columns={columns}
-            getRowId={(row) => row.id}
-            disableRowSelectionOnClick
-            pageSizeOptions={[10, 25, 50]}
-            initialState={{ pagination: { paginationModel: { pageSize: 10 } } }}
-            getRowClassName={(params) =>
-              params.row.action === "Remove" ? "affected-item-obsolete" : ""
-            }
-            sx={{
-              border: 0,
-              "& .affected-item-obsolete .MuiDataGrid-cell": {
-                color: "text.secondary",
-                textDecoration: "line-through",
-              },
-            }}
-          />
-        </Box>
+      <Box sx={{ width: "100%", height: 480, border: 1, borderColor: "divider", borderRadius: 2, overflow: "hidden", bgcolor: "background.paper" }}>
+        <DataGrid
+          rows={eco.affectedItems}
+          columns={columns}
+          getRowId={(row) => row.id}
+          disableRowSelectionOnClick
+          pageSizeOptions={[10, 25, 50]}
+          initialState={{ pagination: { paginationModel: { pageSize: 10 } } }}
+          getRowClassName={(params) =>
+            params.row.action === "Remove" ? "affected-item-obsolete" : ""
+          }
+          slots={{
+            toolbar: CustomToolbar,
+            noRowsOverlay: () => (
+              <DataGridEmptyState
+                message={t("ecos.details.affectedItems.emptyMessage")}
+                description={t("ecos.details.affectedItems.emptyDescription")}
+              />
+            ),
+          }}
+          sx={{
+            height: "100%",
+            border: 0,
+            "& .MuiDataGrid-main": {
+              borderColor: "divider",
+            },
+            "& .MuiDataGrid-columnHeaders": {
+              bgcolor: "action.hover",
+              borderBottom: 1,
+              borderColor: "divider",
+            },
+            "& .MuiDataGrid-cell": {
+              borderColor: "divider",
+              display: "flex !important",
+              alignItems: "center !important",
+            },
+            "& .affected-item-obsolete .MuiDataGrid-cell": {
+              color: "text.secondary",
+              textDecoration: "line-through",
+            },
+          }}
+        />
       </Box>
       {isAddDialogOpen ? (
         <AddAffectedItemDialog
@@ -1221,23 +1650,35 @@ function AffectedItemsTab({
           }}
         />
       ) : null}
+      <ConfirmationDialog
+        open={confirmation.open}
+        title={t("ecos.details.affectedItems.dialog.removeTitle")}
+        message={t("ecos.details.affectedItems.dialog.removeMessage")}
+        onClose={() => setConfirmation({ open: false, itemId: null })}
+        onConfirm={() => {
+          if (confirmation.itemId) {
+            onRemoveItem(confirmation.itemId);
+          }
+          setConfirmation({ open: false, itemId: null });
+        }}
+        color="error"
+      />
     </Stack>
   );
 }
-
-type AddAffectedItemDialogProps = {
-  open: boolean;
-  isPending: boolean;
-  onClose: () => void;
-  onConfirm: (item: AddAffectedItemRequest) => void;
-};
 
 function AddAffectedItemDialog({
   open,
   isPending,
   onClose,
   onConfirm,
-}: AddAffectedItemDialogProps) {
+}: {
+  open: boolean;
+  isPending: boolean;
+  onClose: () => void;
+  onConfirm: (item: AddAffectedItemRequest) => void;
+}) {
+  const { t } = useTranslation();
   const [form, setForm] = useState<AffectedItemFormState>(initialAffectedItemForm);
   const isValid =
     form.partNumber.trim() &&
@@ -1251,12 +1692,12 @@ function AddAffectedItemDialog({
 
   return (
     <Dialog open={open} onClose={onClose} fullWidth maxWidth="md">
-      <DialogTitle>Add Affected Item</DialogTitle>
+      <DialogTitle>{t("ecos.details.affectedItems.dialog.title")}</DialogTitle>
       <DialogContent>
         <Grid container spacing={2} sx={{ pt: 1 }}>
           <Grid size={{ xs: 12, md: 5 }}>
             <TextField
-              label="Part Number"
+              label={t("ecos.details.affectedItems.columns.partNumber")}
               value={form.partNumber}
               onChange={(event) => patchForm({ partNumber: event.target.value })}
               fullWidth
@@ -1266,7 +1707,7 @@ function AddAffectedItemDialog({
           </Grid>
           <Grid size={{ xs: 12, md: 3 }}>
             <TextField
-              label="Current Rev"
+              label={t("ecos.details.affectedItems.columns.currentRev")}
               value={form.currentRevision}
               onChange={(event) => patchForm({ currentRevision: event.target.value })}
               fullWidth
@@ -1276,7 +1717,7 @@ function AddAffectedItemDialog({
           </Grid>
           <Grid size={{ xs: 12, md: 3 }}>
             <TextField
-              label="New Rev"
+              label={t("ecos.details.affectedItems.columns.newRev")}
               value={form.newRevision}
               onChange={(event) => patchForm({ newRevision: event.target.value })}
               fullWidth
@@ -1286,24 +1727,24 @@ function AddAffectedItemDialog({
           </Grid>
           <Grid size={{ xs: 12, md: 3 }}>
             <FormControl fullWidth size="small">
-              <InputLabel id="affected-item-action-label">Action</InputLabel>
+              <InputLabel id="affected-item-action-label">{t("ecos.details.affectedItems.columns.action")}</InputLabel>
               <Select
                 labelId="affected-item-action-label"
-                label="Action"
+                label={t("ecos.details.affectedItems.columns.action")}
                 value={form.action}
                 onChange={(event: SelectChangeEvent) =>
                   patchForm({ action: event.target.value as EcoAffectedItemAction })
                 }
               >
-                <MenuItem value="Add">Create</MenuItem>
-                <MenuItem value="Modify">Modify</MenuItem>
-                <MenuItem value="Remove">Obsolete</MenuItem>
+                <MenuItem value="Add">{t("ecos.details.affectedItems.actions.add")}</MenuItem>
+                <MenuItem value="Modify">{t("ecos.details.affectedItems.actions.modify")}</MenuItem>
+                <MenuItem value="Remove">{t("ecos.details.affectedItems.actions.remove")}</MenuItem>
               </Select>
             </FormControl>
           </Grid>
           <Grid size={12}>
             <TextField
-              label="Description"
+              label={t("ecos.details.affectedItems.columns.description")}
               value={form.description}
               onChange={(event) => patchForm({ description: event.target.value })}
               fullWidth
@@ -1317,7 +1758,7 @@ function AddAffectedItemDialog({
       </DialogContent>
       <DialogActions sx={{ px: 3, pb: 2 }}>
         <Button disabled={isPending} onClick={onClose} sx={{ textTransform: "none" }}>
-          Cancel
+          {t("common.cancel")}
         </Button>
         <Button
           disabled={isPending || !isValid}
@@ -1333,7 +1774,7 @@ function AddAffectedItemDialog({
           variant="contained"
           sx={{ textTransform: "none" }}
         >
-          Add Item
+          {t("ecos.details.affectedItems.addButton")}
         </Button>
       </DialogActions>
     </Dialog>
@@ -1341,10 +1782,11 @@ function AddAffectedItemDialog({
 }
 
 function AffectedItemActionChip({ action }: { action: EcoAffectedItemAction }) {
+  const { t } = useTranslation();
   const labelByAction: Record<EcoAffectedItemAction, string> = {
-    Add: "Create",
-    Modify: "Modify",
-    Remove: "Obsolete",
+    Add: t("ecos.details.affectedItems.actions.add"),
+    Modify: t("ecos.details.affectedItems.actions.modify"),
+    Remove: t("ecos.details.affectedItems.actions.remove"),
   };
   const sxByAction: Record<EcoAffectedItemAction, object> = {
     Add: { bgcolor: "rgba(46, 125, 50, 0.12)", color: "success.dark" },
@@ -1352,16 +1794,19 @@ function AffectedItemActionChip({ action }: { action: EcoAffectedItemAction }) {
     Remove: { bgcolor: "rgba(211, 47, 47, 0.12)", color: "error.dark" },
   };
 
-  return <Chip label={labelByAction[action]} size="small" sx={sxByAction[action]} />;
+  return <Chip label={labelByAction[action]} size="small" sx={{ ...sxByAction[action], border: 1, borderColor: "divider" }} />;
 }
 
-type FilesTabProps = {
+function FilesTab({
+  attachments,
+  ecoId,
+  usersById,
+}: {
   attachments: EcoAttachmentDto[];
   ecoId: string;
   usersById: Map<string, EcoUserDto>;
-};
-
-function FilesTab({ attachments, ecoId, usersById }: FilesTabProps) {
+}) {
+  const { t } = useTranslation();
   const [selectedAttachment, setSelectedAttachment] = useState<EcoAttachmentDto | null>(null);
 
   if (attachments.length === 0) {
@@ -1369,7 +1814,7 @@ function FilesTab({ attachments, ecoId, usersById }: FilesTabProps) {
       <Stack spacing={1.5} sx={{ alignItems: "center", py: 6, textAlign: "center" }}>
         <InsertDriveFileIcon sx={{ color: "grey.500", fontSize: 48 }} />
         <Typography variant="body2" color="text.secondary">
-          No files have been attached to this ECO.
+          {t("ecos.details.attachments.emptyMessage")}
         </Typography>
       </Stack>
     );
@@ -1394,7 +1839,9 @@ function FilesTab({ attachments, ecoId, usersById }: FilesTabProps) {
                   width: "100%",
                   cursor: "pointer",
                   bgcolor: "background.paper",
+                  border: 1,
                   borderColor: "divider",
+                  "&:hover": { bgcolor: "action.hover" },
                 }}
               >
                 <Stack direction="row" spacing={1.25} sx={{ alignItems: "flex-start" }}>
@@ -1407,7 +1854,7 @@ function FilesTab({ attachments, ecoId, usersById }: FilesTabProps) {
                       {formatFileSize(attachment.fileSize)} • {attachment.mimeType}
                     </Typography>
                     <Typography variant="caption" color="text.secondary" noWrap>
-                      Uploaded by {uploader?.name ?? formatShortId(attachment.uploadedByUserId)}
+                      {t("ecos.details.attachments.uploadedBy", { name: uploader?.name ?? formatShortId(attachment.uploadedByUserId) })}
                     </Typography>
                   </Stack>
                 </Stack>
@@ -1427,14 +1874,18 @@ function FilesTab({ attachments, ecoId, usersById }: FilesTabProps) {
   );
 }
 
-type AttachmentDrawerProps = {
+function AttachmentDrawer({
+  attachment,
+  ecoId,
+  uploader,
+  onClose,
+}: {
   attachment: EcoAttachmentDto | null;
   ecoId: string;
   uploader: EcoUserDto | undefined;
   onClose: () => void;
-};
-
-function AttachmentDrawer({ attachment, ecoId, uploader, onClose }: AttachmentDrawerProps) {
+}) {
+  const { t, locale } = useTranslation();
   const [isDownloading, setIsDownloading] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
@@ -1454,7 +1905,7 @@ function AttachmentDrawer({ attachment, ecoId, uploader, onClose }: AttachmentDr
       );
       window.open(download.url, "_blank", "noopener,noreferrer");
     } catch (error) {
-      setErrorMessage(getActionErrorMessage(error));
+      setErrorMessage(getActionErrorMessage(error, t));
     } finally {
       setIsDownloading(false);
     }
@@ -1465,12 +1916,12 @@ function AttachmentDrawer({ attachment, ecoId, uploader, onClose }: AttachmentDr
       anchor="right"
       open={Boolean(attachment)}
       onClose={onClose}
-      slotProps={{ paper: { sx: { width: { xs: "100%", sm: 460 } } } }}
+      slotProps={{ paper: { sx: { width: { xs: "100%", sm: 500 }, borderLeft: 1, borderColor: "divider" } } }}
     >
-      <Stack spacing={2} sx={{ p: 2.5 }}>
+      <Stack spacing={2.5} sx={{ p: 3 }}>
         <Stack direction="row" sx={{ alignItems: "center", justifyContent: "space-between" }}>
           <Typography variant="h6" component="h2">
-            File Details
+            {t("ecos.details.attachments.drawer.title")}
           </Typography>
           <IconButton onClick={onClose} size="small">
             <CloseIcon fontSize="small" />
@@ -1479,21 +1930,21 @@ function AttachmentDrawer({ attachment, ecoId, uploader, onClose }: AttachmentDr
         {attachment ? (
           <>
             <Divider />
-            <Stack spacing={1}>
-              <Typography variant="body1" sx={{ fontWeight: 600, overflowWrap: "anywhere" }}>
+            <Stack spacing={1.5}>
+              <Typography variant="subtitle1" sx={{ fontWeight: 600, overflowWrap: "anywhere" }}>
                 {attachment.fileName}
               </Typography>
-              <DetailRow label="Size">{formatFileSize(attachment.fileSize)}</DetailRow>
-              <DetailRow label="Type">{attachment.mimeType}</DetailRow>
-              <DetailRow label="Uploaded by">
+              <DetailRow label={t("ecos.details.attachments.drawer.labels.size")}>{formatFileSize(attachment.fileSize)}</DetailRow>
+              <DetailRow label={t("ecos.details.attachments.drawer.labels.type")}>{attachment.mimeType}</DetailRow>
+              <DetailRow label={t("ecos.details.attachments.drawer.labels.uploadedBy")}>
                 {uploader?.name ?? formatShortId(attachment.uploadedByUserId)}
               </DetailRow>
-              <DetailRow label="Uploaded">{formatDateTime(attachment.uploadedAt)}</DetailRow>
-              <DetailRow label="Object key">
+              <DetailRow label={t("ecos.details.attachments.drawer.labels.uploaded")}>{formatDateTime(attachment.uploadedAt, locale)}</DetailRow>
+              <DetailRow label={t("ecos.details.attachments.drawer.labels.objectKey")}>
                 <Typography
                   component="span"
                   variant="body2"
-                  sx={{ fontFamily: "monospace", overflowWrap: "anywhere" }}
+                  sx={{ fontFamily: "monospace", overflowWrap: "anywhere", fontSize: "0.8rem", color: "text.secondary" }}
                 >
                   {attachment.objectKey}
                 </Typography>
@@ -1503,15 +1954,17 @@ function AttachmentDrawer({ attachment, ecoId, uploader, onClose }: AttachmentDr
             <Button
               type="button"
               variant="contained"
+              size="large"
+              fullWidth
               startIcon={isDownloading ? undefined : <DownloadIcon />}
               disabled={isDownloading}
               onClick={() => void handleDownload()}
-              sx={{ textTransform: "none" }}
+              sx={{ textTransform: "none", mt: 2, fontWeight: 600 }}
             >
               {isDownloading ? (
-                <CircularProgress color="inherit" size={20} thickness={5} />
+                <CircularProgress color="inherit" size={24} thickness={5} />
               ) : (
-                "Download"
+                t("ecos.details.attachments.drawer.downloadButton")
               )}
             </Button>
           </>
@@ -1524,7 +1977,7 @@ function AttachmentDrawer({ attachment, ecoId, uploader, onClose }: AttachmentDr
 function DetailRow({ label, children }: { label: string; children: ReactNode }) {
   return (
     <Stack spacing={0.25}>
-      <Typography variant="caption" color="text.secondary">
+      <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 600, textTransform: "uppercase", letterSpacing: 0.5 }}>
         {label}
       </Typography>
       <Box>{children}</Box>
@@ -1536,15 +1989,6 @@ function EcoDetailsSkeleton() {
   return (
     <Stack spacing={2.5}>
       <Skeleton variant="text" width="40%" height={48} />
-      <Skeleton variant="rounded" height={72} />
-      <Grid container spacing={2.5}>
-        <Grid size={{ xs: 12, lg: 8 }}>
-          <Skeleton variant="rounded" height={220} />
-        </Grid>
-        <Grid size={{ xs: 12, lg: 4 }}>
-          <Skeleton variant="rounded" height={220} />
-        </Grid>
-      </Grid>
       <Skeleton variant="rounded" height={420} />
     </Stack>
   );
@@ -1621,8 +2065,8 @@ function renderDecisionIcon(decision: EcoApprovalDecision | undefined): ReactNod
   return <HourglassEmptyIcon color="disabled" fontSize="small" />;
 }
 
-function formatDecisionLabel(decision: EcoApprovalDecision): string {
-  return decision === "Approve" ? "Approved" : "Requested changes";
+function formatDecisionLabel(decision: EcoApprovalDecision, t: (key: string) => string): string {
+  return decision === "Approve" ? t("ecos.details.actions.approved") : t("ecos.details.actions.changesRequested");
 }
 
 function readRouteEcoId(value: string | string[] | undefined): string | null {
@@ -1650,14 +2094,14 @@ function formatShortId(id: string): string {
   return id.length > 8 ? id.slice(0, 8).toUpperCase() : id.toUpperCase();
 }
 
-function formatDateTime(value: string): string {
+function formatDateTime(value: string, locale: string): string {
   const timestamp = Date.parse(value);
 
   if (Number.isNaN(timestamp)) {
     return "-";
   }
 
-  return new Intl.DateTimeFormat("en-US", {
+  return new Intl.DateTimeFormat(locale === "pt-BR" ? "pt-BR" : "en-US", {
     dateStyle: "medium",
     timeStyle: "short",
   }).format(timestamp);
@@ -1692,24 +2136,24 @@ function copyCommentLink(commentId: string): void {
   void window.navigator.clipboard?.writeText(nextUrl);
 }
 
-function getLoadEcoErrorMessage(error: unknown): string {
+function getLoadEcoErrorMessage(error: unknown, t: (key: string) => string): string {
   if (error instanceof ApiError && error.status === 404) {
-    return "The requested Engineering Change Order was not found.";
+    return t("ecos.details.loadError");
   }
 
   if (error instanceof ApiError) {
-    return readProblemDetailsMessage(error.details) ?? "Unable to load the Engineering Change Order.";
+    return readProblemDetailsMessage(error.details) ?? t("ecos.details.loadError");
   }
 
-  return "Unable to load the Engineering Change Order. Check your connection and try again.";
+  return t("ecos.details.loadError");
 }
 
-function getActionErrorMessage(error: unknown): string {
+function getActionErrorMessage(error: unknown, t: (key: string) => string): string {
   if (error instanceof ApiError) {
-    return readProblemDetailsMessage(error.details) ?? "The ECO action failed.";
+    return readProblemDetailsMessage(error.details) ?? t("common.error");
   }
 
-  return "The ECO action failed. Check your connection and try again.";
+  return t("common.error");
 }
 
 function readProblemDetailsMessage(details: unknown): string | null {

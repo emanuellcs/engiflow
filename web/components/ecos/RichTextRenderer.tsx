@@ -10,6 +10,7 @@ import ReactMarkdown, { type Components } from "react-markdown";
 import rehypeKatex from "rehype-katex";
 import remarkGfm from "remark-gfm";
 import remarkMath from "remark-math";
+import { useTranslation } from "@/context/I18nContext";
 
 export type RichTextRendererProps = {
   /** Markdown source to render. */
@@ -27,7 +28,79 @@ let isMermaidInitialized = false;
  */
 export default function RichTextRenderer({ value }: RichTextRendererProps) {
   return (
-    <Box className="rich-text-renderer">
+    <Box
+      className="rich-text-renderer"
+      sx={{
+        "& table": {
+          borderCollapse: "collapse",
+          width: "100%",
+          mb: 2,
+          mt: 1,
+          display: "block",
+          overflowX: "auto",
+        },
+        "& th, & td": {
+          border: 1,
+          borderColor: "divider",
+          p: 1.5,
+          textAlign: "left",
+          minWidth: 120,
+        },
+        "& th": {
+          bgcolor: "action.hover",
+          fontWeight: 600,
+          color: "text.primary",
+        },
+        "& td": {
+          color: "text.secondary",
+          verticalAlign: "top",
+        },
+        "& pre": {
+          bgcolor: "action.hover",
+          p: 2,
+          borderRadius: 1,
+          overflowX: "auto",
+          border: 1,
+          borderColor: "divider",
+          my: 2,
+        },
+        "& code": {
+          fontFamily: "monospace",
+          fontSize: "0.875rem",
+          bgcolor: "action.hover",
+          px: 0.75,
+          py: 0.25,
+          borderRadius: 0.5,
+          color: "text.primary",
+        },
+        "& pre > code": {
+          bgcolor: "transparent",
+          p: 0,
+          px: 0,
+          py: 0,
+          borderRadius: 0,
+          display: "block",
+          fontSize: "0.8125rem",
+        },
+        "& .katex-display": {
+          my: 2,
+          p: 1.5,
+          overflowX: "auto",
+          overflowY: "hidden",
+        },
+        "& p": {
+          mb: 1.5,
+          "&:last-child": { mb: 0 },
+        },
+        "& ul, & ol": {
+          mb: 1.5,
+          pl: 3,
+        },
+        "& li": {
+          mb: 0.5,
+        },
+      }}
+    >
       <ReactMarkdown
         remarkPlugins={[remarkGfm, remarkMath]}
         rehypePlugins={[rehypeKatex]}
@@ -87,6 +160,7 @@ type MermaidDiagramProps = {
  * @returns Diagram container or a validation error.
  */
 function MermaidDiagram({ definition }: MermaidDiagramProps) {
+  const { t } = useTranslation();
   const reactId = useId();
   const containerRef = useRef<HTMLDivElement | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -125,7 +199,7 @@ function MermaidDiagram({ definition }: MermaidDiagramProps) {
         }
       } catch (error) {
         if (!isCanceled) {
-          setErrorMessage(getMermaidErrorMessage(error));
+          setErrorMessage(getMermaidErrorMessage(error, t));
         }
       } finally {
         if (!isCanceled) {
@@ -142,7 +216,7 @@ function MermaidDiagram({ definition }: MermaidDiagramProps) {
         renderedContainer.replaceChildren();
       }
     };
-  }, [definition, reactId]);
+  }, [definition, reactId, t]);
 
   if (errorMessage) {
     return (
@@ -166,7 +240,7 @@ function MermaidDiagram({ definition }: MermaidDiagramProps) {
         <Stack direction="row" spacing={1} sx={{ alignItems: "center" }}>
           <CircularProgress size={18} />
           <Typography variant="caption" color="text.secondary">
-            Rendering diagram
+            {t("mermaid.rendering")}
           </Typography>
         </Stack>
       ) : null}
@@ -199,10 +273,10 @@ function normalizeSafeHref(href: string | undefined): string | null {
   return null;
 }
 
-function getMermaidErrorMessage(error: unknown): string {
+function getMermaidErrorMessage(error: unknown, t: (key: string, params?: Record<string, string | number>) => string): string {
   if (error instanceof Error && error.message.trim().length > 0) {
-    return `Unable to render Mermaid diagram: ${error.message}`;
+    return t("mermaid.error", { error: error.message });
   }
 
-  return "Unable to render Mermaid diagram.";
+  return t("mermaid.errorDefault");
 }

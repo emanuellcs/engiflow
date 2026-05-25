@@ -60,7 +60,23 @@ public interface IEngineeringChangeOrderRepository
     /// <param name="cancellationToken">A token that can cancel the persistence operation.</param>
     /// <returns>The total ECO count for the current tenant.</returns>
     Task<int> CountAsync(EcoListFilter? filter = null, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Lists the most recent audit events across all ECOs in the current tenant.
+    /// </summary>
+    /// <param name="limit">The maximum number of events to return.</param>
+    /// <param name="cancellationToken">A token that can cancel the persistence operation.</param>
+    /// <returns>The requested list of recent audit events with actor and ECO context.</returns>
+    Task<IReadOnlyList<EcoActivityDto>> ListRecentActivityAsync(int limit, CancellationToken cancellationToken = default);
 }
+
+/// <summary>
+/// Represents a rich ECO activity entry for dashboard feeds.
+/// </summary>
+public sealed record EcoActivityDto(
+    EcoEvent Event,
+    string ActorName,
+    string EcoTitle);
 
 /// <summary>
 /// Defines optional tenant-scoped ECO list filtering criteria.

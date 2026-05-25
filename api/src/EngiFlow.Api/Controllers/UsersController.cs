@@ -30,10 +30,10 @@ public sealed class UsersController : ControllerBase
     }
 
     /// <summary>
-    /// Lists active users for the current tenant.
+    /// Lists active, pending, and deactivated users for current-tenant administration.
     /// </summary>
     /// <param name="cancellationToken">A token that can cancel the request.</param>
-    /// <returns>The active tenant users.</returns>
+    /// <returns>The tenant users visible to administration.</returns>
     /// <response code="200">The tenant users were returned.</response>
     /// <response code="401">A valid bearer token is required.</response>
     /// <response code="403">The authenticated user is not allowed to manage users.</response>
@@ -55,12 +55,12 @@ public sealed class UsersController : ControllerBase
     }
 
     /// <summary>
-    /// Creates an active user for the current tenant.
+    /// Invites a pending activation user for the current tenant.
     /// </summary>
     /// <param name="request">The user invitation details supplied by an administrator.</param>
     /// <param name="cancellationToken">A token that can cancel the request.</param>
-    /// <returns>The created user summary.</returns>
-    /// <response code="201">The user was created.</response>
+    /// <returns>The invited user summary.</returns>
+    /// <response code="201">The user was invited.</response>
     /// <response code="400">The request body failed application validation.</response>
     /// <response code="401">A valid bearer token is required.</response>
     /// <response code="403">The authenticated user is not allowed to manage users.</response>
@@ -79,7 +79,6 @@ public sealed class UsersController : ControllerBase
                 new CreateUserCommand(
                     request.Name,
                     request.Email,
-                    request.Password,
                     request.Role),
                 cancellationToken)
             .ConfigureAwait(false);
@@ -130,8 +129,8 @@ public sealed class UsersController : ControllerBase
     /// Deactivates a tenant user without deleting their database row.
     /// </summary>
     /// <remarks>
-    /// The command performs a soft delete by setting the user inactive. Inactive users are
-    /// hidden by the EF Core global query filter and cannot authenticate.
+    /// The command performs a lifecycle soft delete by setting the user status to deactivated.
+    /// Deactivated users are hidden by the EF Core global query filter and cannot authenticate.
     /// </remarks>
     /// <param name="id">The target user identifier.</param>
     /// <param name="cancellationToken">A token that can cancel the request.</param>
@@ -161,5 +160,40 @@ public sealed class UsersController : ControllerBase
             .ConfigureAwait(false);
 
         return NoContent();
+    }
+
+    /// <summary>
+    /// Reactivates a deactivated tenant user and records the required audit reason.
+    /// </summary>
+    /// <param name="id">The target user identifier.</param>
+    /// <param name="request">The required compliance reason.</param>
+    /// <param name="cancellationToken">A token that can cancel the request.</param>
+    /// <returns>The updated user summary.</returns>
+    /// <response code="200">The user was reactivated.</response>
+    /// <response code="400">The request failed application validation.</response>
+    /// <response code="401">A valid bearer token is required.</response>
+    /// <response code="403">The authenticated user is not allowed to manage the target user.</response>
+    /// <response code="404">The target user was not found.</response>
+    /// <response code="409">A user lifecycle rule rejected the request.</response>
+    /// <response code="500">An unexpected server error occurred.</response>
+    [HttpPut("{id:guid}/reactivate")]
+    [ProducesResponseType(typeof(UserSummaryDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ValidationProblemDetails), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status409Conflict)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status500InternalServerError)]
+    public async Task<ActionResult<UserSummaryDto>> ReactivateAsync(
+        Guid id,
+        [FromBody] ReactivateUserRequest request,
+        CancellationToken cancellationToken)
+    {
+        var user = await _mediator.SendCommandAsync<ReactivateUserCommand, UserSummaryDto>(
+                new ReactivateUserCommand(id, request.Reason),
+                cancellationToken)
+            .ConfigureAwait(false);
+
+        return Ok(user);
     }
 }

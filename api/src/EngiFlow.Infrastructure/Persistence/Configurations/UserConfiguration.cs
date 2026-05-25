@@ -20,11 +20,19 @@ internal sealed class UserConfiguration : IEntityTypeConfiguration<User>
     {
         builder.ToTable(
             "users",
-            table => table.HasCheckConstraint(
-                "ck_users_role",
-                "\"role\" IN ('Owner', 'Administrator', 'Approver', 'Requester', 'Viewer')"));
+            table =>
+            {
+                table.HasCheckConstraint(
+                    "ck_users_role",
+                    "\"role\" IN ('Owner', 'Administrator', 'Approver', 'Requester', 'Viewer')");
+                table.HasCheckConstraint(
+                    "ck_users_status",
+                    "\"status\" IN ('PendingActivation', 'Active', 'Deactivated')");
+            });
 
         builder.HasKey(user => user.Id);
+
+        builder.Ignore(user => user.IsActive);
 
         builder.HasAlternateKey(user => new { user.Id, user.CompanyId })
             .HasName("ak_users_id_company_id");
@@ -58,10 +66,12 @@ internal sealed class UserConfiguration : IEntityTypeConfiguration<User>
         builder.Property(user => user.PasswordHash)
             .HasColumnName("password_hash")
             .HasMaxLength(512)
-            .IsRequired();
+            .IsRequired(false);
 
-        builder.Property(user => user.IsActive)
-            .HasColumnName("is_active")
+        builder.Property(user => user.Status)
+            .HasColumnName("status")
+            .HasConversion<string>()
+            .HasMaxLength(32)
             .IsRequired();
 
         builder.Property(user => user.CreatedAt)
@@ -81,11 +91,10 @@ internal sealed class UserConfiguration : IEntityTypeConfiguration<User>
             .IsUnique()
             .HasDatabaseName("ux_users_company_id_email");
 
-        builder.HasIndex(user => user.Email)
-            .IsUnique()
-            .HasDatabaseName("ux_users_email");
-
         builder.HasIndex(user => new { user.CompanyId, user.Role })
             .HasDatabaseName("ix_users_company_id_role");
+
+        builder.HasIndex(user => new { user.CompanyId, user.Status })
+            .HasDatabaseName("ix_users_company_id_status");
     }
 }

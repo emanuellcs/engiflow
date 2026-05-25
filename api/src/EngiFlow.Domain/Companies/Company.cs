@@ -1,3 +1,4 @@
+using System.Net.Mail;
 using EngiFlow.Domain.Exceptions;
 using EngiFlow.Domain.Guards;
 using EngiFlow.Domain.Users;
@@ -29,11 +30,13 @@ public sealed class Company
     /// </summary>
     /// <param name="id">The tenant identifier.</param>
     /// <param name="name">The tenant display name.</param>
+    /// <param name="contactEmail">The optional tenant contact email.</param>
     /// <param name="createdAt">The UTC creation timestamp.</param>
-    private Company(CompanyId id, string name, DateTimeOffset createdAt)
+    private Company(CompanyId id, string name, string? contactEmail, DateTimeOffset createdAt)
     {
         Id = id;
         Name = name;
+        ContactEmail = contactEmail;
         IsActive = true;
         CreatedAt = createdAt;
     }
@@ -47,6 +50,11 @@ public sealed class Company
     /// Gets the company display name.
     /// </summary>
     public string Name { get; private set; } = string.Empty;
+
+    /// <summary>
+    /// Gets the primary contact email for tenant selection and onboarding messages.
+    /// </summary>
+    public string? ContactEmail { get; private set; }
 
     /// <summary>
     /// Gets a value indicating whether the tenant can be changed or receive new users.
@@ -77,12 +85,14 @@ public sealed class Company
     /// </summary>
     /// <param name="name">The company display name.</param>
     /// <param name="createdAt">Optional timestamp used for deterministic tests or imports.</param>
+    /// <param name="contactEmail">Optional tenant contact email used in workspace selection.</param>
     /// <returns>A new active company tenant.</returns>
-    public static Company Create(string name, DateTimeOffset? createdAt = null)
+    public static Company Create(string name, DateTimeOffset? createdAt = null, string? contactEmail = null)
     {
         return new Company(
             CompanyId.New(),
             DomainGuard.Required(name, nameof(name), 200),
+            string.IsNullOrWhiteSpace(contactEmail) ? null : NormalizeContactEmail(contactEmail),
             DomainGuard.UtcTimestamp(createdAt));
     }
 
@@ -95,6 +105,16 @@ public sealed class Company
     {
         EnsureActive();
         Name = DomainGuard.Required(name, nameof(name), 200);
+    }
+
+    /// <summary>
+    /// Changes the tenant contact email used in pre-auth workspace selection.
+    /// </summary>
+    /// <param name="contactEmail">The new tenant contact email.</param>
+    public void SetContactEmail(string contactEmail)
+    {
+        EnsureActive();
+        ContactEmail = NormalizeContactEmail(contactEmail);
     }
 
     /// <summary>
@@ -115,6 +135,28 @@ public sealed class Company
         EnsureActive();
 
         var user = User.Create(Id, email, displayName, role, createdAt);
+        _users.Add(user);
+        return user;
+    }
+
+    /// <summary>
+    /// Registers a pending activation user inside this company tenant.
+    /// </summary>
+    /// <param name="email">The user's email address.</param>
+    /// <param name="displayName">The user's display name.</param>
+    /// <param name="role">The initial role assigned to the user.</param>
+    /// <param name="createdAt">Optional timestamp used for deterministic tests or imports.</param>
+    /// <returns>The pending user with this company's tenant identifier.</returns>
+    /// <exception cref="DomainException">Thrown when the company is inactive or user data is invalid.</exception>
+    public User RegisterPendingUser(
+        string email,
+        string displayName,
+        UserRole role,
+        DateTimeOffset? createdAt = null)
+    {
+        EnsureActive();
+
+        var user = User.CreatePendingActivation(Id, email, displayName, role, createdAt);
         _users.Add(user);
         return user;
     }
@@ -157,5 +199,31 @@ public sealed class Company
         {
             throw new DomainException("Inactive companies cannot be changed.");
         }
+    }
+
+    /// <summary>
+    /// Normalizes and validates a tenant contact email address.
+    /// </summary>
+    /// <param name="email">The candidate contact email address.</param>
+    /// <returns>The normalized contact email address.</returns>
+    /// <exception cref="DomainException">Thrown when the email is missing or malformed.</exception>
+    private static string NormalizeContactEmail(string email)
+    {
+        var normalized = DomainGuard.Required(email, nameof(email), 320).ToLowerInvariant();
+
+        try
+        {
+            var address = new MailAddress(normalized);
+            if (!string.Equals(address.Address, normalized, StringComparison.OrdinalIgnoreCase))
+            {
+                throw new DomainException("Contact email is invalid.");
+            }
+        }
+        catch (FormatException exception)
+        {
+            throw new DomainException("Contact email is invalid.", exception);
+        }
+
+        return normalized;
     }
 }

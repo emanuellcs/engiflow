@@ -11,7 +11,12 @@ namespace EngiFlow.Application.Settings.Commands;
 /// Command that updates tenant workflow governance settings.
 /// </summary>
 /// <param name="MinApprovalsRequired">Minimum approvals required for an ECO review quorum.</param>
-public sealed record UpdateCompanySettingsCommand(int MinApprovalsRequired) : ICommand<CompanySettingsDto>;
+/// <param name="MaxReviewDaysBeforeSlabreach">Maximum review time before SLA breach (Days).</param>
+/// <param name="AllowSelfApproval">Whether ECO authors can approve their own submissions.</param>
+public sealed record UpdateCompanySettingsCommand(
+    int MinApprovalsRequired,
+    int MaxReviewDaysBeforeSlabreach,
+    bool AllowSelfApproval) : ICommand<CompanySettingsDto>;
 
 /// <summary>
 /// Validates tenant workflow settings updates.
@@ -26,6 +31,10 @@ public sealed class UpdateCompanySettingsCommandValidator : AbstractValidator<Up
         RuleFor(command => command.MinApprovalsRequired)
             .GreaterThanOrEqualTo(1)
             .WithMessage("Minimum approvals required must be at least one.");
+
+        RuleFor(command => command.MaxReviewDaysBeforeSlabreach)
+            .GreaterThanOrEqualTo(1)
+            .WithMessage("The SLA threshold must be at least one day.");
     }
 }
 
@@ -67,7 +76,11 @@ public sealed class UpdateCompanySettingsCommandHandler
             await _settings.AddAsync(settings, cancellationToken).ConfigureAwait(false);
         }
 
-        settings.SetMinApprovalsRequired(command.MinApprovalsRequired);
+        settings.UpdatePolicies(
+            command.MinApprovalsRequired,
+            command.MaxReviewDaysBeforeSlabreach,
+            command.AllowSelfApproval);
+
         await _unitOfWork.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
 
         return settings.ToDto();

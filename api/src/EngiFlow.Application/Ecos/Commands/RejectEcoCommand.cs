@@ -91,14 +91,15 @@ public sealed class RejectEcoCommandHandler : ICommandHandler<RejectEcoCommand, 
             throw new EntityNotFoundException("EngineeringChangeOrder", command.EcoId);
         }
 
-        var minApprovalsRequired = await EcoCommandHandlerSupport
-            .GetMinApprovalsRequiredAsync(_settings, _tenantProvider, cancellationToken)
+        var settings = await EcoCommandHandlerSupport
+            .GetGovernanceSettingsAsync(_settings, _tenantProvider, cancellationToken)
             .ConfigureAwait(false);
 
         eco.SubmitReviewDecision(
             actorUserId,
             EcoApprovalDecision.RequestChanges,
-            minApprovalsRequired,
+            settings.MinApprovalsRequired,
+            settings.AllowSelfApproval,
             command.Reason);
         await _unitOfWork.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
         _notifications.EnqueueEcoChanged(eco);

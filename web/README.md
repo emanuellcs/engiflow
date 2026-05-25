@@ -149,7 +149,7 @@ The form updates `minApprovalsRequired`. It also loads active users and warns wh
 Warning: You require X approvals, but only have Y Approvers active. ECOs may become stuck.
 ```
 
-Owner and Administrator users can approve ECOs by RBAC policy, but this warning intentionally follows the MVP requirement and counts exact `Approver` roles only.
+Owner and Administrator users can approve ECOs by RBAC policy, but this warning intentionally focuses on active `Approver` role users to ensure a healthy quorum buffer.
 
 ## ECO Dashboard
 
@@ -200,6 +200,38 @@ Security and cleanup:
 - Rendering effects use a cancellation flag.
 - On unmount, the rendered container calls `replaceChildren()` to remove Mermaid DOM output and prevent stale SVG nodes from leaking across route changes.
 
+## Advanced Frontend Modules
+
+The frontend utilizes high-tier patterns to deliver a dense, operational cockpit experience:
+
+- **Command Palette Modal:** A hybrid orchestration tool that provides instant navigation. It handles client-side static route filtering for speed and performs "Enter-to-Search" database fetching for tenant-scoped resources.
+
+```mermaid
+graph LR
+    A["User Input (Search/Command)"] --> B{Local Match?}
+    B -- Yes --> C["Instant Memory Matrix Resolve"]
+    B -- No / Enter --> D["Tenant-Isolated API Query"]
+    D --> E["GET /api/search?q=..."]
+    E --> F["Render Remote Results"]
+```
+
+- **Role-Based Adaptive Dashboard:** Implemented in `app/(authenticated)/page.tsx`, this GitLab-inspired cockpit dynamically omits irrelevant metric widgets and UI nodes from the DOM (e.g., using `isViewer` checks) rather than printing empty zero fields.
+- **Workflow Policies UI:** A two-column symmetric governance page (`/settings/workflow-policies`) featuring reactive input validation and real-time compliance warnings.
+- **Internationalization (I18n) Framework:** An isomorphic context engine consuming pure JSON dictionaries (`en.json`, `pt-BR.json`). It is powered by a Next.js 16 Edge Proxy (`web/proxy.ts`) that manages locale detection via the `engi-locale` cookie and `Accept-Language` header fallback.
+
+```mermaid
+graph TD
+    A["Incoming Route Request"] --> B["Next.js Edge Proxy (proxy.ts)"]
+    B --> C{Check "engi-locale" Cookie}
+    C -- Absent --> D["Parse Accept-Language Header"]
+    C -- Present --> E["Verified Language Token"]
+    D --> E
+    E --> F["Bind Token to Response Cookie"]
+    F --> G["Hydrate Client I18nProvider"]
+    G --> H["JSON Lexicon (en.json / pt-BR.json)"]
+    H --> I["Render Translated React Nodes"]
+```
+
 ## Local Storage Autosave
 
 ECO comment drafts autosave to local storage with an ECO-specific key:
@@ -247,7 +279,10 @@ and the browser reaches the API through mapped host port `8080` for direct Signa
 
 ## Production Notes
 
+> [!TIP]
+> **Edge Delivery & Localization:** In production, assets and localized cookies are handled via **Amazon CloudFront**. This ensures that the `engi-locale` preference is respected at the edge, while specific cache invalidation strategies maintain UI consistency across deployments.
+
 - Keep `NEXT_PUBLIC_API_URL` or `NEXT_PUBLIC_API_BASE_URL` aligned with the externally reachable API origin so SignalR can connect directly.
 - Use HTTPS in production so bearer tokens are not exposed over cleartext transport.
-- The auth cookie is intentionally not HttpOnly because it supports the MVP proxy pattern. A production hardening pass should evaluate a backend-for-frontend session strategy or refresh-token flow.
+- The auth cookie is intentionally not HttpOnly because it supports the isomorphic proxy pattern. A production hardening pass should evaluate a backend-for-frontend session strategy or refresh-token flow.
 - UI authorization is convenience only. The API remains authoritative for RBAC, tenant isolation, inactivity, and segregation-of-duties enforcement.

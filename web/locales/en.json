@@ -1,0 +1,620 @@
+{
+  "auth": {
+    "layout": {
+      "mission": "Engineering change control for modern B2B teams.",
+      "features": {
+        "workflow": {
+          "title": "ECO Workflow",
+          "description": "Create, submit, approve, and reject controlled changes with clear ownership."
+        },
+        "audit": {
+          "title": "Audit Trails",
+          "description": "Capture immutable activity history for every material workflow decision."
+        },
+        "access": {
+          "title": "Role-Based Access",
+          "description": "Separate requesters, approvers, and administrators across each tenant."
+        }
+      }
+    },
+    "login": {
+      "title": "Sign in",
+      "subtitle": "Access your EngiFlow workspace.",
+      "emailLabel": "Email",
+      "passwordLabel": "Password",
+      "submitButton": "Sign in",
+      "forgotPassword": "Forgot password?",
+      "noAccount": "Don't have an account?",
+      "registerLink": "Register your company",
+      "rememberMe": "Remember me",
+      "validation": {
+        "emailRequired": "Email is required.",
+        "invalidEmail": "Enter a valid email address.",
+        "passwordRequired": "Password is required."
+      },
+      "errors": {
+        "default": "Unable to sign in. Check your email and password, then try again.",
+        "pendingActivation": "Your account has been invited but is not activated yet. Please click 'Forgot Password?' above to create your security credentials.",
+        "invalidResponse": "The server returned an invalid authentication response. Please try again."
+      }
+    },
+    "register": {
+      "title": "Register company",
+      "subtitle": "Create a company workspace and first administrator.",
+      "companyNameLabel": "Company name",
+      "fullNameLabel": "Full name",
+      "adminEmailLabel": "Email",
+      "passwordLabel": "Password",
+      "confirmPasswordLabel": "Confirm password",
+      "submitButton": "Create account",
+      "backToLogin": "Already have an account?",
+      "steps": {
+        "company": "Company Details",
+        "admin": "Administrator Profile"
+      },
+      "passwordCriteria": {
+        "length": "12+ characters",
+        "uppercase": "1 Uppercase",
+        "lowercase": "1 Lowercase",
+        "number": "1 Number",
+        "symbol": "1 Symbol"
+      },
+      "validation": {
+        "companyRequired": "Company name is required.",
+        "companyInvalid": "Enter a valid company name (min 2 characters).",
+        "nameRequired": "Full name is required.",
+        "nameInvalid": "Enter a valid name (min 2 characters).",
+        "emailRequired": "Email is required.",
+        "emailInvalid": "Enter a valid email address.",
+        "passwordRequired": "Password is required.",
+        "passwordLength": "Password must be at least 12 characters.",
+        "passwordUppercase": "Password must include at least one uppercase letter.",
+        "passwordLowercase": "Password must include at least one lowercase letter.",
+        "passwordNumber": "Password must include at least one number.",
+        "passwordSymbol": "Password must include at least one symbol.",
+        "passwordsDontMatch": "Passwords do not match.",
+        "default": "Unable to register company."
+      }
+    },
+    "forgotPassword": {
+      "title": "Reset password",
+      "subtitle": "Enter your account email address and EngiFlow will send reset instructions if the account exists.",
+      "multipleWorkspaces": "Multiple workspaces found. Select the one you want to reset your password for.",
+      "successMessage": "If an account exists, a reset link has been sent",
+      "submitError": "Unable to submit reset request.",
+      "continue": "Continue"
+    },
+    "setupPassword": {
+      "reset": {
+        "title": "Reset Your Password",
+        "description": "Enter your new security credentials below."
+      },
+      "invitation": {
+        "title": "Set Up Your Account Password",
+        "description": "Welcome to EngiFlow. Create your security credentials to activate your workspace access."
+      },
+      "emailLabel": "Email",
+      "newPasswordLabel": "New password",
+      "confirmPasswordLabel": "Confirm password",
+      "submitButton": "Save password",
+      "success": "Password saved. You can now sign in.",
+      "invalidContext": "This password link is invalid or expired. Request a new link to continue.",
+      "backTo": "Back to",
+      "signIn": "sign in"
+    },
+    "workspace": {
+      "title": "Choose workspace",
+      "subtitle": "Select the tenant you want to access with this account.",
+      "loading": "Loading workspaces...",
+      "backToLogin": "Back to sign in",
+      "error": "Unable to open this workspace. Please sign in again.",
+      "current": "Current",
+      "owner": "Owner: {name} - {email}"
+    }
+  },
+  "topbar": {
+    "search": {
+      "placeholder": "Search or type a command...",
+      "shortcut": "⌘K"
+    },
+    "notifications": {
+      "tooltip": "Notifications",
+      "empty": "No new notifications",
+      "markAllAsRead": "Mark all as read"
+    },
+    "actions": {
+      "tooltip": "Global Actions",
+      "newEco": "New ECO",
+      "inviteUser": "Invite User",
+      "noActions": "No actions available"
+    }
+  },
+  "workspaceSwitcher": {
+    "title": "Switch Workspace",
+    "current": "Current"
+  },
+  "commandPalette": {
+    "placeholder": "Search or type a command...",
+    "sections": {
+      "navigation": "Navigation",
+      "ecos": "Engineering Change Orders",
+      "team": "Team Members"
+    },
+    "shortcuts": {
+      "dashboard": "Go to Dashboard",
+      "ecos": "Go to Engineering Change Orders (ECOs)",
+      "settings": "Go to Team Settings"
+    },
+    "empty": {
+      "noResults": "No results found",
+      "noRecent": "No recent commands found",
+      "tryDifferent": "Try searching for a different term.",
+      "startTyping": "Type to start searching across ECOs, users, and settings."
+    },
+    "footer": {
+      "navigate": "to navigate",
+      "search": "to search",
+      "close": "to close"
+    }
+  },
+  "notifications": {
+    "title": "Notifications",
+    "markAllRead": "Mark all read",
+    "emptyMessage": "You're all caught up!",
+    "emptyDescription": "No new notifications to show.",
+    "timeAgo": "{time} ago",
+    "time": {
+      "seconds": "{count}s",
+      "minutes": "{count}m",
+      "hours": "{count}h",
+      "days": "{count}d"
+    },
+    "dynamic": {
+      "newComment": {
+        "title": "New Comment on {title}",
+        "message": "A reviewer or teammate added a new comment to your ECO timeline."
+      },
+      "submitted": {
+        "title": "{title} Submitted for Review",
+        "message": "An ECO has been moved into the formal review phase and is awaiting approval."
+      },
+      "changesRequested": {
+        "title": "Changes Requested for {title}",
+        "message": "An approver has requested changes. Review their feedback and resubmit when ready."
+      },
+      "approved": {
+        "title": "{title} Approved",
+        "message": "Your ECO has reached quorum and has been formally approved."
+      },
+      "reviewDecision": {
+        "title": "New Review Decision on {title}",
+        "message": "A team member has submitted their decision for the current review round."
+      }
+    }
+  },
+  "header": {
+    "refreshData": "Refresh data",
+    "refreshPage": "Refresh page"
+  },
+  "sidebar": {
+    "nav": {
+      "dashboard": "Dashboard",
+      "ecos": "ECOs",
+      "settings": "Settings",
+      "teamManagement": "Team Management",
+      "workflowPolicies": "Workflow Policies"
+    },
+    "footer": {
+      "about": "About EngiFlow",
+      "logout": "Logout"
+    }
+  },
+  "dashboard": {
+    "greeting": {
+      "morning": "Good morning",
+      "afternoon": "Good afternoon",
+      "evening": "Good evening",
+      "welcome": "Welcome to EngiFlow",
+      "viewerAlert": "You have Viewer access to this workspace. You can browse ECOs and history but cannot perform mutations or approvals."
+    },
+    "metrics": {
+      "waitingForReview": "Waiting for your review",
+      "authoredByYou": "Authored by you",
+      "assignedToYou": "Assigned to you",
+      "slaAtRisk": "SLA At Risk (>5 days)",
+      "openOrders": "Open Orders Count",
+      "pendingActivations": "Pending Activations",
+      "refresh": "Refresh dashboard data",
+      "footers": {
+        "justNow": "Just now",
+        "acrossWorkspace": "Across the workspace"
+      }
+    },
+    "actionHub": {
+      "title": "Items that need your attention",
+      "activityTitle": "Recent Workspace Activity",
+      "emptyState": "Good job! All your to-do items are done.",
+      "emptyStateActivity": "No activity found in this workspace.",
+      "viewAll": "All to-do items",
+      "browseEcos": "Browse ECOs",
+      "filterEverything": "Everything",
+      "subtitles": {
+        "priorityStatus": "{priority} priority • {status}",
+        "statusPriority": "Status: {status} • Priority: {priority}",
+        "viewerActivity": "Activity by {name} • {title}"
+      },
+      "activity": {
+        "created": "ECO created.",
+        "updated": "ECO details updated.",
+        "itemAdded": "Affected item '{part}' added.",
+        "itemRemoved": "Affected item '{part}' removed.",
+        "commentAdded": "Comment added.",
+        "attachmentAdded": "Attachment '{file}' added.",
+        "submitted": "ECO submitted for review round {round}.",
+        "approved": "Approval submitted for review round {round}.",
+        "requested": "Changes requested for review round {round}.",
+        "returned": "ECO returned to draft because changes were requested.",
+        "quorumApproved": "ECO approved by quorum.",
+        "canceled": "ECO canceled."
+      }
+    },
+    "quickAccess": {
+      "recentlyViewed": "Recently viewed",
+      "quickActions": "Quick Actions",
+      "noHistory": "No recent history",
+      "noHistoryDesc": "You haven't viewed any ECOs recently.",
+      "viewedAt": "Viewed {timestamp}",
+      "workspaceSettings": "Workspace Settings"
+    }
+  },
+  "ecos": {
+    "list": {
+      "title": "Engineering Change Orders",
+      "subtitle": "Search, review, and triage engineering changes across the workspace.",
+      "createButton": "Create ECO",
+      "loadingError": "Unable to load Engineering Change Orders. Refresh the page or try again later.",
+      "connectionError": "Unable to load Engineering Change Orders. Check your connection and try again.",
+      "emptyMessage": "No ECOs found",
+      "emptyDescription": "There are currently no engineering change orders to display.",
+      "columns": {
+        "id": "ID",
+        "round": "Round",
+        "title": "Title",
+        "requester": "Requester",
+        "progress": "Review Progress",
+        "priority": "Priority",
+        "status": "Status",
+        "created": "Created"
+      },
+      "filters": {
+        "searchLabel": "Search ECOs",
+        "statusLabel": "Status",
+        "priorityLabel": "Priority",
+        "createdFrom": "Created from",
+        "createdTo": "Created to",
+        "clearButton": "Clear",
+        "createdByMe": "Created by me",
+        "awaitingReview": "Awaiting my review",
+        "all": "All"
+      },
+      "breadcrumbs": {
+        "ecos": "ECOs",
+        "new": "New ECO",
+        "newFull": "New Engineering Change Order"
+      }
+    },
+    "create": {
+      "title": "Create New ECO",
+      "description": "Author a technical change request. Use the description to provide detailed justification and impact analysis.",
+      "titlePlaceholder": "Engineering Change Order Title",
+      "priorityLevel": "Priority Level",
+      "changeDescription": "Change Description",
+      "autoSaved": "Draft auto-saved at {time}",
+      "submitButton": "Create ECO",
+      "discardDialog": {
+        "title": "Discard unsaved changes?",
+        "message": "You have unsaved changes in your ECO draft. Are you sure you want to cancel? This will also clear your local draft.",
+        "keepEditing": "Keep Editing",
+        "confirmDiscard": "Discard Changes"
+      },
+      "validation": {
+        "titleRequired": "Title is required.",
+        "titleTooLong": "Title cannot exceed {count} characters.",
+        "descriptionRequired": "Description is required.",
+        "descriptionTooLong": "Description cannot exceed {count} characters.",
+        "priorityRequired": "Select a valid priority.",
+        "adminRequired": "Requester or Administrator access is required to create ECOs."
+      }
+    },
+    "details": {
+      "invalidId": "The ECO identifier in the route is invalid.",
+      "backToEcos": "Back to ECOs",
+      "loadError": "Unable to load the Engineering Change Order.",
+      "submittedBy": "Submitted by {name}",
+      "realtimeReconnecting": "Real-time ECO updates are reconnecting.",
+      "realtimeDisconnected": "Real-time ECO updates are disconnected.",
+      "tabs": {
+        "conversation": "Conversation",
+        "items": "Affected Items",
+        "files": "Files & Attachments"
+      },
+      "summary": {
+        "title": "Change Summary"
+      },
+      "metadata": {
+        "title": "Metadata",
+        "created": "Created",
+        "priority": "Priority",
+        "status": "Status"
+      },
+      "reviewers": {
+        "title": "Reviewers",
+        "approvalsRequired": "{count}/{total} approvals required",
+        "pending": "Pending",
+        "noApprovers": "No active approvers are configured for this tenant."
+      },
+      "actions": {
+        "authorConstraint": "As the author, you cannot participate in the approval quorum.",
+        "permissionConstraint": "You do not have the permissions required to review this ECO.",
+        "creatorConstraint": "Only the creator can submit this ECO for review.",
+        "submit": "Submit for Review",
+        "approve": "Approve",
+        "requestChanges": "Request Changes",
+        "cancel": "Cancel ECO",
+        "changeVote": "Change Vote",
+        "approved": "Approved",
+        "changesRequested": "Changes Requested"
+      },
+      "conflicts": {
+        "alert": "ECO state changed by another user. The latest data has been loaded."
+      },
+      "comments": {
+        "write": "Write",
+        "preview": "Preview",
+        "placeholder": "Leave a comment",
+        "nothingToPreview": "Nothing to preview.",
+        "attachFile": "Attach file",
+        "uploading": "Uploading",
+        "commentButton": "Comment",
+        "copyLink": "Copy link"
+      },
+      "affectedItems": {
+        "addButton": "Add Item",
+        "emptyMessage": "No affected items",
+        "emptyDescription": "There are currently no items associated with this ECO.",
+        "columns": {
+          "partNumber": "Part Number",
+          "description": "Description",
+          "currentRev": "Current Rev",
+          "newRev": "New Rev",
+          "action": "Action",
+          "actions": "Actions"
+        },
+        "actions": {
+          "add": "Create",
+          "modify": "Modify",
+          "remove": "Obsolete"
+        },
+        "dialog": {
+          "title": "Add Affected Item",
+          "removeTitle": "Remove Affected Item",
+          "removeMessage": "Are you sure you want to remove this item from the ECO?"
+        }
+      },
+      "attachments": {
+        "emptyMessage": "No files have been attached to this ECO.",
+        "uploadedBy": "Uploaded by {name}",
+        "drawer": {
+          "title": "File Details",
+          "downloadButton": "Download File",
+          "downloading": "Downloading",
+          "labels": {
+            "size": "Size",
+            "type": "Type",
+            "uploadedBy": "Uploaded by",
+            "uploaded": "Uploaded",
+            "objectKey": "Object key"
+          }
+        }
+      },
+      "confirmations": {
+        "submitTitle": "Submit ECO",
+        "submitMessage": "Are you sure you want to submit this Engineering Change Order for review? Once submitted, the affected items will be locked for editing.",
+        "approveTitle": "Approve ECO",
+        "approveMessage": "Are you sure you want to approve this Engineering Change Order?",
+        "cancelTitle": "Cancel ECO",
+        "cancelMessage": "Are you sure you want to cancel this ECO? This action is permanent and will move the ECO to a terminal Canceled state.",
+        "requestChangesTitle": "Request Changes",
+        "requestChangesReason": "Reason",
+        "requestChangesMinLength": "Enter at least {count} characters."
+      },
+      "composer": {
+        "write": "Write",
+        "preview": "Preview",
+        "placeholder": "Describe the engineering change, justification, and impact...",
+        "nothingToPreview": "Nothing to preview"
+      }
+    }
+  },
+  "users": {
+    "list": {
+      "title": "Team Management",
+      "subtitle": "Manage workspace users, roles, and access policies.",
+      "inviteButton": "Invite User",
+      "adminRequired": "Administrator access is required to manage workspace users.",
+      "searchPlaceholder": "Search by name, email, or role",
+      "roleFilterLabel": "Role",
+      "allRoles": "All roles",
+      "userCount": "{count} users",
+      "emptyMessage": "No users found",
+      "emptyDescription": "No matching team members were found in the workspace.",
+      "columns": {
+        "name": "Name",
+        "email": "Email",
+        "role": "Role",
+        "lastActive": "Last Active",
+        "status": "Status"
+      },
+      "status": {
+        "pending": "Pending",
+        "active": "Active",
+        "deactivated": "Deactivated",
+        "never": "Never"
+      },
+      "actions": {
+        "reactivate": "Reactivate {name}",
+        "deactivate": "Deactivate {name}",
+        "noAction": "No action available",
+        "selfMutationConstraint": "You cannot modify your own account.",
+        "ownerMutationConstraint": "Owner accounts cannot be modified.",
+        "reactivationConstraint": "Reactivate this user before changing roles."
+      },
+      "error": "Unable to load team members."
+    },
+    "invite": {
+      "title": "Invite User",
+      "activationFlowTitle": "Email activation flow",
+      "activationFlowDesc": "EngiFlow will send a secure 48-hour activation link so the user can create their own password.",
+      "success": "User invited successfully.",
+      "error": "Unable to invite user. Review the details and try again.",
+      "validation": {
+        "nameRequired": "Name is required.",
+        "emailRequired": "Email is required.",
+        "emailInvalid": "Enter a valid email address.",
+        "roleInvalid": "Role must be Administrator, Approver, Requester, or Viewer."
+      }
+    },
+    "deactivate": {
+      "titleAdmin": "Deactivate Administrator",
+      "titleUser": "Deactivate User",
+      "alertAdmin": "This user has administrative access. Deactivation will immediately revoke their tenant-management permissions and active sessions.",
+      "alertUser": "Deactivation immediately prevents this user from authenticating or taking workflow actions.",
+      "confirm": "Deactivate {name} ({email})?",
+      "success": "{name} was deactivated.",
+      "error": "Unable to deactivate the user."
+    },
+    "reactivate": {
+      "title": "Reactivate User",
+      "alert": "Reactivation restores authentication and workflow access. The reason is stored in the audit ledger.",
+      "confirm": "Reactivate {name} ({email})?",
+      "reasonLabel": "Reason for Reactivation (Required for Audit Compliance)",
+      "reasonRequired": "Reason is required for audit compliance.",
+      "success": "{name} was reactivated.",
+      "error": "Unable to reactivate the user."
+    },
+    "roles": {
+      "owner": "Owner",
+      "administrator": "Administrator",
+      "approver": "Approver",
+      "requester": "Requester",
+      "viewer": "Viewer",
+      "updateSuccess": "{name}'s role was updated.",
+      "updateError": "Unable to update the user's role."
+    }
+  },
+  "status": {
+    "draft": "Draft",
+    "underReview": "Under Review",
+    "approved": "Approved",
+    "canceled": "Canceled",
+    "rejected": "Rejected",
+    "implemented": "Implemented",
+    "reviewProgress": "{current}/{total} approved",
+    "requestChangesCount": "• {count} changes"
+  },
+  "priority": {
+    "critical": "Critical",
+    "high": "High",
+    "medium": "Medium",
+    "low": "Low"
+  },
+  "events": {
+    "affectedItemAdded": "Affected item added",
+    "affectedItemRemoved": "Affected item removed",
+    "approved": "Approved",
+    "attachmentAdded": "Attachment added",
+    "canceled": "Canceled",
+    "changesRequested": "Changes requested",
+    "commentAdded": "Comment added",
+    "created": "Created",
+    "detailsUpdated": "Details updated",
+    "implemented": "Implemented",
+    "rejected": "Rejected",
+    "reviewDecisionSubmitted": "Review decision submitted",
+    "submittedForReview": "Submitted for review"
+  },
+  "policies": {
+    "title": "Workflow Policies",
+    "subtitle": "Control approval quorum rules for engineering change orders.",
+    "adminRequired": "Administrator access is required to manage workflow policies.",
+    "noApprovers": "No active Approvers found. You must invite team members to the Approver role before ECOs can be processed.",
+    "inviteApprovers": "Invite Approvers",
+    "quorumWarning": "Warning: You require {count} approvals, but only have {available} Approver active. ECOs may become stuck.",
+    "quorumWarningPlural": "Warning: You require {count} approvals, but only have {available} Approvers active. ECOs may become stuck.",
+    "sections": {
+      "quorum": {
+        "title": "ECO Approval Quorum",
+        "subtitle": "Minimum approvals required before an ECO can move from review to approved.",
+        "fieldLabel": "Minimum approvals required",
+        "fieldSuffix": "approval",
+        "fieldSuffixPlural": "approvals",
+        "helperInsufficient": "Insufficient approvers: only {count} available",
+        "helperAvailable": "{count} active Approver available",
+        "helperAvailablePlural": "{count} active Approvers available",
+        "selfApprovalLabel": "Allow ECO authors to approve their own submissions"
+      },
+      "sla": {
+        "title": "SLA & Deadlines",
+        "subtitle": "Configure response thresholds before an engineering order triggers a critical bottleneck alert.",
+        "fieldLabel": "Maximum review time before SLA breach (Days)",
+        "fieldSuffix": "day",
+        "fieldSuffixPlural": "days"
+      }
+    },
+    "saveButton": "Save Policy",
+    "saveSuccess": "Workflow policies were updated.",
+    "loadError": "Unable to load workflow policies.",
+    "updateError": "Unable to update workflow policies.",
+    "validation": {
+      "quorumMin": "Minimum approvals required must be at least one.",
+      "slaMin": "Maximum review time must be at least one day."
+    }
+  },
+  "about": {
+    "title": "About EngiFlow",
+    "description": "Engineering Change Management",
+    "designedBy": "DESIGNED & DEVELOPED BY",
+    "viewSource": "View Source on GitHub",
+    "license": "MIT License - Copyright © 2026"
+  },
+  "mermaid": {
+    "rendering": "Rendering diagram",
+    "error": "Unable to render Mermaid diagram: {error}",
+    "errorDefault": "Unable to render Mermaid diagram."
+  },
+  "hubs": {
+    "eco": {
+      "unavailable": "The real-time ECO connection is unavailable."
+    },
+    "security": {
+      "deactivated": "Your EngiFlow account has been deactivated."
+    }
+  },
+  "common": {
+    "loading": "Loading...",
+    "error": "An error occurred",
+    "save": "Save changes",
+    "cancel": "Cancel",
+    "confirm": "Confirm",
+    "back": "Back",
+    "noRecords": "No records found",
+    "noData": "There is currently no data to display.",
+    "close": "Close",
+    "breadcrumbs": "Breadcrumb",
+    "loadingWorkspace": "Loading workspace",
+    "togglePassword": "toggle password visibility",
+    "markdownEditor": "Markdown editor tabs",
+    "refresh": "Refresh",
+    "readOnly": "Read-only"
+  }
+}

@@ -61,7 +61,10 @@ public sealed class SettingsController : ControllerBase
     {
         var settings = await _mediator
             .SendCommandAsync<UpdateCompanySettingsCommand, CompanySettingsDto>(
-                new UpdateCompanySettingsCommand(request.MinApprovalsRequired),
+                new UpdateCompanySettingsCommand(
+                    request.MinApprovalsRequired,
+                    request.MaxReviewDaysBeforeSlabreach,
+                    request.AllowSelfApproval),
                 cancellationToken)
             .ConfigureAwait(false);
 
