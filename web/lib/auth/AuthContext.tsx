@@ -22,27 +22,58 @@ import {
   type StoredAuthSession,
 } from "@/lib/auth/token-storage";
 
+/**
+ * Represents the raw authentication payload returned by the identity provider.
+ * Encapsulates multi-tenant identity claims and session metadata.
+ */
 export type AuthSessionResult = {
+  /** The opaque JWT bearer token. */
   accessToken?: unknown;
+  /** The token type (e.g., "Bearer"). */
   tokenType?: unknown;
+  /** The UTC expiration timestamp. */
   expiresAtUtc?: unknown;
+  /** The display name of the authenticated user. */
   userName?: unknown;
+  /** The name of the currently active tenant company. */
   companyName?: unknown;
+  /** The list of permissions/roles assigned to the user in the active tenant. */
   roles?: unknown;
 };
 
+/**
+ * Orchestrates the global authentication state across the application.
+ * Manages identity resolution, session persistence, and multi-tenant switching.
+ */
 export type AuthContextValue = {
+  /** The decoded identity claims for the current user. */
   user: AuthenticatedUser | null;
+  /** The active JWT used for authenticated API calls. */
   token: string | null;
+  /** Whether a valid session is currently established. */
   isAuthenticated: boolean;
+  /** Whether the session is still being hydrated from persistent storage. */
   isLoading: boolean;
+  /**
+   * Commits a new authentication session to persistent storage.
+   * @param result - The raw session payload.
+   * @param rememberMe - Whether to persist the session across browser restarts.
+   */
   login: (result: AuthSessionResult, rememberMe: boolean) => void;
+  /** Terminates the active session and clears all security identifiers. */
   logout: () => void;
 };
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
 const serverAuthPendingSnapshot = "__engiflow_auth_pending__";
 
+/**
+ * Root authentication provider.
+ * Synchronizes identity state across multiple tabs and handles isomorphic hydration.
+ *
+ * @param props - React children to be wrapped in the security context.
+ * @returns The hydrated authentication context provider.
+ */
 export function AuthProvider({ children }: PropsWithChildren) {
   const router = useRouter();
   const sessionSnapshot = useSyncExternalStore(
@@ -100,6 +131,13 @@ export function AuthProvider({ children }: PropsWithChildren) {
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
 
+/**
+ * Enterprise hook for consuming global authentication state.
+ * Use this to access the current user, token, and session lifecycle controls.
+ *
+ * @returns The active authentication context value.
+ * @throws Error if used outside of AuthProvider.
+ */
 export function useAuth(): AuthContextValue {
   const context = useContext(AuthContext);
 

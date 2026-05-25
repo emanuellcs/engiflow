@@ -101,6 +101,14 @@ type NavigationDrawerContentProps = {
   onDrawerToggle?: () => void;
 };
 
+/**
+ * The primary layout container for the authenticated application experience.
+ * Orchestrates the side navigation, top bar, and main content area.
+ *
+ * @param props - Component properties.
+ * @param props.children - The page content to be rendered within the shell.
+ * @returns The structured application shell layout.
+ */
 export default function AppShell({ children }: PropsWithChildren) {
   const { t } = useTranslation();
   const theme = useTheme();

@@ -7,9 +7,20 @@ import ptBR from "@/locales/pt-BR.json";
 type Locale = "en" | "pt-BR";
 type Translations = typeof en;
 
+/**
+ * Operational contract for the internationalization context.
+ * Defines the active locale state and the high-performance translation function.
+ */
 interface I18nContextProps {
+  /** The currently active BCP 47 locale tag (e.g., "en"). */
   locale: Locale;
+  /** Updates the active locale and persists the preference to a cookie. */
   setLocale: (locale: Locale) => void;
+  /**
+   * Resolves a translation key into localized UI copy.
+   * @param key - The dot-notated dictionary key.
+   * @param params - Optional template parameters for dynamic injection.
+   */
   t: (key: string, params?: Record<string, string | number>) => string;
 }
 

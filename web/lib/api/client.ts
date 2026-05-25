@@ -4,6 +4,9 @@ import {
   getStoredAuthToken,
 } from "@/lib/auth/token-storage";
 
+/**
+ * Represents a standard JSON-compatible value.
+ */
 export type JsonValue =
   | string
   | number
@@ -12,13 +15,23 @@ export type JsonValue =
   | JsonValue[]
   | { [key: string]: JsonValue };
 
+/**
+ * Extended fetch options for the EngiFlow API client.
+ */
 export type ApiFetchOptions = Omit<RequestInit, "body"> & {
+  /** The request payload, either a native BodyInit or a serializable JSON object. */
   body?: BodyInit | JsonValue;
+  /** Whether to bypass the automatic inclusion of the Bearer authentication token. */
   skipAuth?: boolean;
 };
 
+/**
+ * Enterprise-grade API error encapsulating HTTP status and server-provided error details.
+ */
 export class ApiError extends Error {
+  /** The HTTP status code returned by the server. */
   readonly status: number;
+  /** The raw error response body (usually ProblemDetails). */
   readonly details: unknown;
 
   constructor(status: number, message: string, details: unknown) {
