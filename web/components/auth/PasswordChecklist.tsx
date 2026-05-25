@@ -4,6 +4,7 @@ import CheckCircle from "@mui/icons-material/CheckCircle";
 import RadioButtonUnchecked from "@mui/icons-material/RadioButtonUnchecked";
 import Stack from "@mui/material/Stack";
 import Typography from "@mui/material/Typography";
+import { useTranslation } from "@/context/I18nContext";
 
 /**
  * Describes the props used by the shared password checklist.
@@ -13,20 +14,22 @@ interface PasswordChecklistProps {
 }
 
 /**
- * Defines the password rules shown while users type a new password.
- */
-const passwordCriteria = [
-  { label: "12+ characters", test: (value: string) => value.length >= 12 },
-  { label: "1 Uppercase", test: (value: string) => /[A-Z]/.test(value) },
-  { label: "1 Lowercase", test: (value: string) => /[a-z]/.test(value) },
-  { label: "1 Number", test: (value: string) => /[0-9]/.test(value) },
-  { label: "1 Symbol", test: (value: string) => /[^a-zA-Z0-9]/.test(value) },
-];
-
-/**
  * Renders the live five-point password strength checklist.
  */
 export default function PasswordChecklist({ password }: PasswordChecklistProps) {
+  const { t } = useTranslation();
+
+  /**
+   * Defines the password rules shown while users type a new password.
+   */
+  const passwordCriteria = [
+    { label: t("auth.register.passwordCriteria.length"), test: (value: string) => value.length >= 12 },
+    { label: t("auth.register.passwordCriteria.uppercase"), test: (value: string) => /[A-Z]/.test(value) },
+    { label: t("auth.register.passwordCriteria.lowercase"), test: (value: string) => /[a-z]/.test(value) },
+    { label: t("auth.register.passwordCriteria.number"), test: (value: string) => /[0-9]/.test(value) },
+    { label: t("auth.register.passwordCriteria.symbol"), test: (value: string) => /[^a-zA-Z0-9]/.test(value) },
+  ];
+
   return (
     <Stack spacing={0.5} sx={{ pl: 0.5 }}>
       {passwordCriteria.map((criterion) => {

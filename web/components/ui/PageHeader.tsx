@@ -7,6 +7,7 @@ import Typography from "@mui/material/Typography";
 import CircularProgress from "@mui/material/CircularProgress";
 import { useRouter } from "next/navigation";
 import type { ReactNode } from "react";
+import { useTranslation } from "@/context/I18nContext";
 
 export type PageHeaderProps = {
   /** Primary page title rendered as the route-level heading. */
@@ -45,6 +46,7 @@ export default function PageHeader({
   onRefresh,
   isLoading = false,
 }: PageHeaderProps) {
+  const { t } = useTranslation();
   const router = useRouter();
 
   const handleRefresh = () => {
@@ -82,7 +84,7 @@ export default function PageHeader({
         sx={{ alignSelf: { xs: "stretch", sm: "center" }, alignItems: "center" }}
       >
         {showRefresh && (
-          <Tooltip title={onRefresh ? "Refresh data" : "Refresh page"}>
+          <Tooltip title={onRefresh ? t("header.refreshData") : t("header.refreshPage")}>
             <span>
               <IconButton 
                 onClick={handleRefresh} 

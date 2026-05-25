@@ -1,0 +1,620 @@
+{
+  "auth": {
+    "layout": {
+      "mission": "Controle de modificações de engenharia para equipes B2B modernas.",
+      "features": {
+        "workflow": {
+          "title": "Fluxo de OME",
+          "description": "Crie, envie, aprove e rejeite modificações controladas com responsabilidade clara."
+        },
+        "audit": {
+          "title": "Trilhas de Auditoria",
+          "description": "Capture histórico de atividade imutável para cada decisão material do fluxo."
+        },
+        "access": {
+          "title": "Acesso Baseado em Função",
+          "description": "Separe requisitantes, aprovadores e administradores em cada organização."
+        }
+      }
+    },
+    "login": {
+      "title": "Entrar",
+      "subtitle": "Acesse seu workspace no EngiFlow.",
+      "emailLabel": "E-mail",
+      "passwordLabel": "Senha",
+      "submitButton": "Entrar",
+      "forgotPassword": "Esqueceu a senha?",
+      "noAccount": "Não possui uma conta?",
+      "registerLink": "Cadastre sua empresa",
+      "rememberMe": "Lembrar-me",
+      "validation": {
+        "emailRequired": "O e-mail é obrigatório.",
+        "invalidEmail": "Insira um endereço de e-mail válido.",
+        "passwordRequired": "A senha é obrigatória."
+      },
+      "errors": {
+        "default": "Não foi possível entrar. Verifique seu e-mail e senha e tente novamente.",
+        "pendingActivation": "Sua conta foi convidada mas ainda não está ativada. Por favor, clique em 'Esqueceu a senha?' acima para criar suas credenciais de segurança.",
+        "invalidResponse": "O servidor retornou uma resposta de autenticação inválida. Por favor, tente novamente."
+      }
+    },
+    "register": {
+      "title": "Cadastrar empresa",
+      "subtitle": "Crie um workspace para sua empresa e o primeiro administrador.",
+      "companyNameLabel": "Nome da empresa",
+      "fullNameLabel": "Nome completo",
+      "adminEmailLabel": "E-mail",
+      "passwordLabel": "Senha",
+      "confirmPasswordLabel": "Confirmar senha",
+      "submitButton": "Criar conta",
+      "backToLogin": "Já possui uma conta?",
+      "steps": {
+        "company": "Dados da Empresa",
+        "admin": "Perfil do Administrador"
+      },
+      "passwordCriteria": {
+        "length": "12+ caracteres",
+        "uppercase": "1 Maiúscula",
+        "lowercase": "1 Minúscula",
+        "number": "1 Número",
+        "symbol": "1 Símbolo"
+      },
+      "validation": {
+        "companyRequired": "O nome da empresa é obrigatório.",
+        "companyInvalid": "Insira um nome de empresa válido (mín. 2 caracteres).",
+        "nameRequired": "O nome completo é obrigatório.",
+        "nameInvalid": "Insira um nome válido (mín. 2 caracteres).",
+        "emailRequired": "O e-mail é obrigatório.",
+        "emailInvalid": "Insira um endereço de e-mail válido.",
+        "passwordRequired": "A senha é obrigatória.",
+        "passwordLength": "A senha deve ter pelo menos 12 caracteres.",
+        "passwordUppercase": "A senha deve incluir pelo menos uma letra maiúscula.",
+        "passwordLowercase": "A senha deve incluir pelo menos uma letra minúscula.",
+        "passwordNumber": "A senha deve incluir pelo menos um número.",
+        "passwordSymbol": "A senha deve incluir pelo menos um símbolo.",
+        "passwordsDontMatch": "As senhas não coincidem.",
+        "default": "Não foi possível cadastrar a empresa."
+      }
+    },
+    "forgotPassword": {
+      "title": "Redefinir senha",
+      "subtitle": "Insira o endereço de e-mail da sua conta e o EngiFlow enviará instruções de redefinição se a conta existir.",
+      "multipleWorkspaces": "Múltiplos workspaces encontrados. Selecione aquele para o qual deseja redefinir sua senha.",
+      "successMessage": "Se a conta existir, um link de redefinição foi enviado",
+      "submitError": "Não foi possível enviar a solicitação de redefinição.",
+      "continue": "Continuar"
+    },
+    "setupPassword": {
+      "reset": {
+        "title": "Redefinir sua senha",
+        "description": "Insira suas novas credenciais de segurança abaixo."
+      },
+      "invitation": {
+        "title": "Configurar senha da conta",
+        "description": "Bem-vindo ao EngiFlow. Crie suas credenciais de segurança para ativar seu acesso ao workspace."
+      },
+      "emailLabel": "E-mail",
+      "newPasswordLabel": "Nova senha",
+      "confirmPasswordLabel": "Confirmar senha",
+      "submitButton": "Salvar senha",
+      "success": "Senha salva. Você já pode entrar.",
+      "invalidContext": "Este link de senha é inválido ou expirou. Solicite um novo link para continuar.",
+      "backTo": "Voltar para o",
+      "signIn": "login"
+    },
+    "workspace": {
+      "title": "Escolha o workspace",
+      "subtitle": "Selecione o tenant que deseja acessar com esta conta.",
+      "loading": "Carregando workspaces...",
+      "backToLogin": "Voltar para o login",
+      "error": "Não foi possível abrir este workspace. Por favor, faça login novamente.",
+      "current": "Atual",
+      "owner": "Proprietário: {name} - {email}"
+    }
+  },
+  "topbar": {
+    "search": {
+      "placeholder": "Pesquisar ou digitar um comando...",
+      "shortcut": "⌘K"
+    },
+    "notifications": {
+      "tooltip": "Notificações",
+      "empty": "Nenhuma nova notificação",
+      "markAllAsRead": "Mark all as read"
+    },
+    "actions": {
+      "tooltip": "Ações Globais",
+      "newEco": "Nova OME",
+      "inviteUser": "Convidar Usuário",
+      "noActions": "Nenhuma ação disponível"
+    }
+  },
+  "workspaceSwitcher": {
+    "title": "Trocar Workspace",
+    "current": "Atual"
+  },
+  "commandPalette": {
+    "placeholder": "Pesquisar ou digitar um comando...",
+    "sections": {
+      "navigation": "Navegação",
+      "ecos": "Ordens de Modificação de Engenharia",
+      "team": "Membros da Equipe"
+    },
+    "shortcuts": {
+      "dashboard": "Ir para o Dashboard",
+      "ecos": "Ir para Ordens de Modificação (OMEs)",
+      "settings": "Ir para Gestão de Equipe"
+    },
+    "empty": {
+      "noResults": "Nenhum resultado encontrado",
+      "noRecent": "Nenhum comando recente encontrado",
+      "tryDifferent": "Tente pesquisar por um termo diferente.",
+      "startTyping": "Digite para começar a pesquisar em OMEs, usuários e configurações."
+    },
+    "footer": {
+      "navigate": "para navegar",
+      "search": "para pesquisar",
+      "close": "para fechar"
+    }
+  },
+  "notifications": {
+    "title": "Notificações",
+    "markAllRead": "Marcar todas como lidas",
+    "emptyMessage": "Tudo em dia!",
+    "emptyDescription": "Nenhuma nova notificação para exibir.",
+    "timeAgo": "há {time}",
+    "time": {
+      "seconds": "{count}s",
+      "minutes": "{count}min",
+      "hours": "{count}h",
+      "days": "{count}d"
+    },
+    "dynamic": {
+      "newComment": {
+        "title": "Novo Comentário em {title}",
+        "message": "Um revisor ou colega de equipe adicionou um novo comentário à linha do tempo da sua OME."
+      },
+      "submitted": {
+        "title": "{title} Enviada para Revisão",
+        "message": "Uma OME foi movida para a fase formal de revisão e está aguardando aprovação."
+      },
+      "changesRequested": {
+        "title": "Alterações Solicitadas para {title}",
+        "message": "Um aprovador solicitou alterações. Revise o feedback e reenvie quando estiver pronto."
+      },
+      "approved": {
+        "title": "{title} Aprovada",
+        "message": "Sua OME atingiu o quórum e foi formalmente aprovada."
+      },
+      "reviewDecision": {
+        "title": "Nova Decisão de Revisão em {title}",
+        "message": "Um membro da equipe enviou sua decisão para a rodada de revisão atual."
+      }
+    }
+  },
+  "header": {
+    "refreshData": "Atualizar dados",
+    "refreshPage": "Atualizar página"
+  },
+  "sidebar": {
+    "nav": {
+      "dashboard": "Dashboard",
+      "ecos": "OMEs",
+      "settings": "Configurações",
+      "teamManagement": "Gestão de Equipe",
+      "workflowPolicies": "Políticas de Fluxo"
+    },
+    "footer": {
+      "about": "Sobre o EngiFlow",
+      "logout": "Sair"
+    }
+  },
+  "dashboard": {
+    "greeting": {
+      "morning": "Bom dia",
+      "afternoon": "Boa tarde",
+      "evening": "Boa noite",
+      "welcome": "Bem-vindo ao EngiFlow",
+      "viewerAlert": "Você possui acesso de Visualizador neste workspace. Você pode navegar pelas OMEs e histórico, mas não pode realizar mutações ou aprovações."
+    },
+    "metrics": {
+      "waitingForReview": "Aguardando sua revisão",
+      "authoredByYou": "Criadas por você",
+      "assignedToYou": "Atribuídas a você",
+      "slaAtRisk": "SLA em Risco (>5 dias)",
+      "openOrders": "Ordens em Aberto",
+      "pendingActivations": "Ativações Pendentes",
+      "refresh": "Atualizar dados do dashboard",
+      "footers": {
+        "justNow": "Agora mesmo",
+        "acrossWorkspace": "Em todo o workspace"
+      }
+    },
+    "actionHub": {
+      "title": "Itens que precisam de sua atenção",
+      "activityTitle": "Atividade Recente do Workspace",
+      "emptyState": "Bom trabalho! Todos os seus itens pendentes foram concluídos.",
+      "emptyStateActivity": "Nenhuma atividade encontrada neste workspace.",
+      "viewAll": "Todos os itens pendentes",
+      "browseEcos": "Explorar OMEs",
+      "filterEverything": "Tudo",
+      "subtitles": {
+        "priorityStatus": "Prioridade {priority} • {status}",
+        "statusPriority": "Status: {status} • Prioridade: {priority}",
+        "viewerActivity": "Atividade por {name} • {title}"
+      },
+      "activity": {
+        "created": "OME criada.",
+        "updated": "Detalhes da OME atualizados.",
+        "itemAdded": "Item afetado '{part}' adicionado.",
+        "itemRemoved": "Item afetado '{part}' removido.",
+        "commentAdded": "Comentário adicionado.",
+        "attachmentAdded": "Anexo '{file}' adicionado.",
+        "submitted": "OME enviada para revisão (Rodada {round}).",
+        "approved": "Aprovação enviada para revisão (Rodada {round}).",
+        "requested": "Alterações solicitadas para revisão (Rodada {round}).",
+        "returned": "OME retornada para rascunho devido à solicitação de alterações.",
+        "quorumApproved": "OME aprovada por quórum.",
+        "canceled": "OME cancelada."
+      }
+    },
+    "quickAccess": {
+      "recentlyViewed": "Visualizados recentemente",
+      "quickActions": "Ações Rápidas",
+      "noHistory": "Sem histórico recente",
+      "noHistoryDesc": "Você não visualizou nenhuma OME recentemente.",
+      "viewedAt": "Visualizado em {timestamp}",
+      "workspaceSettings": "Configurações do Workspace"
+    }
+  },
+  "ecos": {
+    "list": {
+      "title": "Ordens de Modificação de Engenharia",
+      "subtitle": "Pesquise, revise e trie modificações de engenharia em todo o workspace.",
+      "createButton": "Criar OME",
+      "loadingError": "Não foi possível carregar as Ordens de Modificação de Engenharia. Atualize a página ou tente novamente mais tarde.",
+      "connectionError": "Não foi possível carregar as Ordens de Modificação de Engenharia. Verifique sua conexão e tente novamente.",
+      "emptyMessage": "Nenhuma OME encontrada",
+      "emptyDescription": "Atualmente não há ordens de modificação de engenharia para exibir.",
+      "columns": {
+        "id": "ID",
+        "round": "Rodada",
+        "title": "Título",
+        "requester": "Requisitante",
+        "progress": "Progresso da Revisão",
+        "priority": "Prioridade",
+        "status": "Status",
+        "created": "Criada em"
+      },
+      "filters": {
+        "searchLabel": "Pesquisar OMEs",
+        "statusLabel": "Status",
+        "priorityLabel": "Prioridade",
+        "createdFrom": "Criada de",
+        "createdTo": "Criada até",
+        "clearButton": "Limpar",
+        "createdByMe": "Criada por mim",
+        "awaitingReview": "Aguardando minha revisão",
+        "all": "Todos"
+      },
+      "breadcrumbs": {
+        "ecos": "OMEs",
+        "new": "Nova OME",
+        "newFull": "Nova Ordem de Modificação de Engenharia"
+      }
+    },
+    "create": {
+      "title": "Criar Nova OME",
+      "description": "Crie uma solicitação de modificação técnica. Use a descrição para fornecer justificativa detalhada e análise de impacto.",
+      "titlePlaceholder": "Título da Ordem de Modificação de Engenharia",
+      "priorityLevel": "Nível de Prioridade",
+      "changeDescription": "Descrição da Modificação",
+      "autoSaved": "Rascunho salvo automaticamente às {time}",
+      "submitButton": "Criar OME",
+      "discardDialog": {
+        "title": "Descartar alterações não salvas?",
+        "message": "Você possui alterações não salvas em seu rascunho de OME. Tem certeza de que deseja cancelar? Isso também limpará seu rascunho local.",
+        "keepEditing": "Continuar Editando",
+        "confirmDiscard": "Descartar Alterações"
+      },
+      "validation": {
+        "titleRequired": "O título é obrigatório.",
+        "titleTooLong": "O título não pode exceder {count} caracteres.",
+        "descriptionRequired": "A descrição é obrigatória.",
+        "descriptionTooLong": "A descrição não pode exceder {count} caracteres.",
+        "priorityRequired": "Selecione uma prioridade válida.",
+        "adminRequired": "Acesso de Requisitante ou Administrador é necessário para criar OMEs."
+      }
+    },
+    "details": {
+      "invalidId": "O identificador da OME na rota é inválido.",
+      "backToEcos": "Voltar para OMEs",
+      "loadError": "Não foi possível carregar a Ordem de Modificação de Engenharia.",
+      "submittedBy": "Enviada por {name}",
+      "realtimeReconnecting": "As atualizações em tempo real da OME estão reconectando.",
+      "realtimeDisconnected": "As atualizações em tempo real da OME estão desconectadas.",
+      "tabs": {
+        "conversation": "Conversa",
+        "items": "Itens Afetados",
+        "files": "Arquivos e Anexos"
+      },
+      "summary": {
+        "title": "Resumo da Modificação"
+      },
+      "metadata": {
+        "title": "Metadados",
+        "created": "Criada em",
+        "priority": "Prioridade",
+        "status": "Status"
+      },
+      "reviewers": {
+        "title": "Revisores",
+        "approvalsRequired": "{count}/{total} aprovações necessárias",
+        "pending": "Pendente",
+        "noApprovers": "Nenhum aprovador ativo está configurado para este tenant."
+      },
+      "actions": {
+        "authorConstraint": "Como autor, você não pode participar do quórum de aprovação.",
+        "permissionConstraint": "Você não possui as permissões necessárias para revisar esta OME.",
+        "creatorConstraint": "Apenas o criador pode enviar esta OME para revisão.",
+        "submit": "Enviar para Revisão",
+        "approve": "Aprovar",
+        "requestChanges": "Solicitar Alterações",
+        "cancel": "Cancelar OME",
+        "changeVote": "Alterar Voto",
+        "approved": "Aprovada",
+        "changesRequested": "Alterações Solicitadas"
+      },
+      "conflicts": {
+        "alert": "O estado da OME foi alterado por outro usuário. Os dados mais recentes foram carregados."
+      },
+      "comments": {
+        "write": "Escrever",
+        "preview": "Visualizar",
+        "placeholder": "Deixe um comentário",
+        "nothingToPreview": "Nada para visualizar.",
+        "attachFile": "Anexar arquivo",
+        "uploading": "Enviando",
+        "commentButton": "Comentar",
+        "copyLink": "Copiar link"
+      },
+      "affectedItems": {
+        "addButton": "Adicionar Item",
+        "emptyMessage": "Nenhum item afetado",
+        "emptyDescription": "Atualmente não há itens associados a esta OME.",
+        "columns": {
+          "partNumber": "Part Number",
+          "description": "Descrição",
+          "currentRev": "Rev. Atual",
+          "newRev": "Nova Rev.",
+          "action": "Ação",
+          "actions": "Ações"
+        },
+        "actions": {
+          "add": "Criar",
+          "modify": "Modificar",
+          "remove": "Obsoleto"
+        },
+        "dialog": {
+          "title": "Adicionar Item Afetado",
+          "removeTitle": "Remover Item Afetado",
+          "removeMessage": "Tem certeza de que deseja remover este item da OME?"
+        }
+      },
+      "attachments": {
+        "emptyMessage": "Nenhum arquivo foi anexado a esta OME.",
+        "uploadedBy": "Enviado por {name}",
+        "drawer": {
+          "title": "Detalhes do Arquivo",
+          "downloadButton": "Baixar Arquivo",
+          "downloading": "Baixando",
+          "labels": {
+            "size": "Tamanho",
+            "type": "Tipo",
+            "uploadedBy": "Enviado por",
+            "uploaded": "Enviado em",
+            "objectKey": "Chave do objeto"
+          }
+        }
+      },
+      "confirmations": {
+        "submitTitle": "Enviar OME",
+        "submitMessage": "Tem certeza de que deseja enviar esta Ordem de Modificação de Engenharia para revisão? Uma vez enviada, os itens afetados serão bloqueados para edição.",
+        "approveTitle": "Aprovar OME",
+        "approveMessage": "Tem certeza de que deseja aprovar esta Ordem de Modificação de Engenharia?",
+        "cancelTitle": "Cancelar OME",
+        "cancelMessage": "Tem certeza de que deseja cancelar esta OME? Esta ação é permanente e moverá a OME para o estado terminal Cancelada.",
+        "requestChangesTitle": "Solicitar Alterações",
+        "requestChangesReason": "Motivo",
+        "requestChangesMinLength": "Insira pelo menos {count} caracteres."
+      },
+      "composer": {
+        "write": "Escrever",
+        "preview": "Visualizar",
+        "placeholder": "Descreva a modificação de engenharia, justificativa e impacto...",
+        "nothingToPreview": "Nada para visualizar"
+      }
+    }
+  },
+  "users": {
+    "list": {
+      "title": "Gestão de Equipe",
+      "subtitle": "Gerencie usuários do workspace, funções e políticas de acesso.",
+      "inviteButton": "Convidar Usuário",
+      "adminRequired": "Acesso de administrador é necessário para gerenciar usuários do workspace.",
+      "searchPlaceholder": "Pesquisar por nome, e-mail ou função",
+      "roleFilterLabel": "Função",
+      "allRoles": "Todas as funções",
+      "userCount": "{count} usuários",
+      "emptyMessage": "Nenhum usuário encontrado",
+      "emptyDescription": "Nenhum membro da equipe correspondente foi encontrado no workspace.",
+      "columns": {
+        "name": "Nome",
+        "email": "E-mail",
+        "role": "Função",
+        "lastActive": "Última Atividade",
+        "status": "Status"
+      },
+      "status": {
+        "pending": "Pendente",
+        "active": "Ativo",
+        "deactivated": "Desativado",
+        "never": "Nunca"
+      },
+      "actions": {
+        "reactivate": "Reativar {name}",
+        "deactivate": "Desativar {name}",
+        "noAction": "Nenhuma ação disponível",
+        "selfMutationConstraint": "Você não pode modificar sua própria conta.",
+        "ownerMutationConstraint": "Contas de Proprietário (Owner) não podem ser modificadas.",
+        "reactivationConstraint": "Reative este usuário antes de alterar as funções."
+      },
+      "error": "Não foi possível carregar os membros da equipe."
+    },
+    "invite": {
+      "title": "Convidar Usuário",
+      "activationFlowTitle": "Fluxo de ativação por e-mail",
+      "activationFlowDesc": "O EngiFlow enviará um link de ativação seguro de 48 horas para que o usuário possa criar sua própria senha.",
+      "success": "Usuário convidado com sucesso.",
+      "error": "Não foi possível convidar o usuário. Revise os detalhes e tente novamente.",
+      "validation": {
+        "nameRequired": "O nome é obrigatório.",
+        "emailRequired": "O e-mail é obrigatório.",
+        "emailInvalid": "Insira um endereço de e-mail válido.",
+        "roleInvalid": "A função deve ser Administrador, Aprovador, Requisitante ou Visualizador."
+      }
+    },
+    "deactivate": {
+      "titleAdmin": "Desativar Administrador",
+      "titleUser": "Desativar Usuário",
+      "alertAdmin": "Este usuário possui acesso administrativo. A desativação revogará imediatamente suas permissões de gerenciamento de tenant e sessões ativas.",
+      "alertUser": "A desativação impede imediatamente este usuário de se autenticar ou realizar ações de fluxo.",
+      "confirm": "Desativar {name} ({email})?",
+      "success": "{name} foi desativado.",
+      "error": "Não foi possível desativar o usuário."
+    },
+    "reactivate": {
+      "title": "Reativar Usuário",
+      "alert": "A reativação restaura o acesso de autenticação e fluxo de trabalho. O motivo é armazenado no registro de auditoria.",
+      "confirm": "Reativar {name} ({email})?",
+      "reasonLabel": "Motivo da Reativação (Obrigatório para Auditoria)",
+      "reasonRequired": "O motivo é obrigatório para conformidade de auditoria.",
+      "success": "{name} foi reativado.",
+      "error": "Não foi possível reativar o usuário."
+    },
+    "roles": {
+      "owner": "Proprietário",
+      "administrator": "Administrador",
+      "approver": "Aprovador",
+      "requester": "Requisitante",
+      "viewer": "Visualizador",
+      "updateSuccess": "A função de {name} foi atualizada.",
+      "updateError": "Não foi possível atualizar a função do usuário."
+    }
+  },
+  "status": {
+    "draft": "Rascunho",
+    "underReview": "Em Revisão",
+    "approved": "Aprovada",
+    "canceled": "Cancelada",
+    "rejected": "Rejeitada",
+    "implemented": "Implementada",
+    "reviewProgress": "{current}/{total} aprovadas",
+    "requestChangesCount": "• {count} alterações"
+  },
+  "priority": {
+    "critical": "Crítica",
+    "high": "Alta",
+    "medium": "Média",
+    "low": "Baixa"
+  },
+  "events": {
+    "affectedItemAdded": "Item afetado adicionado",
+    "affectedItemRemoved": "Item afetado removido",
+    "approved": "Aprovada",
+    "attachmentAdded": "Anexo adicionado",
+    "canceled": "Cancelada",
+    "changesRequested": "Alterações solicitadas",
+    "commentAdded": "Comentário adicionado",
+    "created": "Criada",
+    "detailsUpdated": "Detalhes atualizados",
+    "implemented": "Implementada",
+    "rejected": "Rejeitada",
+    "reviewDecisionSubmitted": "Decisão de revisão enviada",
+    "submittedForReview": "Enviada para revisão"
+  },
+  "policies": {
+    "title": "Políticas de Fluxo",
+    "subtitle": "Controle as regras de quórum de aprovação para ordens de modificação de engenharia.",
+    "adminRequired": "Acesso de administrador é necessário para gerenciar políticas de fluxo.",
+    "noApprovers": "Nenhum Aprovador ativo encontrado. Você deve convidar membros da equipe para a função de Aprovador antes que as OMEs possam ser processadas.",
+    "inviteApprovers": "Convidar Aprovadores",
+    "quorumWarning": "Aviso: Você exige {count} aprovação, mas possui apenas {available} Aprovador ativo. As OMEs podem ficar travadas.",
+    "quorumWarningPlural": "Aviso: Você exige {count} aprovações, mas possui apenas {available} Aprovadores ativos. As OMEs podem ficar travadas.",
+    "sections": {
+      "quorum": {
+        "title": "Quórum de Aprovação de OME",
+        "subtitle": "Aprovações mínimas necessárias antes que uma OME possa passar de revisão para aprovada.",
+        "fieldLabel": "Aprovações mínimas necessárias",
+        "fieldSuffix": "aprovação",
+        "fieldSuffixPlural": "aprovações",
+        "helperInsufficient": "Aprovadores insuficientes: apenas {count} disponível",
+        "helperAvailable": "{count} Aprovador ativo disponível",
+        "helperAvailablePlural": "{count} Aprovadores ativos disponíveis",
+        "selfApprovalLabel": "Permitir que autores de OME aprovem suas próprias submissões"
+      },
+      "sla": {
+        "title": "SLA e Prazos",
+        "subtitle": "Configure os limites de resposta antes que uma ordem de engenharia dispare um alerta de gargalo crítico.",
+        "fieldLabel": "Tempo máximo de revisão antes da violação de SLA (Dias)",
+        "fieldSuffix": "dia",
+        "fieldSuffixPlural": "dias"
+      }
+    },
+    "saveButton": "Salvar Política",
+    "saveSuccess": "As políticas de fluxo foram atualizadas.",
+    "loadError": "Não foi possível carregar as políticas de fluxo.",
+    "updateError": "Não foi possível atualizar as políticas de fluxo.",
+    "validation": {
+      "quorumMin": "As aprovações mínimas necessárias devem ser pelo menos uma.",
+      "slaMin": "O tempo máximo de revisão deve ser de pelo menos um dia."
+    }
+  },
+  "about": {
+    "title": "Sobre o EngiFlow",
+    "description": "Gestão de Modificações de Engenharia",
+    "designedBy": "DESIGNADO E DESENVOLVIDO POR",
+    "viewSource": "Ver Código Fonte no GitHub",
+    "license": "Licença MIT - Copyright © 2026"
+  },
+  "mermaid": {
+    "rendering": "Renderizando diagrama",
+    "error": "Não foi possível renderizar o diagrama Mermaid: {error}",
+    "errorDefault": "Não foi possível renderizar o diagrama Mermaid."
+  },
+  "hubs": {
+    "eco": {
+      "unavailable": "A conexão em tempo real da OME está indisponível."
+    },
+    "security": {
+      "deactivated": "Sua conta EngiFlow foi desativada."
+    }
+  },
+  "common": {
+    "loading": "Carregando...",
+    "error": "Ocorreu um erro",
+    "save": "Salvar alterações",
+    "cancel": "Cancelar",
+    "confirm": "Confirmar",
+    "back": "Voltar",
+    "noRecords": "Nenhum registro encontrado",
+    "noData": "Atualmente não há dados para exibir.",
+    "close": "Fechar",
+    "breadcrumbs": "Navegação",
+    "loadingWorkspace": "Carregando workspace",
+    "togglePassword": "alternar visibilidade da senha",
+    "markdownEditor": "Abas do editor Markdown",
+    "refresh": "Atualizar",
+    "readOnly": "Somente leitura"
+  }
+}

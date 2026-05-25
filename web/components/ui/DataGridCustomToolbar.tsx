@@ -11,6 +11,7 @@ import {
   GridToolbarFilterButton,
   type GridToolbarProps,
 } from "@mui/x-data-grid";
+import { useTranslation } from "@/context/I18nContext";
 
 interface DataGridCustomToolbarProps extends Partial<GridToolbarProps> {
   isLoading?: boolean;
@@ -22,6 +23,8 @@ export default function DataGridCustomToolbar({
   onRefresh,
   ...other
 }: DataGridCustomToolbarProps) {
+  const { t } = useTranslation();
+
   return (
     <GridToolbarContainer
       {...other}
@@ -43,7 +46,7 @@ export default function DataGridCustomToolbar({
       </Box>
       {onRefresh ? (
         <Box sx={{ ml: 1 }}>
-          <Tooltip title="Refresh data">
+          <Tooltip title={t("header.refreshData")}>
             <span>
               <IconButton
                 size="small"

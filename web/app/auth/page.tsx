@@ -12,6 +12,7 @@ import { Suspense, useState } from "react";
 import { TransitionGroup } from "react-transition-group";
 import AuthLayout from "@/components/auth/AuthLayout";
 import TenantList from "@/components/auth/TenantList";
+import { useTranslation } from "@/context/I18nContext";
 import LoginForm, {
   type WorkspaceSelectionChallenge,
 } from "@/components/auth/LoginForm";
@@ -122,6 +123,7 @@ interface WorkspacePickerProps {
  * Renders the premium tenant picker using the official MUI List item structure.
  */
 function WorkspacePicker({ challenge, onBack }: WorkspacePickerProps) {
+  const { t } = useTranslation();
   const { login } = useAuth();
   const [selectedTenantId, setSelectedTenantId] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -149,7 +151,7 @@ function WorkspacePicker({ challenge, onBack }: WorkspacePickerProps) {
       login(response, challenge.rememberMe);
       window.location.assign("/");
     } catch (error) {
-      setErrorMessage(readWorkspaceError(error));
+      setErrorMessage(readWorkspaceError(error, t));
       setSelectedTenantId(null);
     }
   }
@@ -167,10 +169,10 @@ function WorkspacePicker({ challenge, onBack }: WorkspacePickerProps) {
       <Stack spacing={2.5}>
         <Stack spacing={0.75}>
           <Typography variant="h4" component="h1">
-            Choose workspace
+            {t("auth.workspace.title")}
           </Typography>
           <Typography variant="body2" color="text.secondary">
-            Select the tenant you want to access with this account.
+            {t("auth.workspace.subtitle")}
           </Typography>
         </Stack>
 
@@ -194,7 +196,7 @@ function WorkspacePicker({ challenge, onBack }: WorkspacePickerProps) {
           disabled={Boolean(selectedTenantId)}
           sx={{ alignSelf: "flex-start", textTransform: "none" }}
         >
-          Back to sign in
+          {t("auth.workspace.backToLogin")}
         </Button>
       </Stack>
     </Card>
@@ -204,10 +206,10 @@ function WorkspacePicker({ challenge, onBack }: WorkspacePickerProps) {
 /**
  * Converts a workspace picker API error into user-facing copy.
  */
-function readWorkspaceError(error: unknown): string {
+function readWorkspaceError(error: unknown, t: (key: string) => string): string {
   if (error instanceof ApiError) {
-    return "Unable to open this workspace. Please sign in again.";
+    return t("auth.workspace.error");
   }
 
-  return "Unable to open this workspace. Please sign in again.";
+  return t("auth.workspace.error");
 }

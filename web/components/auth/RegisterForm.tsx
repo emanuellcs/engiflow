@@ -24,6 +24,7 @@ import { type FormEvent, type ReactNode, useEffect, useRef, useState, forwardRef
 import NextLink from "@/components/ui/NextLink";
 import { ApiError, apiFetch } from "@/lib/api/client";
 import { type AuthSessionResult, useAuth } from "@/lib/auth/AuthContext";
+import { useTranslation } from "@/context/I18nContext";
 
 type RegisterFormState = {
   companyName: string;
@@ -35,7 +36,6 @@ type RegisterFormState = {
 
 type RegisterFieldErrors = Partial<Record<keyof RegisterFormState, string>>;
 
-const steps = ["Company Details", "Administrator Profile"] as const;
 const initialFormState: RegisterFormState = {
   companyName: "",
   adminName: "",
@@ -43,10 +43,7 @@ const initialFormState: RegisterFormState = {
   adminPassword: "",
   adminConfirmPassword: "",
 };
-const defaultRegisterError =
-  "Unable to register your company. Review the details and try again.";
-const invalidAuthResponseError =
-  "The server returned an invalid authentication response. Please try again.";
+
 const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const passwordPatterns = {
   length: /^.{12,}$/,
@@ -58,6 +55,7 @@ const passwordPatterns = {
 
 const RegisterForm = forwardRef<HTMLDivElement, { style?: React.CSSProperties }>(
   ({ style }, ref) => {
+    const { t } = useTranslation();
     const router = useRouter();
     const { login } = useAuth();
     const adminNameRef = useRef<HTMLInputElement>(null);
@@ -69,6 +67,8 @@ const RegisterForm = forwardRef<HTMLDivElement, { style?: React.CSSProperties }>
     const [errorMessage, setErrorMessage] = useState<string | null>(null);
     const [isPending, setIsPending] = useState(false);
     const [submitted, setSubmitted] = useState(false);
+
+    const steps = [t("auth.register.steps.company"), t("auth.register.steps.admin")] as const;
 
     useEffect(() => {
       if (activeStep === 1) {
@@ -88,8 +88,8 @@ const RegisterForm = forwardRef<HTMLDivElement, { style?: React.CSSProperties }>
 
       setSubmitted(true);
 
-      const step0Errors = validateStep(0, form);
-      const step1Errors = validateStep(1, form);
+      const step0Errors = validateStep(0, form, t);
+      const step1Errors = validateStep(1, form, t);
       const nextErrors: RegisterFieldErrors = {
         ...step0Errors,
         ...step1Errors,
@@ -124,7 +124,7 @@ const RegisterForm = forwardRef<HTMLDivElement, { style?: React.CSSProperties }>
         login(response, true);
         router.replace("/");
       } catch (error) {
-        setErrorMessage(getRegisterErrorMessage(error));
+        setErrorMessage(getRegisterErrorMessage(error, t));
       } finally {
         setIsPending(false);
       }
@@ -171,7 +171,7 @@ const RegisterForm = forwardRef<HTMLDivElement, { style?: React.CSSProperties }>
             <TextField
               id="companyName"
               name="companyName"
-              label="Company name"
+              label={t("auth.register.companyNameLabel")}
               value={form.companyName}
               onChange={(event) =>
                 handleFieldChange("companyName", event.target.value)
@@ -193,7 +193,7 @@ const RegisterForm = forwardRef<HTMLDivElement, { style?: React.CSSProperties }>
           <TextField
             id="adminName"
             name="adminName"
-            label="Full name"
+            label={t("auth.register.fullNameLabel")}
             inputRef={adminNameRef}
             value={form.adminName}
             onChange={(event) => handleFieldChange("adminName", event.target.value)}
@@ -208,7 +208,7 @@ const RegisterForm = forwardRef<HTMLDivElement, { style?: React.CSSProperties }>
           <TextField
             id="adminEmail"
             name="adminEmail"
-            label="Email"
+            label={t("auth.register.adminEmailLabel")}
             type="email"
             value={form.adminEmail}
             onChange={(event) =>
@@ -226,7 +226,7 @@ const RegisterForm = forwardRef<HTMLDivElement, { style?: React.CSSProperties }>
             <TextField
               id="adminPassword"
               name="adminPassword"
-              label="Password"
+              label={t("auth.register.passwordLabel")}
               type={showPassword ? "text" : "password"}
               value={form.adminPassword}
               onChange={(event) =>
@@ -264,12 +264,12 @@ const RegisterForm = forwardRef<HTMLDivElement, { style?: React.CSSProperties }>
             <Box sx={{ pl: 0.5 }}>
               <Stack spacing={0.5}>
                 {[
-                  { label: "12+ characters", met: passwordPatterns.length.test(form.adminPassword) },
-                  { label: "1 Uppercase", met: passwordPatterns.uppercase.test(form.adminPassword) },
-                  { label: "1 Lowercase", met: passwordPatterns.lowercase.test(form.adminPassword) },
-                  { label: "1 Number", met: passwordPatterns.number.test(form.adminPassword) },
+                  { label: t("auth.register.passwordCriteria.length"), met: passwordPatterns.length.test(form.adminPassword) },
+                  { label: t("auth.register.passwordCriteria.uppercase"), met: passwordPatterns.uppercase.test(form.adminPassword) },
+                  { label: t("auth.register.passwordCriteria.lowercase"), met: passwordPatterns.lowercase.test(form.adminPassword) },
+                  { label: t("auth.register.passwordCriteria.number"), met: passwordPatterns.number.test(form.adminPassword) },
                   {
-                    label: "1 Symbol",
+                    label: t("auth.register.passwordCriteria.symbol"),
                     met: passwordPatterns.symbol.test(form.adminPassword),
                   },
                 ].map((criterion) => (
@@ -301,7 +301,7 @@ const RegisterForm = forwardRef<HTMLDivElement, { style?: React.CSSProperties }>
           <TextField
             id="adminConfirmPassword"
             name="adminConfirmPassword"
-            label="Confirm password"
+            label={t("auth.register.confirmPasswordLabel")}
             type={showConfirmPassword ? "text" : "password"}
             value={form.adminConfirmPassword}
             onChange={(event) =>
@@ -355,7 +355,7 @@ const RegisterForm = forwardRef<HTMLDivElement, { style?: React.CSSProperties }>
             onClick={handleBack}
             sx={{ textTransform: "none" }}
           >
-            Back
+            {t("common.back")}
           </Button>
           <Button
             type={isStepFinal ? "submit" : "button"}
@@ -370,9 +370,9 @@ const RegisterForm = forwardRef<HTMLDivElement, { style?: React.CSSProperties }>
             {isPending && isStepFinal ? (
               <CircularProgress color="inherit" size={20} thickness={5} />
             ) : isStepFinal ? (
-              "Create account"
+              t("auth.register.submitButton")
             ) : (
-              "Next"
+              t("auth.forgotPassword.continue")
             )}
           </Button>
         </Stack>
@@ -394,10 +394,10 @@ const RegisterForm = forwardRef<HTMLDivElement, { style?: React.CSSProperties }>
         <Stack spacing={3}>
           <Stack spacing={1}>
             <Typography variant="h4" component="h1" sx={{ fontWeight: 500 }}>
-              Register company
+              {t("auth.register.title")}
             </Typography>
             <Typography variant="body1" color="text.secondary">
-              Create a company workspace and first administrator.
+              {t("auth.register.subtitle")}
             </Typography>
           </Stack>
 
@@ -432,9 +432,9 @@ const RegisterForm = forwardRef<HTMLDivElement, { style?: React.CSSProperties }>
           </Stepper>
 
           <Typography variant="body2" color="text.secondary" align="center">
-            Already have an account?{" "}
+            {t("auth.register.backToLogin")}{" "}
             <Link component={NextLink} href="/auth?mode=login" underline="hover">
-              Sign in
+              {t("auth.login.submitButton")}
             </Link>
           </Typography>
         </Stack>
@@ -450,13 +450,14 @@ export default RegisterForm;
 function validateStep(
   stepIndex: number,
   form: RegisterFormState,
+  t: (key: string) => string,
 ): RegisterFieldErrors {
   if (stepIndex === 0) {
     if (!form.companyName.trim()) {
-      return { companyName: "Company name is required." };
+      return { companyName: t("auth.register.validation.companyRequired") };
     }
     if (!/^[\p{L}\p{N}\s.,&'-]{2,}$/u.test(form.companyName.trim())) {
-      return { companyName: "Enter a valid company name (min 2 characters)." };
+      return { companyName: t("auth.register.validation.companyInvalid") };
     }
     return {};
   }
@@ -464,33 +465,33 @@ function validateStep(
   const errors: RegisterFieldErrors = {};
 
   if (!form.adminName.trim()) {
-    errors.adminName = "Full name is required.";
+    errors.adminName = t("auth.register.validation.nameRequired");
   } else if (!/^[\p{L}\s.'-]{2,}$/u.test(form.adminName.trim())) {
-    errors.adminName = "Enter a valid name (min 2 characters).";
+    errors.adminName = t("auth.register.validation.nameInvalid");
   }
 
   if (!form.adminEmail.trim()) {
-    errors.adminEmail = "Email is required.";
+    errors.adminEmail = t("auth.register.validation.emailRequired");
   } else if (!emailPattern.test(form.adminEmail.trim())) {
-    errors.adminEmail = "Enter a valid email address.";
+    errors.adminEmail = t("auth.register.validation.emailInvalid");
   }
 
   if (!form.adminPassword) {
-    errors.adminPassword = "Password is required.";
+    errors.adminPassword = t("auth.register.validation.passwordRequired");
   } else if (!passwordPatterns.length.test(form.adminPassword)) {
-    errors.adminPassword = "Password must be at least 12 characters.";
+    errors.adminPassword = t("auth.register.validation.passwordLength");
   } else if (!passwordPatterns.uppercase.test(form.adminPassword)) {
-    errors.adminPassword = "Password must include at least one uppercase letter.";
+    errors.adminPassword = t("auth.register.validation.passwordUppercase");
   } else if (!passwordPatterns.lowercase.test(form.adminPassword)) {
-    errors.adminPassword = "Password must include at least one lowercase letter.";
+    errors.adminPassword = t("auth.register.validation.passwordLowercase");
   } else if (!passwordPatterns.number.test(form.adminPassword)) {
-    errors.adminPassword = "Password must include at least one number.";
+    errors.adminPassword = t("auth.register.validation.passwordNumber");
   } else if (!passwordPatterns.symbol.test(form.adminPassword)) {
-    errors.adminPassword = "Password must include at least one symbol.";
+    errors.adminPassword = t("auth.register.validation.passwordSymbol");
   }
 
   if (form.adminPassword && form.adminConfirmPassword !== form.adminPassword) {
-    errors.adminConfirmPassword = "Passwords do not match.";
+    errors.adminConfirmPassword = t("auth.register.validation.passwordsDontMatch");
   }
 
   return errors;
@@ -516,19 +517,19 @@ function stepHasErrors(
   );
 }
 
-function getRegisterErrorMessage(error: unknown): string {
+function getRegisterErrorMessage(error: unknown, t: (key: string) => string): string {
   if (error instanceof ApiError) {
-    return readProblemDetailsMessage(error.details) ?? defaultRegisterError;
+    return readProblemDetailsMessage(error.details) ?? t("auth.register.validation.default");
   }
 
   if (
     error instanceof Error &&
     error.message === "The server returned an invalid authentication response."
   ) {
-    return invalidAuthResponseError;
+    return t("auth.login.errors.invalidResponse");
   }
 
-  return defaultRegisterError;
+  return t("auth.register.validation.default");
 }
 
 function readProblemDetailsMessage(details: unknown): string | null {

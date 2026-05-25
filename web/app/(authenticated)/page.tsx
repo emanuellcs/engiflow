@@ -1,39 +1,40 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Alert from "@mui/material/Alert";
+import Avatar from "@mui/material/Avatar";
 import Box from "@mui/material/Box";
 import Button from "@mui/material/Button";
 import Card from "@mui/material/Card";
 import CardContent from "@mui/material/CardContent";
-import Grid from "@mui/material/Grid";
-import Stack from "@mui/material/Stack";
-import Typography from "@mui/material/Typography";
-import Avatar from "@mui/material/Avatar";
+import Chip from "@mui/material/Chip";
+import CircularProgress from "@mui/material/CircularProgress";
 import Divider from "@mui/material/Divider";
-import Tabs from "@mui/material/Tabs";
-import Tab from "@mui/material/Tab";
-import Select from "@mui/material/Select";
-import MenuItem from "@mui/material/MenuItem";
 import FormControl from "@mui/material/FormControl";
+import Grid from "@mui/material/Grid";
+import IconButton from "@mui/material/IconButton";
+import MenuItem from "@mui/material/MenuItem";
+import Select from "@mui/material/Select";
+import Stack from "@mui/material/Stack";
+import Tab from "@mui/material/Tab";
+import Tabs from "@mui/material/Tabs";
+import Tooltip from "@mui/material/Tooltip";
+import Typography from "@mui/material/Typography";
+import { alpha, useTheme } from "@mui/material/styles";
+import RefreshIcon from "@mui/icons-material/Refresh";
 import CheckCircleOutlinedIcon from "@mui/icons-material/CheckCircleOutlined";
 import HistoryOutlinedIcon from "@mui/icons-material/HistoryOutlined";
 import AddIcon from "@mui/icons-material/Add";
 import SettingsIcon from "@mui/icons-material/Settings";
 import InfoOutlinedIcon from "@mui/icons-material/InfoOutlined";
-import CircularProgress from "@mui/material/CircularProgress";
 import MuiLink from "@mui/material/Link";
-import Alert from "@mui/material/Alert";
-import Chip from "@mui/material/Chip";
-import Tooltip from "@mui/material/Tooltip";
-import IconButton from "@mui/material/IconButton";
-import RefreshIcon from "@mui/icons-material/Refresh";
-import { useTheme, alpha } from "@mui/material/styles";
 
 import { useAuth } from "@/lib/auth/AuthContext";
 import { isAdminOrOwner } from "@/lib/auth/jwt";
 import { getDashboardData, type DashboardData } from "@/lib/api/dashboard";
 import NextLink from "@/components/ui/NextLink";
 import DataGridEmptyState from "@/components/ui/DataGridEmptyState";
+import { useTranslation } from "@/context/I18nContext";
 
 const RECENTLY_VIEWED_STORAGE_KEY = "engiflow.recently_viewed.ecos";
 
@@ -44,14 +45,14 @@ type RecentlyViewedItem = {
 };
 
 /**
- * Renders the role-based multi-tenant dashboard.
- *
- * This page mimics the GitLab dashboard aesthetic, focusing on text-dense
+ * Renders the role-based dashboard for authenticated users.
+ * Aggregates high-level metrics, actionable items (Action Hub), workflow
  * utility, quick access, and role-tailored metrics.
  *
  * @returns The authenticated dashboard view.
  */
 export default function DashboardPage() {
+  const { t, locale } = useTranslation();
   const { user } = useAuth();
   const theme = useTheme();
   const [data, setData] = useState<DashboardData | null>(null);
@@ -72,9 +73,9 @@ export default function DashboardPage() {
 
   const getGreeting = () => {
     const hour = new Date().getHours();
-    if (hour < 12) return "Good morning";
-    if (hour < 18) return "Good afternoon";
-    return "Good evening";
+    if (hour < 12) return t("dashboard.greeting.morning");
+    if (hour < 18) return t("dashboard.greeting.afternoon");
+    return t("dashboard.greeting.evening");
   };
 
   const isViewer = user?.role === "Viewer";
@@ -126,23 +127,20 @@ export default function DashboardPage() {
         component="div" 
         direction="row" 
         spacing={2} 
-        sx={{ 
-          alignItems: "center", 
-          justifyContent: "space-between",
-          flexWrap: "wrap",
-          gap: 2
-        }}
+        sx={{ alignItems: "center", justifyContent: "space-between" }}
       >
         <Stack direction="row" spacing={2} sx={{ alignItems: "center" }}>
           <Avatar
             sx={{
-              width: 48,
-              height: 48,
-              bgcolor: theme.palette.primary.main,
+              width: 56,
+              height: 56,
+              bgcolor: "primary.main",
               fontSize: "1.25rem",
+              fontWeight: 700,
+              boxShadow: 2,
             }}
           >
-            {user?.userName.charAt(0)}
+            {user?.userName?.[0]?.toUpperCase() || "U"}
           </Avatar>
           <Box sx={{ flexGrow: 1 }}>
             <Stack direction="row" spacing={1} sx={{ alignItems: "center" }}>
@@ -151,7 +149,7 @@ export default function DashboardPage() {
               </Typography>
               {isViewer && (
                 <Chip 
-                  label="Read-only" 
+                  label={t("common.readOnly")} 
                   size="small" 
                   variant="outlined" 
                   color="info" 
@@ -160,20 +158,20 @@ export default function DashboardPage() {
               )}
             </Stack>
             <Typography variant="body2" color="text.secondary">
-              {isViewer ? "Explore the workspace activity feed below." : "Welcome to EngiFlow"}
+              {isViewer ? t("dashboard.actionHub.emptyStateActivity") : t("dashboard.greeting.welcome")}
             </Typography>
           </Box>
         </Stack>
 
         <Box>
-          <Tooltip title="Refresh dashboard data">
+          <Tooltip title={t("dashboard.metrics.refresh")}>
             <span>
               <IconButton 
                 onClick={() => void fetchDashboard()} 
                 disabled={loading}
                 color="primary"
                 size="small" 
-                aria-label="refresh"
+                aria-label={t("common.refresh")}
                 sx={{
                   border: 1,
                   borderColor: "divider",
@@ -198,13 +196,13 @@ export default function DashboardPage() {
 
       {isViewer && (
         <Alert severity="info" variant="outlined" sx={{ borderStyle: "dashed" }}>
-          You have <strong>Viewer</strong> access to this workspace. You can browse ECOs and history but cannot perform mutations or approvals.
+          {t("dashboard.greeting.viewerAlert")}
         </Alert>
       )}
 
       {/* Metric Row */}
       {data?.metrics && data.metrics.length > 0 && (
-        <Grid container spacing={2}>
+        <Grid container spacing={2.5}>
           {data.metrics.map((metric, index) => (
             <Grid key={index} size={{ xs: 12, sm: 6, md: 3 }}>
               <Card
@@ -226,10 +224,10 @@ export default function DashboardPage() {
                     variant="body2"
                     sx={{ fontWeight: 500, color: "text.primary", mb: 1 }}
                   >
-                    {metric.label}
+                    {getMetricLabel(metric.label, t)}
                   </Typography>
                   <Typography variant="caption" color="text.secondary">
-                    {metric.footer}
+                    {getMetricFooter(metric.footer, t)}
                   </Typography>
                 </CardContent>
               </Card>
@@ -261,11 +259,11 @@ export default function DashboardPage() {
               }}
             >
               <Typography variant="subtitle1" sx={{ fontWeight: 600 }}>
-                {isViewer ? "Recent Workspace Activity" : "Items that need your attention"}
+                {isViewer ? t("dashboard.actionHub.activityTitle") : t("dashboard.actionHub.title")}
               </Typography>
               <FormControl size="small" sx={{ minWidth: 120 }}>
                 <Select value="Everything" disabled variant="outlined">
-                  <MenuItem value="Everything">Everything</MenuItem>
+                  <MenuItem value="Everything">{t("dashboard.actionHub.filterEverything")}</MenuItem>
                 </Select>
               </FormControl>
             </Box>
@@ -302,7 +300,7 @@ export default function DashboardPage() {
                   </Box>
                   <Box>
                     <Typography variant="h6" sx={{ fontWeight: 600 }}>
-                      {isViewer ? "No activity found in this workspace." : "Good job! All your to-do items are done."}
+                      {isViewer ? t("dashboard.actionHub.emptyStateActivity") : t("dashboard.actionHub.emptyState")}
                     </Typography>
                     <MuiLink
                       component={NextLink}
@@ -316,7 +314,7 @@ export default function DashboardPage() {
                         "&:hover": { textDecoration: "underline" },
                       }}
                     >
-                      {isViewer ? "Browse ECOs" : "All to-do items"}
+                      {isViewer ? t("dashboard.actionHub.browseEcos") : t("dashboard.actionHub.viewAll")}
                     </MuiLink>
                   </Box>
                 </Stack>
@@ -342,15 +340,15 @@ export default function DashboardPage() {
                         variant="body1"
                         sx={{ fontWeight: 500, color: "primary.main" }}
                       >
-                        {item.title}
+                        {localizeEventDescription(item.title, t)}
                       </Typography>
                       <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
                         <Typography variant="body2" color="text.secondary">
-                          {item.subtitle}
+                          {localizeAttentionSubtitle(item.subtitle, t)}
                         </Typography>
                         {item.occurredAt && (
                            <Typography variant="caption" color="text.secondary" sx={{ opacity: 0.8 }}>
-                             • {new Date(item.occurredAt).toLocaleString(undefined, {
+                             • {new Date(item.occurredAt).toLocaleString(locale === "pt-BR" ? "pt-BR" : "en-US", {
                                 dateStyle: "medium",
                                 timeStyle: "short"
                              })}
@@ -382,8 +380,8 @@ export default function DashboardPage() {
                 onChange={(_, v) => setTabValue(v)}
                 aria-label="quick access tabs"
               >
-                <Tab label="Recently viewed" sx={{ textTransform: "none" }} />
-                {!isViewer && <Tab label="Quick Actions" sx={{ textTransform: "none" }} />}
+                <Tab label={t("dashboard.quickAccess.recentlyViewed")} sx={{ textTransform: "none" }} />
+                {!isViewer && <Tab label={t("dashboard.quickAccess.quickActions")} sx={{ textTransform: "none" }} />}
               </Tabs>
             </Box>
             <Box sx={{ p: 2, flexGrow: 1 }}>
@@ -393,8 +391,8 @@ export default function DashboardPage() {
                     <>
                       <DataGridEmptyState
                         icon={<HistoryOutlinedIcon sx={{ fontSize: 48, color: "grey.400" }} />}
-                        message="No recent history"
-                        description="You haven't viewed any ECOs recently."
+                        message={t("dashboard.quickAccess.noHistory")}
+                        description={t("dashboard.quickAccess.noHistoryDesc")}
                       />
                       <Box sx={{ textAlign: "center", pb: 2 }}>
                         <Button 
@@ -404,7 +402,7 @@ export default function DashboardPage() {
                           size="small" 
                           sx={{ textTransform: "none" }}
                         >
-                          Browse all ECOs
+                          {t("dashboard.actionHub.browseEcos")}
                         </Button>
                       </Box>
                     </>
@@ -431,9 +429,11 @@ export default function DashboardPage() {
                             {item.title}
                           </Typography>
                           <Typography variant="caption" color="text.secondary">
-                            Viewed {new Date(item.timestamp).toLocaleString(undefined, { 
-                              dateStyle: 'medium', 
-                              timeStyle: 'short' 
+                            {t("dashboard.quickAccess.viewedAt", {
+                               timestamp: new Date(item.timestamp).toLocaleString(locale === "pt-BR" ? "pt-BR" : "en-US", { 
+                                  dateStyle: 'medium', 
+                                  timeStyle: 'short' 
+                               })
                             })}
                           </Typography>
                         </Box>
@@ -452,7 +452,7 @@ export default function DashboardPage() {
                       startIcon={<AddIcon />}
                       sx={{ textTransform: "none", justifyContent: "flex-start" }}
                     >
-                      New Engineering Change Order
+                      {t("topbar.actions.newEco")}
                     </Button>
                   )}
                   {isAdminOrOwner(user?.role) && (
@@ -464,7 +464,7 @@ export default function DashboardPage() {
                       startIcon={<SettingsIcon />}
                       sx={{ textTransform: "none", justifyContent: "flex-start" }}
                     >
-                      Workspace Settings
+                      {t("dashboard.quickAccess.workspaceSettings")}
                     </Button>
                   )}
                 </Stack>
@@ -475,4 +475,112 @@ export default function DashboardPage() {
       </Grid>
     </Stack>
   );
+}
+
+function getMetricLabel(label: string, t: (key: string) => string): string {
+  const map: Record<string, string> = {
+    "Waiting for your review": t("dashboard.metrics.waitingForReview"),
+    "Authored by you": t("dashboard.metrics.authoredByYou"),
+    "Assigned to you": t("dashboard.metrics.assignedToYou"),
+    "SLA At Risk (>5 days)": t("dashboard.metrics.slaAtRisk"),
+    "Open Orders Count": t("dashboard.metrics.openOrders"),
+    "Pending Activations": t("dashboard.metrics.pendingActivations"),
+  };
+  return map[label] || label;
+}
+
+function getMetricFooter(footer: string, t: (key: string) => string): string {
+  const map: Record<string, string> = {
+    "Just now": t("dashboard.metrics.footers.justNow"),
+    "Across the workspace": t("dashboard.metrics.footers.acrossWorkspace"),
+  };
+  return map[footer] || footer;
+}
+
+function localizeAttentionSubtitle(subtitle: string, t: (key: string, params?: Record<string, string | number>) => string): string {
+  // Pattern 1: "{priority} priority • {status}"
+  const priorityStatusRegex = /^(\w+) priority • ([\w\s]+)$/;
+  const priorityStatusMatch = subtitle.match(priorityStatusRegex);
+  if (priorityStatusMatch) {
+    const priority = priorityStatusMatch[1];
+    const status = priorityStatusMatch[2];
+    return t("dashboard.actionHub.subtitles.priorityStatus", {
+      priority: t(`priority.${priority.toLowerCase()}`) || priority,
+      status: t(`status.${camelCase(status)}`) || status,
+    });
+  }
+
+  // Pattern 2: "Status: {status} • Priority: {priority}"
+  const statusPriorityRegex = /^Status: (\w+) • Priority: (\w+)$/;
+  const statusPriorityMatch = subtitle.match(statusPriorityRegex);
+  if (statusPriorityMatch) {
+    const status = statusPriorityMatch[1];
+    const priority = statusPriorityMatch[2];
+    return t("dashboard.actionHub.subtitles.statusPriority", {
+      status: t(`status.${camelCase(status)}`) || status,
+      priority: t(`priority.${priority.toLowerCase()}`) || priority,
+    });
+  }
+
+  // Pattern 3: "Activity by {name} • {title}"
+  const viewerActivityRegex = /^Activity by (.+) • (.+)$/;
+  const viewerActivityMatch = subtitle.match(viewerActivityRegex);
+  if (viewerActivityMatch) {
+    const name = viewerActivityMatch[1];
+    const title = viewerActivityMatch[2];
+    return t("dashboard.actionHub.subtitles.viewerActivity", { name, title });
+  }
+
+  return subtitle;
+}
+
+function localizeEventDescription(description: string, t: (key: string, params?: Record<string, string | number>) => string): string {
+  const activityMap: Record<string, string> = {
+    "ECO created.": "dashboard.actionHub.activity.created",
+    "ECO details updated.": "dashboard.actionHub.activity.updated",
+    "Comment added.": "dashboard.actionHub.activity.commentAdded",
+    "ECO approved by quorum.": "dashboard.actionHub.activity.quorumApproved",
+    "ECO canceled.": "dashboard.actionHub.activity.canceled",
+    "ECO returned to draft because changes were requested.": "dashboard.actionHub.activity.returned"
+  };
+
+  if (activityMap[description]) {
+    return t(activityMap[description]);
+  }
+
+  // Parameterized Patterns
+  const itemAddedRegex = /^Affected item '(.+)' added\.$/;
+  const itemRemovedRegex = /^Affected item '(.+)' removed\.$/;
+  const attachmentAddedRegex = /^Attachment '(.+)' added\.$/;
+  const submittedRegex = /^ECO submitted for review round (\d+)\.$/;
+  const approvedRegex = /^Approval submitted for review round (\d+)\.$/;
+  const requestedRegex = /^Changes requested for review round (\d+)\.$/;
+
+  const itemAddedMatch = description.match(itemAddedRegex);
+  if (itemAddedMatch) return t("dashboard.actionHub.activity.itemAdded", { part: itemAddedMatch[1] });
+
+  const itemRemovedMatch = description.match(itemRemovedRegex);
+  if (itemRemovedMatch) return t("dashboard.actionHub.activity.itemRemoved", { part: itemRemovedMatch[1] });
+
+  const attachmentAddedMatch = description.match(attachmentAddedRegex);
+  if (attachmentAddedMatch) return t("dashboard.actionHub.activity.attachmentAdded", { file: attachmentAddedMatch[1] });
+
+  const submittedMatch = description.match(submittedRegex);
+  if (submittedMatch) return t("dashboard.actionHub.activity.submitted", { round: submittedMatch[1] });
+
+  const approvedMatch = description.match(approvedRegex);
+  if (approvedMatch) return t("dashboard.actionHub.activity.approved", { round: approvedMatch[1] });
+
+  const requestedMatch = description.match(requestedRegex);
+  if (requestedMatch) return t("dashboard.actionHub.activity.requested", { round: requestedMatch[1] });
+
+  return description;
+}
+
+function camelCase(str: string): string {
+  return str
+    .replace(/(?:^\w|[A-Z]|\b\w)/g, (word, index) =>
+      index === 0 ? word.toLowerCase() : word.toUpperCase()
+    )
+    .replace(/\s+/g, "");
 }

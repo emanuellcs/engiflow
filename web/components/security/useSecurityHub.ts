@@ -10,6 +10,7 @@ import {
   clearStoredAuthToken,
   updateStoredAuthSessionRoles,
 } from "@/lib/auth/token-storage";
+import { useTranslation } from "@/context/I18nContext";
 
 type UseSecurityHubOptions = {
   token: string | null;
@@ -17,6 +18,8 @@ type UseSecurityHubOptions = {
 };
 
 export function useSecurityHub({ token, currentUserId }: UseSecurityHubOptions): void {
+  const { t } = useTranslation();
+
   useEffect(() => {
     if (!token || !currentUserId) {
       return undefined;
@@ -46,7 +49,7 @@ export function useSecurityHub({ token, currentUserId }: UseSecurityHubOptions):
       }
 
       clearStoredAuthToken();
-      window.alert("Your EngiFlow account has been deactivated.");
+      window.alert(t("hubs.security.deactivated"));
       window.location.assign("/auth?mode=login");
     }
 
@@ -75,7 +78,7 @@ export function useSecurityHub({ token, currentUserId }: UseSecurityHubOptions):
       connection.off("UserDeactivated", handleUserDeactivated);
       void connection.stop();
     };
-  }, [currentUserId, token]);
+  }, [currentUserId, token, t]);
 }
 
 function resolveSecurityHubUrl(): string {

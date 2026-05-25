@@ -10,6 +10,7 @@ import ListItemText from "@mui/material/ListItemText";
 import Stack from "@mui/material/Stack";
 import Typography from "@mui/material/Typography";
 import { type WorkspaceTenantOption } from "./LoginForm";
+import { useTranslation } from "@/context/I18nContext";
 
 /**
  * Describes props accepted by the tenant selection list.
@@ -48,6 +49,8 @@ export default function TenantList({
   onSelect,
   maxHeight = 320,
 }: TenantListProps) {
+  const { t } = useTranslation();
+
   return (
     <List
       aria-label="Available EngiFlow workspaces"
@@ -89,7 +92,7 @@ export default function TenantList({
                   </Typography>
                   {isCurrent && (
                     <Chip
-                      label="Current"
+                      label={t("auth.workspace.current")}
                       size="small"
                       color="secondary"
                       variant="outlined"
@@ -104,7 +107,7 @@ export default function TenantList({
                     {tenant.companyEmail}
                   </Typography>
                   <Typography component="span" variant="caption" color="text.secondary">
-                    Owner: {tenant.ownerName} - {tenant.ownerEmail}
+                    {t("auth.workspace.owner", { name: tenant.ownerName, email: tenant.ownerEmail })}
                   </Typography>
                 </Stack>
               }

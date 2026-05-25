@@ -27,6 +27,7 @@ import NextLink from "@/components/ui/NextLink";
 import { ApiError, apiFetch } from "@/lib/api/client";
 import { useAuth } from "@/lib/auth/AuthContext";
 import { isAdminOrOwner } from "@/lib/auth/jwt";
+import { useTranslation } from "@/context/I18nContext";
 import type {
   CreateEcoPriority,
   CreateEcoRequest,
@@ -49,8 +50,6 @@ const initialFormState: CreateEcoFormState = {
 };
 const titleMaxLength = 200;
 const descriptionMaxLength = 4000;
-const defaultCreateError =
-  "Unable to create the Engineering Change Order. Review the details and try again.";
 const requesterRole = "Requester";
 
 /**
@@ -59,6 +58,7 @@ const requesterRole = "Requester";
  * @returns The dense ECO creation form page.
  */
 export default function NewEcoPage() {
+  const { t } = useTranslation();
   const router = useRouter();
   const { user } = useAuth();
   const storageKey = user ? `new-eco-draft-${user.id}` : null;
@@ -114,7 +114,7 @@ export default function NewEcoPage() {
       return;
     }
 
-    const nextErrors = validateCreateEcoForm(form);
+    const nextErrors = validateCreateEcoForm(form, t);
 
     if (hasFieldErrors(nextErrors)) {
       setFieldErrors(nextErrors);
@@ -145,7 +145,7 @@ export default function NewEcoPage() {
       const createdId = readCreatedEcoId(createdEco);
       router.push(createdId ? `/ecos/${createdId}` : "/ecos");
     } catch (error) {
-      setErrorMessage(getCreateEcoErrorMessage(error));
+      setErrorMessage(getCreateEcoErrorMessage(error, t));
       window.scrollTo({ top: 0, behavior: "smooth" });
     } finally {
       setIsSubmitting(false);
@@ -202,12 +202,12 @@ export default function NewEcoPage() {
         <Stack spacing={3}>
           <Breadcrumbs aria-label="breadcrumb">
             <Link underline="hover" color="inherit" component={NextLink} href="/ecos">
-              ECOs
+              {t("ecos.list.breadcrumbs.ecos")}
             </Link>
-            <Typography color="text.primary">New ECO</Typography>
+            <Typography color="text.primary">{t("ecos.list.breadcrumbs.new")}</Typography>
           </Breadcrumbs>
           <Alert severity="warning">
-            Requester or Administrator access is required to create ECOs.
+            {t("ecos.create.validation.adminRequired")}
           </Alert>
           <Button
             component={NextLink}
@@ -216,7 +216,7 @@ export default function NewEcoPage() {
             startIcon={<ArrowBackIcon />}
             sx={{ alignSelf: "flex-start", textTransform: "none" }}
           >
-            Back to ECOs
+            {t("ecos.details.backToEcos")}
           </Button>
         </Stack>
       </Container>
@@ -229,9 +229,9 @@ export default function NewEcoPage() {
         <Stack spacing={4}>
           <Breadcrumbs aria-label="breadcrumb">
             <Link underline="hover" color="inherit" component={NextLink} href="/ecos">
-              ECOs
+              {t("ecos.list.breadcrumbs.ecos")}
             </Link>
-            <Typography color="text.primary">New Engineering Change Order</Typography>
+            <Typography color="text.primary">{t("ecos.list.breadcrumbs.newFull")}</Typography>
           </Breadcrumbs>
 
           <Box component="form" id="create-eco-form" noValidate onSubmit={handleSubmit}>
@@ -244,11 +244,10 @@ export default function NewEcoPage() {
 
               <Stack spacing={1}>
                 <Typography variant="h4" component="h1" sx={{ fontWeight: 700 }}>
-                  Create New ECO
+                  {t("ecos.create.title")}
                 </Typography>
                 <Typography variant="body1" color="text.secondary">
-                  Author a technical change request. Use the description to provide
-                  detailed justification and impact analysis.
+                  {t("ecos.create.description")}
                 </Typography>
               </Stack>
 
@@ -257,7 +256,7 @@ export default function NewEcoPage() {
                   <TextField
                     id="title"
                     name="title"
-                    placeholder="Engineering Change Order Title"
+                    placeholder={t("ecos.create.titlePlaceholder")}
                     value={form.title}
                     onChange={(event) =>
                       handleFieldChange("title", event.target.value)
@@ -293,7 +292,7 @@ export default function NewEcoPage() {
                       color="text.secondary"
                       sx={{ fontWeight: 600 }}
                     >
-                      Priority Level
+                      {t("ecos.create.priorityLevel")}
                     </Typography>
                     <ToggleButtonGroup
                       value={form.priority}
@@ -325,7 +324,7 @@ export default function NewEcoPage() {
                           },
                         }}
                       >
-                        Low
+                        {t("priority.low")}
                       </ToggleButton>
                       <ToggleButton
                         value="Medium"
@@ -339,7 +338,7 @@ export default function NewEcoPage() {
                           },
                         }}
                       >
-                        Medium
+                        {t("priority.medium")}
                       </ToggleButton>
                       <ToggleButton
                         value="High"
@@ -353,7 +352,7 @@ export default function NewEcoPage() {
                           },
                         }}
                       >
-                        High
+                        {t("priority.high")}
                       </ToggleButton>
                     </ToggleButtonGroup>
                     {fieldErrors.priority && (
@@ -371,7 +370,7 @@ export default function NewEcoPage() {
                       color="text.secondary"
                       sx={{ fontWeight: 600 }}
                     >
-                      Change Description
+                      {t("ecos.create.changeDescription")}
                     </Typography>
                     <EcoComposer
                       value={form.description}
@@ -396,7 +395,7 @@ export default function NewEcoPage() {
                 <Box>
                   {lastSaved && (
                     <Typography variant="caption" color="text.secondary">
-                      Draft auto-saved at {lastSaved.toLocaleTimeString()}
+                      {t("ecos.create.autoSaved", { time: lastSaved.toLocaleTimeString() })}
                     </Typography>
                   )}
                 </Box>
@@ -410,7 +409,7 @@ export default function NewEcoPage() {
                       minWidth: 100,
                     }}
                   >
-                    Cancel
+                    {t("common.cancel")}
                   </Button>
                   <Button
                     type="submit"
@@ -429,7 +428,7 @@ export default function NewEcoPage() {
                     {isSubmitting ? (
                       <CircularProgress color="inherit" size={20} thickness={5} />
                     ) : (
-                      "Create ECO"
+                      t("ecos.create.submitButton")
                     )}
                   </Button>
                 </Stack>
@@ -445,16 +444,15 @@ export default function NewEcoPage() {
         onClose={() => setIsDiscardDialogOpen(false)}
         aria-labelledby="discard-dialog-title"
       >
-        <DialogTitle id="discard-dialog-title">Discard unsaved changes?</DialogTitle>
+        <DialogTitle id="discard-dialog-title">{t("ecos.create.discardDialog.title")}</DialogTitle>
         <DialogContent>
           <DialogContentText>
-            You have unsaved changes in your ECO draft. Are you sure you want to
-            cancel? This will also clear your local draft.
+            {t("ecos.create.discardDialog.message")}
           </DialogContentText>
         </DialogContent>
         <DialogActions sx={{ p: 2, pt: 0 }}>
           <Button onClick={() => setIsDiscardDialogOpen(false)} sx={{ textTransform: "none" }}>
-            Keep Editing
+            {t("ecos.create.discardDialog.keepEditing")}
           </Button>
           <Button
             onClick={handleConfirmDiscard}
@@ -462,7 +460,7 @@ export default function NewEcoPage() {
             variant="contained"
             sx={{ textTransform: "none" }}
           >
-            Discard Changes
+            {t("ecos.create.discardDialog.confirmDiscard")}
           </Button>
         </DialogActions>
       </Dialog>
@@ -474,27 +472,29 @@ export default function NewEcoPage() {
  * Validates user-entered ECO creation fields before the API call.
  *
  * @param form - Current creation form state.
+ * @param t - Translation function.
  * @returns Field-level validation messages keyed by form field.
  */
 function validateCreateEcoForm(
   form: CreateEcoFormState,
+  t: (key: string, params?: Record<string, string | number>) => string,
 ): CreateEcoFieldErrors {
   const errors: CreateEcoFieldErrors = {};
 
   if (!form.title.trim()) {
-    errors.title = "Title is required.";
+    errors.title = t("ecos.create.validation.titleRequired");
   } else if (form.title.trim().length > titleMaxLength) {
-    errors.title = `Title cannot exceed ${titleMaxLength} characters.`;
+    errors.title = t("ecos.create.validation.titleTooLong", { count: titleMaxLength });
   }
 
   if (!form.description.trim()) {
-    errors.description = "Description is required.";
+    errors.description = t("ecos.create.validation.descriptionRequired");
   } else if (form.description.trim().length > descriptionMaxLength) {
-    errors.description = `Description cannot exceed ${descriptionMaxLength} characters.`;
+    errors.description = t("ecos.create.validation.descriptionTooLong", { count: descriptionMaxLength });
   }
 
   if (!createEcoPriorityOptions.includes(form.priority)) {
-    errors.priority = "Select a valid priority.";
+    errors.priority = t("ecos.create.validation.priorityRequired");
   }
 
   return errors;
@@ -528,14 +528,15 @@ function readCreatedEcoId(eco: EcoDetailsDto | null | undefined): string | null 
  * Produces the user-facing create error message from API and network failures.
  *
  * @param error - Unknown error thrown while creating an ECO.
+ * @param t - Translation function.
  * @returns A stable error message suitable for a Material UI Alert.
  */
-function getCreateEcoErrorMessage(error: unknown): string {
+function getCreateEcoErrorMessage(error: unknown, t: (key: string) => string): string {
   if (error instanceof ApiError) {
-    return readProblemDetailsMessage(error.details) ?? defaultCreateError;
+    return readProblemDetailsMessage(error.details) ?? t("ecos.list.loadingError");
   }
 
-  return defaultCreateError;
+  return t("ecos.list.loadingError");
 }
 
 /**

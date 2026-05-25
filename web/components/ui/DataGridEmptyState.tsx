@@ -2,6 +2,7 @@ import FolderOffOutlinedIcon from "@mui/icons-material/FolderOffOutlined";
 import Stack from "@mui/material/Stack";
 import Typography from "@mui/material/Typography";
 import type { ReactNode } from "react";
+import { useTranslation } from "@/context/I18nContext";
 
 type DataGridEmptyStateProps = {
   icon?: ReactNode;
@@ -11,9 +12,11 @@ type DataGridEmptyStateProps = {
 
 export default function DataGridEmptyState({
   icon,
-  message = "No records found",
-  description = "There is currently no data to display.",
+  message,
+  description,
 }: DataGridEmptyStateProps) {
+  const { t } = useTranslation();
+
   return (
     <Stack
       spacing={1.5}
@@ -30,10 +33,10 @@ export default function DataGridEmptyState({
       {icon ?? <FolderOffOutlinedIcon sx={{ fontSize: 48, color: "grey.400" }} />}
       <Stack spacing={0.5}>
         <Typography variant="h6" color="text.primary" sx={{ fontWeight: 600 }}>
-          {message}
+          {message ?? t("common.noRecords")}
         </Typography>
         <Typography variant="body2" color="text.secondary">
-          {description}
+          {description ?? t("common.noData")}
         </Typography>
       </Stack>
     </Stack>

@@ -60,11 +60,13 @@ import { useNotificationHub } from "@/components/security/useNotificationHub";
 import { useSecurityHub } from "@/components/security/useSecurityHub";
 import NextLink from "@/components/ui/NextLink";
 import NotificationPopover from "@/components/ui/NotificationPopover";
+import LanguageSwitcher from "@/components/ui/LanguageSwitcher";
 import CommandPalette from "@/components/ui/CommandPalette";
 import { apiFetch } from "@/lib/api/client";
 import { type AuthSessionResult, useAuth } from "@/lib/auth/AuthContext";
 import { isAdminOrOwner } from "@/lib/auth/jwt";
 import { getRememberMe } from "@/lib/auth/token-storage";
+import { useTranslation } from "@/context/I18nContext";
 import { type WorkspaceTenantOption } from "./auth/LoginForm";
 
 const drawerWidth = 240;
@@ -100,6 +102,7 @@ type NavigationDrawerContentProps = {
 };
 
 export default function AppShell({ children }: PropsWithChildren) {
+  const { t } = useTranslation();
   const theme = useTheme();
   const pathname = usePathname() ?? "/";
   const { login, logout, token, user } = useAuth();
@@ -316,36 +319,36 @@ export default function AppShell({ children }: PropsWithChildren) {
   const navigationItems = useMemo<NavigationItem[]>(
     () => [
       {
-        label: "Dashboard",
+        label: t("sidebar.nav.dashboard"),
         href: "/",
         icon: <DashboardIcon fontSize="small" />,
       },
       {
-        label: "ECOs",
+        label: t("sidebar.nav.ecos"),
         href: "/ecos",
         icon: <AssignmentIcon fontSize="small" />,
         badgeCount: ecoCount,
       },
       {
-        label: "Settings",
+        label: t("sidebar.nav.settings"),
         href: "/settings",
         icon: <SettingsIcon fontSize="small" />,
         administratorOnly: true,
         subItems: [
           {
-            label: "Team Management",
+            label: t("sidebar.nav.teamManagement"),
             href: "/settings/users",
             icon: <ManageAccountsIcon fontSize="small" />,
           },
           {
-            label: "Workflow Policies",
+            label: t("sidebar.nav.workflowPolicies"),
             href: "/settings/workflow-policies",
             icon: <GroupIcon fontSize="small" />,
           },
         ],
       },
     ],
-    [ecoCount],
+    [ecoCount, t],
   );
 
   return (
@@ -431,14 +434,15 @@ export default function AppShell({ children }: PropsWithChildren) {
           >
             <Box sx={{ p: 2, pb: 1 }}>
               <Typography variant="subtitle2" sx={{ fontWeight: 800, color: "text.secondary", fontSize: "0.75rem", textTransform: "uppercase", letterSpacing: "0.05em" }}>
-                Switch Workspace
+                {t("workspaceSwitcher.title")}
               </Typography>
             </Box>
+
             <Box sx={{ px: 2, pb: 2 }}>
               {isTenantsLoading ? (
                 <Stack direction="row" spacing={1} sx={{ py: 2, justifyContent: "center", alignItems: "center" }}>
                   <CircularProgress size={16} />
-                  <Typography variant="body2" color="text.secondary">Loading workspaces...</Typography>
+                  <Typography variant="body2" color="text.secondary">{t("auth.workspace.loading")}</Typography>
                 </Stack>
               ) : (
                 <TenantList
@@ -454,8 +458,9 @@ export default function AppShell({ children }: PropsWithChildren) {
 
           {/* Dynamic Breadcrumbs */}
           <Breadcrumbs
-            aria-label="breadcrumb"
+            aria-label={t("common.breadcrumbs")}
             separator={<Typography color="text.disabled" variant="caption">/</Typography>}
+
             sx={{
               ml: 1,
               display: "flex",
@@ -525,7 +530,7 @@ export default function AppShell({ children }: PropsWithChildren) {
             >
               <SearchOutlinedIcon fontSize="small" sx={{ color: "text.disabled", mr: 1.5 }} />
               <Typography variant="body2" color="text.disabled" sx={{ flex: 1 }}>
-                Search or type a command...
+                {t("topbar.search.placeholder")}
               </Typography>
               <Typography
                 variant="caption"
@@ -539,13 +544,15 @@ export default function AppShell({ children }: PropsWithChildren) {
                   color: "text.secondary",
                 }}
               >
-                ⌘K
+                {t("topbar.search.shortcut")}
               </Typography>
             </Box>
           </Box>
 
           {/* Global Quick Actions & Utilities */}
           <Stack direction="row" spacing={0.5} sx={{ alignItems: "center", ml: "auto" }}>
+            <LanguageSwitcher />
+
             <IconButton
               size="small"
               onClick={handleSearchOpen}
@@ -572,7 +579,7 @@ export default function AppShell({ children }: PropsWithChildren) {
               onMarkAllAsRead={markAllAsRead}
             />
 
-            <Tooltip title="Global Actions">
+            <Tooltip title={t("topbar.actions.tooltip")}>
               <IconButton
                 size="small"
                 onClick={handleActionsOpen}
@@ -603,18 +610,18 @@ export default function AppShell({ children }: PropsWithChildren) {
               {canCreateEco ? (
                 <MenuItem component={NextLink} href="/ecos/new" onClick={handleActionsClose}>
                   <ListItemIcon><AddIcon fontSize="small" /></ListItemIcon>
-                  <ListItemText primary="New ECO" slotProps={{ primary: { variant: "body2", sx: { fontWeight: 600 } } }} />
+                  <ListItemText primary={t("topbar.actions.newEco")} slotProps={{ primary: { variant: "body2", sx: { fontWeight: 600 } } }} />
                 </MenuItem>
               ) : null}
               {isAdministrator ? (
                 <MenuItem component={NextLink} href="/settings/users" onClick={handleActionsClose}>
                   <ListItemIcon><PeopleOutlinedIcon fontSize="small" /></ListItemIcon>
-                  <ListItemText primary="Invite User" slotProps={{ primary: { variant: "body2", sx: { fontWeight: 600 } } }} />
+                  <ListItemText primary={t("topbar.actions.inviteUser")} slotProps={{ primary: { variant: "body2", sx: { fontWeight: 600 } } }} />
                 </MenuItem>
               ) : null}
               {!canCreateEco && !isAdministrator ? (
                 <MenuItem disabled>
-                  <ListItemText primary="No actions available" slotProps={{ primary: { variant: "body2", sx: { color: "text.disabled" } } }} />
+                  <ListItemText primary={t("topbar.actions.noActions")} slotProps={{ primary: { variant: "body2", sx: { color: "text.disabled" } } }} />
                 </MenuItem>
               ) : null}
             </Menu>
@@ -776,6 +783,7 @@ function getPathSegments(pathname: string): { label: string; href: string }[] {
  * About modal component displaying product information and credits.
  */
 function AboutDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
+  const { t } = useTranslation();
   return (
     <Dialog
       open={open}
@@ -789,7 +797,7 @@ function AboutDialog({ open, onClose }: { open: boolean; onClose: () => void }) 
       }}
     >
       <IconButton
-        aria-label="close"
+        aria-label={t("common.close")}
         onClick={onClose}
         sx={{
           position: "absolute",
@@ -810,11 +818,11 @@ function AboutDialog({ open, onClose }: { open: boolean; onClose: () => void }) 
       </DialogTitle>
       <DialogContent sx={{ textAlign: "center", py: 3 }}>
         <Typography variant="body2" color="text.secondary" gutterBottom>
-          Engineering Change Management
+          {t("about.description")}
         </Typography>
         <Box sx={{ my: 3 }}>
           <Typography variant="caption" component="span" color="text.secondary" sx={{ display: "block", mb: 0.5 }}>
-            DESIGNED & DEVELOPED BY
+            {t("about.designedBy")}
           </Typography>
           <Typography variant="body1" sx={{ fontWeight: 600 }}>
             Emanuel Lázaro
@@ -831,13 +839,13 @@ function AboutDialog({ open, onClose }: { open: boolean; onClose: () => void }) 
           fullWidth
           sx={{ borderRadius: 2, textTransform: "none" }}
         >
-          View Source on GitHub
+          {t("about.viewSource")}
         </Button>
       </DialogContent>
       <Divider sx={{ mx: 2 }} />
       <DialogActions sx={{ justifyContent: "center", p: 2 }}>
         <Typography variant="caption" color="text.disabled">
-          MIT License - Copyright © 2026
+          {t("about.license")}
         </Typography>
       </DialogActions>
     </Dialog>
@@ -863,6 +871,7 @@ function NavigationDrawerContent({
   onAboutOpen,
   onDrawerToggle,
 }: NavigationDrawerContentProps) {
+  const { t } = useTranslation();
   const theme = useTheme();
   const [isSettingsOpen, setIsSettingsOpen] = useState(() => pathname.startsWith("/settings"));
 
@@ -1141,7 +1150,7 @@ function NavigationDrawerContent({
 
       <Divider />
       <Box sx={{ py: 1, px: isExpanded ? 1 : 0.5 }}>
-        <Tooltip title={!isExpanded ? "About EngiFlow" : ""} placement="right">
+        <Tooltip title={!isExpanded ? t("sidebar.footer.about") : ""} placement="right">
           <ListItemButton
             onClick={onAboutOpen}
             sx={{
@@ -1163,7 +1172,7 @@ function NavigationDrawerContent({
             </ListItemIcon>
             {isExpanded && (
               <ListItemText
-                primary="About EngiFlow"
+                primary={t("sidebar.footer.about")}
                 slotProps={{ primary: { variant: "body2", sx: { fontWeight: 500 } } }}
               />
             )}
@@ -1204,12 +1213,12 @@ function NavigationDrawerContent({
                 {userName}
               </Typography>
               <Typography variant="caption" color="text.secondary" noWrap sx={{ display: "block", mt: -0.5 }}>
-                {role}
+                {getRoleLabel(role, t)}
               </Typography>
             </Box>
           )}
-          <Tooltip title="Logout" placement={isExpanded ? "top" : "right"}>
-            <IconButton size="small" aria-label="Logout" onClick={onLogout}>
+          <Tooltip title={t("sidebar.footer.logout")} placement={isExpanded ? "top" : "right"}>
+            <IconButton size="small" aria-label={t("sidebar.footer.logout")} onClick={onLogout}>
               <LogoutIcon fontSize="small" />
             </IconButton>
           </Tooltip>
@@ -1270,4 +1279,19 @@ function getInitials(name: string): string {
     .join("");
 
   return initials || "U";
+}
+
+/**
+ * Converts a technical role token into a localized display label.
+ */
+function getRoleLabel(role: string | undefined, t: (key: string) => string): string {
+  if (!role) return "";
+  const map: Record<string, string> = {
+    Owner: t("users.roles.owner"),
+    Administrator: t("users.roles.administrator"),
+    Approver: t("users.roles.approver"),
+    Requester: t("users.roles.requester"),
+    Viewer: t("users.roles.viewer"),
+  };
+  return map[role] || role;
 }

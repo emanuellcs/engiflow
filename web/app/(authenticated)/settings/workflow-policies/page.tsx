@@ -19,6 +19,7 @@ import PageHeader from "@/components/ui/PageHeader";
 import { ApiError, apiFetch } from "@/lib/api/client";
 import { useAuth } from "@/lib/auth/AuthContext";
 import { isAdminOrOwner } from "@/lib/auth/jwt";
+import { useTranslation } from "@/context/I18nContext";
 
 /**
  * Describes the tenant-scoped workflow governance settings returned by the API.
@@ -46,6 +47,7 @@ type UserSummary = {
 };
 
 export default function WorkflowPoliciesPage() {
+  const { t } = useTranslation();
   const { user } = useAuth();
   const [settings, setSettings] = useState<CompanySettings | null>(null);
   const [users, setUsers] = useState<UserSummary[]>([]);
@@ -84,11 +86,11 @@ export default function WorkflowPoliciesPage() {
       setSlaValue(String(settingsResponse.maxReviewDaysBeforeSlabreach));
       setAllowSelfApproval(settingsResponse.allowSelfApproval);
     } catch (error) {
-      setErrorMessage(getApiErrorMessage(error, "Unable to load workflow policies."));
+      setErrorMessage(getApiErrorMessage(error, t("policies.loadError"), t));
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [t]);
 
   useEffect(() => {
     if (!isAdministrator) {
@@ -112,7 +114,7 @@ export default function WorkflowPoliciesPage() {
       })
       .catch((error) => {
         if (isMounted) {
-          setErrorMessage(getApiErrorMessage(error, "Unable to load workflow policies."));
+          setErrorMessage(getApiErrorMessage(error, t("policies.loadError"), t));
         }
       })
       .finally(() => {
@@ -124,18 +126,18 @@ export default function WorkflowPoliciesPage() {
     return () => {
       isMounted = false;
     };
-  }, [isAdministrator]);
+  }, [isAdministrator, t]);
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
     if (!Number.isInteger(parsedQuorum) || parsedQuorum < 1) {
-      setErrorMessage("Minimum approvals required must be at least one.");
+      setErrorMessage(t("policies.validation.quorumMin"));
       return;
     }
 
     if (!Number.isInteger(parsedSla) || parsedSla < 1) {
-      setErrorMessage("Maximum review time must be at least one day.");
+      setErrorMessage(t("policies.validation.slaMin"));
       return;
     }
 
@@ -157,9 +159,9 @@ export default function WorkflowPoliciesPage() {
       setQuorumValue(String(response.minApprovalsRequired));
       setSlaValue(String(response.maxReviewDaysBeforeSlabreach));
       setAllowSelfApproval(response.allowSelfApproval);
-      setSuccessMessage("Workflow policies were updated.");
+      setSuccessMessage(t("policies.saveSuccess"));
     } catch (error) {
-      setErrorMessage(getApiErrorMessage(error, "Unable to update workflow policies."));
+      setErrorMessage(getApiErrorMessage(error, t("policies.updateError"), t));
     } finally {
       setIsSaving(false);
     }
@@ -169,11 +171,11 @@ export default function WorkflowPoliciesPage() {
     return (
       <Stack spacing={2.5}>
         <PageHeader
-          title="Workflow Policies"
-          description="Control approval quorum rules for engineering change orders."
+          title={t("policies.title")}
+          description={t("policies.subtitle")}
         />
         <Alert severity="warning">
-          Administrator access is required to manage workflow policies.
+          {t("policies.adminRequired")}
         </Alert>
       </Stack>
     );
@@ -182,8 +184,8 @@ export default function WorkflowPoliciesPage() {
   return (
     <Stack spacing={2.5}>
       <PageHeader
-        title="Workflow Policies"
-        description="Control approval quorum rules for engineering change orders."
+        title={t("policies.title")}
+        description={t("policies.subtitle")}
         onRefresh={() => void loadPolicyData()}
         isLoading={isLoading}
       />
@@ -211,15 +213,15 @@ export default function WorkflowPoliciesPage() {
               href="/settings/users"
               sx={{ fontWeight: 700, textTransform: "none" }}
             >
-              Invite Approvers
+              {t("policies.inviteApprovers")}
             </Button>
           }
         >
-          No active Approvers found. You must invite team members to the Approver role before ECOs can be processed.
+          {t("policies.noApprovers")}
         </Alert>
       ) : showQuorumWarning ? (
         <Alert severity="warning">
-          Warning: You require {parsedQuorum} approval{parsedQuorum === 1 ? "" : "s"}, but only have {activeApproverCount} Approver{activeApproverCount === 1 ? "" : "s"} active. ECOs may become stuck.
+          {t("policies.quorumWarningPlural", { count: parsedQuorum, available: activeApproverCount })}
         </Alert>
       ) : null}
 
@@ -239,10 +241,10 @@ export default function WorkflowPoliciesPage() {
               <Stack spacing={2.5} sx={{ height: "100%" }}>
                 <Stack spacing={0.5}>
                   <Typography variant="h6" component="h2">
-                    ECO Approval Quorum
+                    {t("policies.sections.quorum.title")}
                   </Typography>
                   <Typography variant="body2" color="text.secondary">
-                    Minimum approvals required before an ECO can move from review to approved.
+                    {t("policies.sections.quorum.subtitle")}
                   </Typography>
                 </Stack>
 
@@ -254,7 +256,7 @@ export default function WorkflowPoliciesPage() {
                   <Stack spacing={3} sx={{ flexGrow: 1 }}>
                     <TextField
                       id="min-approvals-required"
-                      label="Minimum approvals required"
+                      label={t("policies.sections.quorum.fieldLabel")}
                       type="number"
                       value={quorumValue}
                       onChange={(event) => setQuorumValue(event.target.value)}
@@ -264,15 +266,17 @@ export default function WorkflowPoliciesPage() {
                         input: {
                           endAdornment: (
                             <InputAdornment position="end">
-                              approval{parsedQuorum === 1 ? "" : "s"}
+                              {parsedQuorum === 1 ? t("policies.sections.quorum.fieldSuffix") : t("policies.sections.quorum.fieldSuffixPlural")}
                             </InputAdornment>
                           ),
                         },
                       }}
                       helperText={
                         showQuorumWarning
-                          ? `Insufficient approvers: only ${activeApproverCount} available`
-                          : `${activeApproverCount} active Approver${activeApproverCount === 1 ? "" : "s"} available`
+                          ? t("policies.sections.quorum.helperInsufficient", { count: activeApproverCount })
+                          : activeApproverCount === 1 
+                            ? t("policies.sections.quorum.helperAvailable", { count: activeApproverCount })
+                            : t("policies.sections.quorum.helperAvailablePlural", { count: activeApproverCount })
                       }
                       required
                       fullWidth
@@ -289,7 +293,7 @@ export default function WorkflowPoliciesPage() {
                       }
                       label={
                         <Typography variant="body2">
-                          Allow ECO authors to approve their own submissions
+                          {t("policies.sections.quorum.selfApprovalLabel")}
                         </Typography>
                       }
                     />
@@ -313,10 +317,10 @@ export default function WorkflowPoliciesPage() {
               <Stack spacing={2.5} sx={{ height: "100%" }}>
                 <Stack spacing={0.5}>
                   <Typography variant="h6" component="h2">
-                    SLA & Deadlines
+                    {t("policies.sections.sla.title")}
                   </Typography>
                   <Typography variant="body2" color="text.secondary">
-                    Configure response thresholds before an engineering order triggers a critical bottleneck alert.
+                    {t("policies.sections.sla.subtitle")}
                   </Typography>
                 </Stack>
 
@@ -328,7 +332,7 @@ export default function WorkflowPoliciesPage() {
                   <Stack spacing={3} sx={{ flexGrow: 1 }}>
                     <TextField
                       id="sla-threshold"
-                      label="Maximum review time before SLA breach (Days)"
+                      label={t("policies.sections.sla.fieldLabel")}
                       type="number"
                       value={slaValue}
                       onChange={(event) => setSlaValue(event.target.value)}
@@ -337,7 +341,7 @@ export default function WorkflowPoliciesPage() {
                         input: {
                           endAdornment: (
                             <InputAdornment position="end">
-                              days
+                              {parsedSla === 1 ? t("policies.sections.sla.fieldSuffix") : t("policies.sections.sla.fieldSuffixPlural")}
                             </InputAdornment>
                           ),
                         },
@@ -364,7 +368,7 @@ export default function WorkflowPoliciesPage() {
             {isSaving ? (
               <CircularProgress color="inherit" size={18} thickness={5} />
             ) : (
-              "Save Policy"
+              t("policies.saveButton")
             )}
           </Button>
         </Stack>
@@ -373,12 +377,12 @@ export default function WorkflowPoliciesPage() {
   );
 }
 
-function getApiErrorMessage(error: unknown, fallback: string): string {
+function getApiErrorMessage(error: unknown, fallback: string, t: (key: string) => string): string {
   if (error instanceof ApiError) {
     return readProblemDetailsMessage(error.details) ?? fallback;
   }
 
-  return fallback;
+  return t(fallback) || fallback;
 }
 
 function readProblemDetailsMessage(details: unknown): string | null {

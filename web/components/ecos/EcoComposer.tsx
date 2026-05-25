@@ -6,6 +6,7 @@ import Tabs from "@mui/material/Tabs";
 import TextField from "@mui/material/TextField";
 import { useState } from "react";
 import RichTextRenderer from "./RichTextRenderer";
+import { useTranslation } from "@/context/I18nContext";
 
 export type EcoComposerProps = {
   /** The markdown value to edit. */
@@ -34,6 +35,7 @@ export default function EcoComposer({
   maxLength = 4000,
   error,
 }: EcoComposerProps) {
+  const { t } = useTranslation();
   const [activeTab, setActiveTab] = useState(0);
 
   const handleTabChange = (_: React.SyntheticEvent, newValue: number) => {
@@ -66,8 +68,8 @@ export default function EcoComposer({
             },
           }}
         >
-          <Tab label="Write" id="composer-tab-0" aria-controls="composer-panel-0" />
-          <Tab label="Preview" id="composer-tab-1" aria-controls="composer-panel-1" />
+          <Tab label={t("ecos.details.composer.write")} id="composer-tab-0" aria-controls="composer-panel-0" />
+          <Tab label={t("ecos.details.composer.preview")} id="composer-tab-1" aria-controls="composer-panel-1" />
         </Tabs>
       </Box>
 
@@ -85,7 +87,7 @@ export default function EcoComposer({
           value={value}
           onChange={(e) => onChange(e.target.value)}
           disabled={disabled}
-          placeholder="Describe the engineering change, justification, and impact..."
+          placeholder={t("ecos.details.composer.placeholder")}
           slotProps={{
             htmlInput: {
               maxLength,
@@ -132,7 +134,7 @@ export default function EcoComposer({
               fontStyle: "italic",
             }}
           >
-            Nothing to preview
+            {t("ecos.details.composer.nothingToPreview")}
           </Box>
         )}
       </Box>

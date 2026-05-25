@@ -1,4 +1,5 @@
 import Chip from "@mui/material/Chip";
+import { useTranslation } from "@/context/I18nContext";
 import type { EcoStatus } from "@/lib/types/eco";
 
 export type { EcoStatus } from "@/lib/types/eco";
@@ -45,9 +46,11 @@ const chipSxByStatus: Record<EcoStatus, object> = {
  * @returns A dense status chip suitable for tables and summary views.
  */
 export default function StatusChip({ status }: StatusChipProps) {
+  const { t } = useTranslation();
+
   return (
     <Chip
-      label={formatStatusLabel(status)}
+      label={getStatusLabel(status, t)}
       size="small"
       variant={status === "Draft" ? "outlined" : "filled"}
       sx={{
@@ -61,11 +64,20 @@ export default function StatusChip({ status }: StatusChipProps) {
 }
 
 /**
- * Converts a PascalCase or camelCase enum token into readable UI copy.
+ * Converts a PascalCase or camelCase enum token into localized UI copy.
  *
  * @param value - Raw API enum string.
- * @returns A display label with word boundaries inserted.
+ * @param t - Translation function.
+ * @returns A localized display label.
  */
-function formatStatusLabel(value: string): string {
-  return value.replace(/([a-z])([A-Z])/g, "$1 $2");
+function getStatusLabel(value: EcoStatus, t: (key: string) => string): string {
+  const map: Record<EcoStatus, string> = {
+    Draft: t("status.draft"),
+    UnderReview: t("status.underReview"),
+    Approved: t("status.approved"),
+    Canceled: t("status.canceled"),
+    Rejected: t("status.rejected"),
+    Implemented: t("status.implemented"),
+  };
+  return map[value] || value;
 }

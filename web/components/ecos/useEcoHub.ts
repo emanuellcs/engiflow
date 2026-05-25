@@ -7,6 +7,7 @@ import {
 } from "@microsoft/signalr";
 import { useEffect, useState } from "react";
 import type { EcoRealtimeUpdate } from "@/lib/types/eco";
+import { useTranslation } from "@/context/I18nContext";
 
 export type EcoHubConnectionStatus =
   | "idle"
@@ -36,6 +37,7 @@ export type UseEcoHubResult = {
  * @returns Current hub status and error state.
  */
 export function useEcoHub({ token, onEcoChanged }: UseEcoHubOptions): UseEcoHubResult {
+  const { t } = useTranslation();
   const [status, setStatus] = useState<EcoHubConnectionStatus>("idle");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
@@ -62,7 +64,7 @@ export function useEcoHub({ token, onEcoChanged }: UseEcoHubOptions): UseEcoHubR
     connection.onreconnecting((error) => {
       if (!isDisposed) {
         setStatus("reconnecting");
-        setErrorMessage(getSignalRErrorMessage(error));
+        setErrorMessage(getSignalRErrorMessage(error, t));
       }
     });
     connection.onreconnected(() => {
@@ -74,7 +76,7 @@ export function useEcoHub({ token, onEcoChanged }: UseEcoHubOptions): UseEcoHubR
     connection.onclose((error) => {
       if (!isDisposed) {
         setStatus("disconnected");
-        setErrorMessage(getSignalRErrorMessage(error));
+        setErrorMessage(getSignalRErrorMessage(error, t));
       }
     });
 
@@ -90,7 +92,7 @@ export function useEcoHub({ token, onEcoChanged }: UseEcoHubOptions): UseEcoHubR
       } catch (error) {
         if (!isDisposed) {
           setStatus("disconnected");
-          setErrorMessage(getSignalRErrorMessage(error));
+          setErrorMessage(getSignalRErrorMessage(error, t));
         }
       }
     }
@@ -102,7 +104,7 @@ export function useEcoHub({ token, onEcoChanged }: UseEcoHubOptions): UseEcoHubR
       connection.off("EcoChanged", onEcoChanged);
       void connection.stop();
     };
-  }, [onEcoChanged, token]);
+  }, [onEcoChanged, token, t]);
 
   return { status, errorMessage };
 }
@@ -117,7 +119,7 @@ function resolveEcoHubUrl(): string {
   return `${baseUrl}/hubs/ecos`;
 }
 
-function getSignalRErrorMessage(error: unknown): string | null {
+function getSignalRErrorMessage(error: unknown, t: (key: string) => string): string | null {
   if (!error) {
     return null;
   }
@@ -126,5 +128,5 @@ function getSignalRErrorMessage(error: unknown): string | null {
     return error.message;
   }
 
-  return "The real-time ECO connection is unavailable.";
+  return t("hubs.eco.unavailable");
 }

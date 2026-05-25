@@ -6,7 +6,9 @@ import HistoryEduIcon from "@mui/icons-material/HistoryEdu";
 import Box from "@mui/material/Box";
 import Stack from "@mui/material/Stack";
 import Typography from "@mui/material/Typography";
-import { type ReactNode } from "react";
+import { useMemo, type ReactNode } from "react";
+import LanguageSwitcher from "@/components/ui/LanguageSwitcher";
+import { useTranslation } from "@/context/I18nContext";
 
 /**
  * Describes one branding feature rendered in the public auth split screen.
@@ -24,28 +26,30 @@ interface AuthLayoutProps {
   children: ReactNode;
 }
 
-const featureItems: AuthFeatureItem[] = [
-  {
-    icon: <AssignmentTurnedInIcon sx={{ color: "primary.light" }} />,
-    title: "ECO Workflow",
-    description: "Create, submit, approve, and reject controlled changes with clear ownership.",
-  },
-  {
-    icon: <HistoryEduIcon sx={{ color: "primary.light" }} />,
-    title: "Audit Trails",
-    description: "Capture immutable activity history for every material workflow decision.",
-  },
-  {
-    icon: <AdminPanelSettingsIcon sx={{ color: "primary.light" }} />,
-    title: "Role-Based Access",
-    description: "Separate requesters, approvers, and administrators across each tenant.",
-  },
-];
-
 /**
  * Renders the shared EngiFlow public auth layout.
  */
 export default function AuthLayout({ children }: AuthLayoutProps) {
+  const { t } = useTranslation();
+
+  const featureItems = useMemo<AuthFeatureItem[]>(() => [
+    {
+      icon: <AssignmentTurnedInIcon sx={{ color: "primary.light" }} />,
+      title: t("auth.layout.features.workflow.title"),
+      description: t("auth.layout.features.workflow.description"),
+    },
+    {
+      icon: <HistoryEduIcon sx={{ color: "primary.light" }} />,
+      title: t("auth.layout.features.audit.title"),
+      description: t("auth.layout.features.audit.description"),
+    },
+    {
+      icon: <AdminPanelSettingsIcon sx={{ color: "primary.light" }} />,
+      title: t("auth.layout.features.access.title"),
+      description: t("auth.layout.features.access.description"),
+    },
+  ], [t]);
+
   return (
     <Box
       component="main"
@@ -54,8 +58,27 @@ export default function AuthLayout({ children }: AuthLayoutProps) {
         display: "flex",
         flexDirection: { xs: "column", md: "row" },
         bgcolor: "background.default",
+        position: "relative",
       }}
     >
+      <Box
+        sx={{
+          position: "absolute",
+          top: 16,
+          right: 16,
+          zIndex: 100,
+          // Mobile visibility: make icon white on small screens to contrast with dark green background
+          "& .MuiButton-root": {
+            color: { xs: "common.white", md: "text.secondary" },
+            "&:hover": {
+              color: { xs: "common.white", md: "primary.main" },
+              bgcolor: { xs: "rgba(255, 255, 255, 0.08)", md: "action.hover" },
+            },
+          },
+        }}
+      >
+        <LanguageSwitcher />
+      </Box>
       <Box
         component="section"
         sx={{
@@ -94,7 +117,7 @@ export default function AuthLayout({ children }: AuthLayoutProps) {
                 opacity: 0.9,
               }}
             >
-              Engineering change control for modern B2B teams.
+              {t("auth.layout.mission")}
             </Typography>
           </Stack>
 

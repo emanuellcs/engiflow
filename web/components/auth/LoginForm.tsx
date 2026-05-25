@@ -41,6 +41,7 @@ import NextLink from "@/components/ui/NextLink";
 import TenantList from "./TenantList";
 import { ApiError, apiFetch } from "@/lib/api/client";
 import { type AuthSessionResult, useAuth } from "@/lib/auth/AuthContext";
+import { useTranslation } from "@/context/I18nContext";
 
 /**
  * Describes client-side login validation errors.
@@ -91,20 +92,13 @@ interface LoginFormProps {
 }
 
 const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-const defaultLoginError =
-  "Unable to sign in. Check your email and password, then try again.";
-const pendingActivationError =
-  "Your account has been invited but is not activated yet. Please click 'Forgot Password?' above to create your security credentials.";
-const invalidAuthResponseError =
-  "The server returned an invalid authentication response. Please try again.";
-const forgotPasswordSuccess =
-  "If an account exists, a reset link has been sent";
 
 /**
  * Renders the sign-in form and raises a workspace picker challenge when needed.
  */
 const LoginForm = forwardRef<HTMLDivElement, LoginFormProps>(
   ({ style, onWorkspaceSelectionRequired }, ref) => {
+    const { t } = useTranslation();
     const router = useRouter();
     const { login } = useAuth();
     const [email, setEmail] = useState("");
@@ -124,7 +118,7 @@ const LoginForm = forwardRef<HTMLDivElement, LoginFormProps>(
         return;
       }
 
-      const nextErrors = validateLogin(email, password);
+      const nextErrors = validateLogin(email, password, t);
 
       if (hasErrors(nextErrors)) {
         setFieldErrors(nextErrors);
@@ -146,11 +140,11 @@ const LoginForm = forwardRef<HTMLDivElement, LoginFormProps>(
         });
 
         if (response.status === "PendingActivation") {
-          setErrorMessage(pendingActivationError);
+          setErrorMessage(t("auth.login.errors.pendingActivation"));
           return;
         }
 
-        const workspaceChallenge = readWorkspaceSelectionChallenge(response, rememberMe);
+        const workspaceChallenge = readWorkspaceSelectionChallenge(response, rememberMe, t);
 
         if (workspaceChallenge) {
           onWorkspaceSelectionRequired?.(workspaceChallenge);
@@ -160,7 +154,7 @@ const LoginForm = forwardRef<HTMLDivElement, LoginFormProps>(
         login(response, rememberMe);
         router.replace("/");
       } catch (error) {
-        setErrorMessage(getLoginErrorMessage(error));
+        setErrorMessage(getLoginErrorMessage(error, t));
       } finally {
         setIsPending(false);
       }
@@ -204,10 +198,10 @@ const LoginForm = forwardRef<HTMLDivElement, LoginFormProps>(
           <Stack spacing={2}>
             <Stack spacing={0.75}>
               <Typography variant="h4" component="h1">
-                Sign in
+                {t("auth.login.title")}
               </Typography>
               <Typography variant="body2" color="text.secondary">
-                Access your EngiFlow workspace.
+                {t("auth.login.subtitle")}
               </Typography>
             </Stack>
 
@@ -222,7 +216,7 @@ const LoginForm = forwardRef<HTMLDivElement, LoginFormProps>(
               <TextField
                 id="outlined-basic-email"
                 name="email"
-                label="Email"
+                label={t("auth.login.emailLabel")}
                 variant="outlined"
                 type="email"
                 value={email}
@@ -241,7 +235,7 @@ const LoginForm = forwardRef<HTMLDivElement, LoginFormProps>(
               <TextField
                 id="outlined-basic-password"
                 name="password"
-                label="Password"
+                label={t("auth.login.passwordLabel")}
                 variant="outlined"
                 type={showPassword ? "text" : "password"}
                 value={password}
@@ -295,7 +289,7 @@ const LoginForm = forwardRef<HTMLDivElement, LoginFormProps>(
                       size="small"
                     />
                   }
-                  label="Remember me"
+                  label={t("auth.login.rememberMe")}
                   slotProps={{
                     typography: { variant: "body2" },
                   }}
@@ -312,7 +306,7 @@ const LoginForm = forwardRef<HTMLDivElement, LoginFormProps>(
                     }}
                     sx={{ whiteSpace: "nowrap" }}
                   >
-                    Forgot password?
+                    {t("auth.login.forgotPassword")}
                   </Link>
                 </Box>
               </Box>
@@ -328,14 +322,14 @@ const LoginForm = forwardRef<HTMLDivElement, LoginFormProps>(
               {isPending ? (
                 <CircularProgress color="inherit" size={20} thickness={5} />
               ) : (
-                "Sign in"
+                t("auth.login.submitButton")
               )}
             </Button>
 
             <Typography variant="body2" color="text.secondary" align="center">
-              Don&apos;t have an account?{" "}
+              {t("auth.login.noAccount")}{" "}
               <Link component={NextLink} href="/auth?mode=register" underline="hover">
-                Register your company
+                {t("auth.login.registerLink")}
               </Link>
             </Typography>
           </Stack>
@@ -347,7 +341,7 @@ const LoginForm = forwardRef<HTMLDivElement, LoginFormProps>(
           onClose={() => setIsForgotPasswordOpen(false)}
           onSuccess={() => {
             setIsForgotPasswordOpen(false);
-            setSuccessMessage(forgotPasswordSuccess);
+            setSuccessMessage(t("auth.forgotPassword.successMessage"));
             setErrorMessage(null);
           }}
         />
@@ -379,6 +373,7 @@ function ForgotPasswordDialog({
   onClose,
   onSuccess,
 }: ForgotPasswordDialogProps) {
+  const { t } = useTranslation();
   const [email, setEmail] = useState(initialEmail);
   const [tenants, setTenants] = useState<WorkspaceTenantOption[] | null>(null);
   const [selectedTenantId, setSelectedTenantId] = useState<string | null>(null);
@@ -402,7 +397,7 @@ function ForgotPasswordDialog({
     event?.preventDefault();
 
     if (!tenantId) {
-      const nextError = validateEmail(email);
+      const nextError = validateEmail(email, t);
       if (nextError) {
         setFieldError(nextError);
         return;
@@ -441,7 +436,7 @@ function ForgotPasswordDialog({
       }
     } catch (error) {
       setSubmitError(
-        readProblemDetailsMessage(error) ?? "Unable to submit reset request.",
+        readProblemDetailsMessage(error) ?? t("auth.forgotPassword.submitError"),
       );
       setSelectedTenantId(null);
     } finally {
@@ -465,13 +460,12 @@ function ForgotPasswordDialog({
         noValidate
         onSubmit={(e: FormEvent<HTMLFormElement>) => void handleSubmit(e)}
       >
-        <DialogTitle>Reset password</DialogTitle>
+        <DialogTitle>{t("auth.forgotPassword.title")}</DialogTitle>
         <DialogContent sx={{ display: "flex", flexDirection: "column", gap: 2 }}>
           {tenants ? (
             <>
               <DialogContentText>
-                Multiple workspaces found. Select the one you want to reset your
-                password for.
+                {t("auth.forgotPassword.multipleWorkspaces")}
               </DialogContentText>
               {submitError ? (
                 <Alert severity="error">{submitError}</Alert>
@@ -485,8 +479,7 @@ function ForgotPasswordDialog({
           ) : (
             <>
               <DialogContentText>
-                Enter your account email address and EngiFlow will send reset
-                instructions if the account exists.
+                {t("auth.forgotPassword.subtitle")}
               </DialogContentText>
               {submitError ? (
                 <Alert severity="error">{submitError}</Alert>
@@ -496,7 +489,7 @@ function ForgotPasswordDialog({
                 required
                 id="forgot-password-email"
                 name="email"
-                label="Email"
+                label={t("auth.login.emailLabel")}
                 variant="outlined"
                 type="email"
                 value={email}
@@ -523,7 +516,7 @@ function ForgotPasswordDialog({
               disabled={isPending}
               sx={{ textTransform: "none" }}
             >
-              Back
+              {t("common.back")}
             </Button>
           ) : (
             <Button
@@ -531,7 +524,7 @@ function ForgotPasswordDialog({
               disabled={isPending}
               sx={{ textTransform: "none" }}
             >
-              Cancel
+              {t("common.cancel")}
             </Button>
           )}
           {!tenants && (
@@ -544,7 +537,7 @@ function ForgotPasswordDialog({
               {isPending ? (
                 <CircularProgress color="inherit" size={18} thickness={5} />
               ) : (
-                "Continue"
+                t("auth.forgotPassword.continue")
               )}
             </Button>
           )}
@@ -557,16 +550,16 @@ function ForgotPasswordDialog({
 /**
  * Validates the login form fields.
  */
-function validateLogin(email: string, password: string): LoginFieldErrors {
+function validateLogin(email: string, password: string, t: (key: string) => string): LoginFieldErrors {
   const errors: LoginFieldErrors = {};
-  const emailError = validateEmail(email);
+  const emailError = validateEmail(email, t);
 
   if (emailError) {
     errors.email = emailError;
   }
 
   if (!password) {
-    errors.password = "Password is required.";
+    errors.password = t("auth.login.validation.passwordRequired");
   }
 
   return errors;
@@ -575,13 +568,13 @@ function validateLogin(email: string, password: string): LoginFieldErrors {
 /**
  * Validates an email address for public auth dialogs.
  */
-function validateEmail(email: string): string | null {
+function validateEmail(email: string, t: (key: string) => string): string | null {
   if (!email.trim()) {
-    return "Email is required.";
+    return t("auth.login.validation.emailRequired");
   }
 
   if (!emailPattern.test(email.trim())) {
-    return "Enter a valid email address.";
+    return t("auth.login.validation.invalidEmail");
   }
 
   return null;
@@ -597,19 +590,19 @@ function hasErrors(errors: LoginFieldErrors): boolean {
 /**
  * Converts a login failure into user-facing copy.
  */
-function getLoginErrorMessage(error: unknown): string {
+function getLoginErrorMessage(error: unknown, t: (key: string) => string): string {
   if (error instanceof ApiError) {
-    return readProblemDetailsMessage(error) ?? defaultLoginError;
+    return readProblemDetailsMessage(error) ?? t("auth.login.errors.default");
   }
 
   if (
     error instanceof Error &&
     error.message === "The server returned an invalid authentication response."
   ) {
-    return invalidAuthResponseError;
+    return t("auth.login.errors.invalidResponse");
   }
 
-  return defaultLoginError;
+  return t("auth.login.errors.default");
 }
 
 /**
@@ -618,6 +611,7 @@ function getLoginErrorMessage(error: unknown): string {
 function readWorkspaceSelectionChallenge(
   response: LoginResponse,
   rememberMe: boolean,
+  t: (key: string) => string,
 ): WorkspaceSelectionChallenge | null {
   if (!response.requiresTenantSelection) {
     return null;
@@ -628,7 +622,7 @@ function readWorkspaceSelectionChallenge(
     typeof response.preAuthExpiresAtUtc !== "string" ||
     !Array.isArray(response.tenants)
   ) {
-    throw new Error("The server returned an invalid authentication response.");
+    throw new Error(t("auth.login.errors.invalidResponse"));
   }
 
   const tenants = response.tenants
@@ -636,7 +630,7 @@ function readWorkspaceSelectionChallenge(
     .filter((tenant): tenant is WorkspaceTenantOption => tenant !== null);
 
   if (tenants.length === 0) {
-    throw new Error("The server returned an invalid authentication response.");
+    throw new Error(t("auth.login.errors.invalidResponse"));
   }
 
   return {

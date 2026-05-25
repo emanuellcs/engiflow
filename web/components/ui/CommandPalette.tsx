@@ -23,12 +23,13 @@ import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { apiFetch } from "@/lib/api/client";
 import StatusChip, { type EcoStatus } from "@/components/ui/StatusChip";
+import { useTranslation } from "@/context/I18nContext";
 
 /**
  * Represents a static navigational shortcut.
  */
 type ShortcutItem = {
-  label: string;
+  labelKey: string;
   href: string;
   icon: React.ReactNode;
 };
@@ -78,9 +79,9 @@ type CommandPaletteProps = {
 };
 
 const staticShortcuts: ShortcutItem[] = [
-  { label: "Go to Dashboard", href: "/", icon: <DashboardIcon fontSize="small" /> },
-  { label: "Go to Engineering Change Orders (ECOs)", href: "/ecos", icon: <AssignmentIcon fontSize="small" /> },
-  { label: "Go to Team Settings", href: "/settings/users", icon: <ManageAccountsIcon fontSize="small" /> },
+  { labelKey: "commandPalette.shortcuts.dashboard", href: "/", icon: <DashboardIcon fontSize="small" /> },
+  { labelKey: "commandPalette.shortcuts.ecos", href: "/ecos", icon: <AssignmentIcon fontSize="small" /> },
+  { labelKey: "commandPalette.shortcuts.settings", href: "/settings/users", icon: <ManageAccountsIcon fontSize="small" /> },
 ];
 
 /**
@@ -90,6 +91,7 @@ const staticShortcuts: ShortcutItem[] = [
  * @returns The rendered Command Palette dialog.
  */
 export default function CommandPalette({ open, onClose }: CommandPaletteProps) {
+  const { t } = useTranslation();
   const theme = useTheme();
   const router = useRouter();
   const [query, setQuery] = useState("");
@@ -102,8 +104,8 @@ export default function CommandPalette({ open, onClose }: CommandPaletteProps) {
   const filteredShortcuts = useMemo(() => {
     if (!query) return staticShortcuts;
     const lowerQuery = query.toLowerCase();
-    return staticShortcuts.filter((s) => s.label.toLowerCase().includes(lowerQuery));
-  }, [query]);
+    return staticShortcuts.filter((s) => t(s.labelKey).toLowerCase().includes(lowerQuery));
+  }, [query, t]);
 
   // Flatten all visible items into a single list for sequential arrow-key navigation
   const flattenedItems = useMemo<PaletteItem[]>(() => {
@@ -153,6 +155,7 @@ export default function CommandPalette({ open, onClose }: CommandPaletteProps) {
    */
   const handleQueryChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setQuery(e.target.value);
+    setResults(null); // Clear server results when query changes
     setActiveIndex(0);
   };
 
@@ -179,21 +182,16 @@ export default function CommandPalette({ open, onClose }: CommandPaletteProps) {
     } else if (event.key === "Enter") {
       event.preventDefault();
 
-      // If a shortcut is highlighted, navigate immediately
-      if (activeIndex < filteredShortcuts.length) {
-        handleNavigate(filteredShortcuts[activeIndex].href);
-      } 
-      // If a DB result is highlighted, navigate to it
-      else if (activeIndex < flattenedItems.length) {
+      if (flattenedItems.length > 0 && activeIndex < flattenedItems.length) {
         const item = flattenedItems[activeIndex];
-        if (item.type === "eco") {
+        if (item.type === "shortcut") {
+          handleNavigate(item.data.href);
+        } else if (item.type === "eco") {
           handleNavigate(`/ecos/${item.data.id}`);
         } else if (item.type === "user") {
-          handleNavigate("/settings/users"); // Users don't have detail pages in the current requirements
+          handleNavigate("/settings/users");
         }
-      } 
-      // Otherwise, trigger a new database search
-      else {
+      } else {
         void handleSearch();
       }
     } else if (event.key === "Escape") {
@@ -235,7 +233,7 @@ export default function CommandPalette({ open, onClose }: CommandPaletteProps) {
         <InputBase
           inputRef={inputRef}
           fullWidth
-          placeholder="Search or type a command..."
+          placeholder={t("commandPalette.placeholder")}
           value={query}
           onChange={handleQueryChange}
           onKeyDown={handleKeyDown}
@@ -261,7 +259,7 @@ export default function CommandPalette({ open, onClose }: CommandPaletteProps) {
               <>
                 <Box sx={{ px: 2, py: 1 }}>
                   <Typography variant="caption" sx={{ fontWeight: 800, color: "text.secondary", textTransform: "uppercase", letterSpacing: "0.05em" }}>
-                    Navigation
+                    {t("commandPalette.sections.navigation")}
                   </Typography>
                 </Box>
                 {filteredShortcuts.map((s, i) => (
@@ -273,7 +271,7 @@ export default function CommandPalette({ open, onClose }: CommandPaletteProps) {
                   >
                     <ListItemIcon sx={{ minWidth: 40 }}>{s.icon}</ListItemIcon>
                     <ListItemText 
-                      primary={s.label} 
+                      primary={t(s.labelKey)} 
                       slotProps={{ primary: { variant: "body2", sx: { fontWeight: activeIndex === i ? 600 : 400 } } }} 
                     />
                   </ListItemButton>
@@ -287,7 +285,7 @@ export default function CommandPalette({ open, onClose }: CommandPaletteProps) {
                 <Divider sx={{ my: 1 }} />
                 <Box sx={{ px: 2, py: 1 }}>
                   <Typography variant="caption" sx={{ fontWeight: 800, color: "text.secondary", textTransform: "uppercase", letterSpacing: "0.05em" }}>
-                    Engineering Change Orders
+                    {t("commandPalette.sections.ecos")}
                   </Typography>
                 </Box>
                 {results.ecos.map((eco, i) => {
@@ -321,7 +319,7 @@ export default function CommandPalette({ open, onClose }: CommandPaletteProps) {
                 <Divider sx={{ my: 1 }} />
                 <Box sx={{ px: 2, py: 1 }}>
                   <Typography variant="caption" sx={{ fontWeight: 800, color: "text.secondary", textTransform: "uppercase", letterSpacing: "0.05em" }}>
-                    Team Members
+                    {t("commandPalette.sections.team")}
                   </Typography>
                 </Box>
                 {results.users.map((user, i) => {
@@ -355,10 +353,10 @@ export default function CommandPalette({ open, onClose }: CommandPaletteProps) {
           <Box sx={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", py: 8 }}>
             <SearchOutlinedIcon sx={{ fontSize: 48, color: "text.disabled", mb: 2, opacity: 0.5 }} />
             <Typography variant="body2" color="text.secondary" sx={{ fontWeight: 500 }}>
-              {query ? "No results found" : "No recent commands found"}
+              {query ? t("commandPalette.empty.noResults") : t("commandPalette.empty.noRecent")}
             </Typography>
             <Typography variant="caption" color="text.disabled">
-              {query ? "Try searching for a different term." : "Type to start searching across ECOs, users, and settings."}
+              {query ? t("commandPalette.empty.tryDifferent") : t("commandPalette.empty.startTyping")}
             </Typography>
           </Box>
         )}
@@ -369,15 +367,15 @@ export default function CommandPalette({ open, onClose }: CommandPaletteProps) {
         <Stack direction="row" spacing={2} sx={{ alignItems: "center" }}>
           <Box sx={{ display: "flex", alignItems: "center", gap: 0.5 }}>
             <Chip label="↑↓" size="small" sx={{ height: 16, fontSize: "0.6rem", fontWeight: 800, borderRadius: 0.5 }} />
-            <Typography variant="caption" color="text.secondary">to navigate</Typography>
+            <Typography variant="caption" color="text.secondary">{t("commandPalette.footer.navigate")}</Typography>
           </Box>
           <Box sx={{ display: "flex", alignItems: "center", gap: 0.5 }}>
             <Chip label="ENTER" size="small" sx={{ height: 16, fontSize: "0.6rem", fontWeight: 800, borderRadius: 0.5 }} />
-            <Typography variant="caption" color="text.secondary">to search</Typography>
+            <Typography variant="caption" color="text.secondary">{t("commandPalette.footer.search")}</Typography>
           </Box>
           <Box sx={{ display: "flex", alignItems: "center", gap: 0.5, ml: "auto" }}>
             <Chip label="ESC" size="small" sx={{ height: 16, fontSize: "0.6rem", fontWeight: 800, borderRadius: 0.5 }} />
-            <Typography variant="caption" color="text.secondary">to close</Typography>
+            <Typography variant="caption" color="text.secondary">{t("commandPalette.footer.close")}</Typography>
           </Box>
         </Stack>
       </Box>

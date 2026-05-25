@@ -30,17 +30,29 @@ export class ApiError extends Error {
 }
 
 const defaultApiBaseUrl = "";
+const LOCALE_COOKIE_NAME = "engi-locale";
 
+/**
+ * Enterprise API client wrapper.
+ * Handles authentication, serialization, and locale synchronization.
+ */
 export async function apiFetch<TResponse = unknown>(
   path: string,
   options: ApiFetchOptions = {},
 ): Promise<TResponse> {
   const { skipAuth = false, body, headers, ...requestOptions } = options;
   const requestHeaders = new Headers(headers);
+  
+  // 1. Authenticate Request
   const token = getStoredAuthToken();
-
   if (!skipAuth && token && !requestHeaders.has("Authorization")) {
     requestHeaders.set("Authorization", `Bearer ${token}`);
+  }
+
+  // 2. Synchronize Locale
+  const locale = await resolveLocale();
+  if (locale && !requestHeaders.has("Accept-Language")) {
+    requestHeaders.set("Accept-Language", locale);
   }
 
   const response = await fetch(resolveApiUrl(path), {
@@ -64,6 +76,30 @@ export async function apiFetch<TResponse = unknown>(
   }
 
   return responseBody as TResponse;
+}
+
+/**
+ * Resolves the active locale from cookies isomorphically.
+ */
+async function resolveLocale(): Promise<string | null> {
+  // Client-side detection
+  if (typeof window !== "undefined") {
+    return (
+      document.cookie
+        .split("; ")
+        .find((row) => row.startsWith(`${LOCALE_COOKIE_NAME}=`))
+        ?.split("=")[1] || "en"
+    );
+  }
+
+  // Server-side detection (Next.js 16)
+  try {
+    const { cookies } = await import("next/headers");
+    const cookieStore = await cookies();
+    return cookieStore.get(LOCALE_COOKIE_NAME)?.value || "en";
+  } catch {
+    return "en";
+  }
 }
 
 function resolveApiUrl(path: string): string {

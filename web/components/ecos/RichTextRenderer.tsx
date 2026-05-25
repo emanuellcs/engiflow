@@ -10,6 +10,7 @@ import ReactMarkdown, { type Components } from "react-markdown";
 import rehypeKatex from "rehype-katex";
 import remarkGfm from "remark-gfm";
 import remarkMath from "remark-math";
+import { useTranslation } from "@/context/I18nContext";
 
 export type RichTextRendererProps = {
   /** Markdown source to render. */
@@ -159,6 +160,7 @@ type MermaidDiagramProps = {
  * @returns Diagram container or a validation error.
  */
 function MermaidDiagram({ definition }: MermaidDiagramProps) {
+  const { t } = useTranslation();
   const reactId = useId();
   const containerRef = useRef<HTMLDivElement | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -197,7 +199,7 @@ function MermaidDiagram({ definition }: MermaidDiagramProps) {
         }
       } catch (error) {
         if (!isCanceled) {
-          setErrorMessage(getMermaidErrorMessage(error));
+          setErrorMessage(getMermaidErrorMessage(error, t));
         }
       } finally {
         if (!isCanceled) {
@@ -214,7 +216,7 @@ function MermaidDiagram({ definition }: MermaidDiagramProps) {
         renderedContainer.replaceChildren();
       }
     };
-  }, [definition, reactId]);
+  }, [definition, reactId, t]);
 
   if (errorMessage) {
     return (
@@ -238,7 +240,7 @@ function MermaidDiagram({ definition }: MermaidDiagramProps) {
         <Stack direction="row" spacing={1} sx={{ alignItems: "center" }}>
           <CircularProgress size={18} />
           <Typography variant="caption" color="text.secondary">
-            Rendering diagram
+            {t("mermaid.rendering")}
           </Typography>
         </Stack>
       ) : null}
@@ -271,10 +273,10 @@ function normalizeSafeHref(href: string | undefined): string | null {
   return null;
 }
 
-function getMermaidErrorMessage(error: unknown): string {
+function getMermaidErrorMessage(error: unknown, t: (key: string, params?: Record<string, string | number>) => string): string {
   if (error instanceof Error && error.message.trim().length > 0) {
-    return `Unable to render Mermaid diagram: ${error.message}`;
+    return t("mermaid.error", { error: error.message });
   }
 
-  return "Unable to render Mermaid diagram.";
+  return t("mermaid.errorDefault");
 }

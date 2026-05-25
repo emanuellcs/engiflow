@@ -19,6 +19,7 @@ import AuthLayout from "@/components/auth/AuthLayout";
 import PasswordChecklist from "@/components/auth/PasswordChecklist";
 import NextLink from "@/components/ui/NextLink";
 import { ApiError, apiFetch } from "@/lib/api/client";
+import { useTranslation } from "@/context/I18nContext";
 
 /**
  * Describes the setup-password token purpose returned by the API.
@@ -41,9 +42,6 @@ type SetupPasswordFieldErrors = {
   confirmPassword?: string;
 };
 
-const invalidContextMessage =
-  "This password link is invalid or expired. Request a new link to continue.";
-
 /**
  * Renders the setup-password route inside a suspense boundary for search params.
  */
@@ -59,6 +57,7 @@ export default function SetupPasswordPage() {
  * Renders the context-aware invitation setup and password reset form.
  */
 function SetupPasswordContent() {
+  const { t } = useTranslation();
   const searchParams = useSearchParams();
   const token = searchParams.get("token") ?? "";
   const email = searchParams.get("email") ?? "";
@@ -72,7 +71,19 @@ function SetupPasswordContent() {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const copy = useMemo(() => getSetupCopy(context?.purpose), [context?.purpose]);
+  
+  const copy = useMemo(() => {
+    if (context?.purpose === "Reset") {
+      return {
+        title: t("auth.setupPassword.reset.title"),
+        description: t("auth.setupPassword.reset.description"),
+      };
+    }
+    return {
+      title: t("auth.setupPassword.invitation.title"),
+      description: t("auth.setupPassword.invitation.description"),
+    };
+  }, [context?.purpose, t]);
 
   useEffect(() => {
     let isMounted = true;
@@ -82,7 +93,7 @@ function SetupPasswordContent() {
      */
     async function loadContext() {
       if (!token || !email) {
-        setErrorMessage(invalidContextMessage);
+        setErrorMessage(t("auth.setupPassword.invalidContext"));
         setIsContextLoading(false);
         return;
       }
@@ -102,7 +113,7 @@ function SetupPasswordContent() {
         }
       } catch (error) {
         if (isMounted) {
-          setErrorMessage(readSetupError(error));
+          setErrorMessage(readSetupError(error, t));
         }
       } finally {
         if (isMounted) {
@@ -116,7 +127,7 @@ function SetupPasswordContent() {
     return () => {
       isMounted = false;
     };
-  }, [email, token]);
+  }, [email, token, t]);
 
   /**
    * Submits the new password and consumes the setup token.
@@ -128,7 +139,7 @@ function SetupPasswordContent() {
       return;
     }
 
-    const nextErrors = validateSetupPassword(password, confirmPassword);
+    const nextErrors = validateSetupPassword(password, confirmPassword, t);
 
     if (hasSetupErrors(nextErrors)) {
       setFieldErrors(nextErrors);
@@ -149,11 +160,11 @@ function SetupPasswordContent() {
           password,
         },
       });
-      setSuccessMessage("Password saved. You can now sign in.");
+      setSuccessMessage(t("auth.setupPassword.success"));
       setPassword("");
       setConfirmPassword("");
     } catch (error) {
-      setErrorMessage(readSetupError(error));
+      setErrorMessage(readSetupError(error, t));
     } finally {
       setIsSubmitting(false);
     }
@@ -212,7 +223,7 @@ function SetupPasswordContent() {
               <>
                 <TextField
                   id="setup-password-email"
-                  label="Email"
+                  label={t("auth.setupPassword.emailLabel")}
                   value={context.email}
                   disabled
                   fullWidth
@@ -221,7 +232,7 @@ function SetupPasswordContent() {
                 <Stack spacing={0}>
                   <TextField
                     id="setup-password"
-                    label="New password"
+                    label={t("auth.setupPassword.newPasswordLabel")}
                     type={showPassword ? "text" : "password"}
                     value={password}
                     onChange={(event) => handleFieldChange("password", event.target.value)}
@@ -262,7 +273,7 @@ function SetupPasswordContent() {
                 </Stack>
                 <TextField
                   id="setup-confirm-password"
-                  label="Confirm password"
+                  label={t("auth.setupPassword.confirmPasswordLabel")}
                   type={showConfirmPassword ? "text" : "password"}
                   value={confirmPassword}
                   onChange={(event) => handleFieldChange("confirmPassword", event.target.value)}
@@ -304,16 +315,16 @@ function SetupPasswordContent() {
                   {isSubmitting ? (
                     <CircularProgress color="inherit" size={20} thickness={5} />
                   ) : (
-                    "Save password"
+                    t("auth.setupPassword.submitButton")
                   )}
                 </Button>
               </>
             ) : null}
 
             <Typography variant="body2" color="text.secondary" align="center">
-              Back to{" "}
+              {t("auth.setupPassword.backTo")}{" "}
               <Link component={NextLink} href="/auth?mode=login" underline="hover">
-                sign in
+                {t("auth.setupPassword.signIn")}
               </Link>
             </Typography>
           </Stack>
@@ -324,49 +335,29 @@ function SetupPasswordContent() {
 }
 
 /**
- * Returns page copy for invitation setup or password reset.
- */
-function getSetupCopy(purpose: SetupPasswordPurpose | undefined): {
-  title: string;
-  description: string;
-} {
-  if (purpose === "Reset") {
-    return {
-      title: "Reset Your Password",
-      description: "Enter your new security credentials below.",
-    };
-  }
-
-  return {
-    title: "Set Up Your Account Password",
-    description:
-      "Welcome to EngiFlow. Create your security credentials to activate your workspace access.",
-  };
-}
-
-/**
  * Validates the setup-password form.
  */
 function validateSetupPassword(
   password: string,
   confirmPassword: string,
+  t: (key: string) => string,
 ): SetupPasswordFieldErrors {
   const errors: SetupPasswordFieldErrors = {};
 
   if (password.length < 12) {
-    errors.password = "Password must be at least 12 characters.";
+    errors.password = t("auth.register.validation.passwordLength");
   } else if (!/[A-Z]/.test(password)) {
-    errors.password = "Password must include at least one uppercase letter.";
+    errors.password = t("auth.register.validation.passwordUppercase");
   } else if (!/[a-z]/.test(password)) {
-    errors.password = "Password must include at least one lowercase letter.";
+    errors.password = t("auth.register.validation.passwordLowercase");
   } else if (!/[0-9]/.test(password)) {
-    errors.password = "Password must include at least one number.";
+    errors.password = t("auth.register.validation.passwordNumber");
   } else if (!/[^a-zA-Z0-9]/.test(password)) {
-    errors.password = "Password must include at least one symbol.";
+    errors.password = t("auth.register.validation.passwordSymbol");
   }
 
   if (confirmPassword !== password) {
-    errors.confirmPassword = "Passwords do not match.";
+    errors.confirmPassword = t("auth.register.validation.passwordsDontMatch");
   }
 
   return errors;
@@ -382,12 +373,12 @@ function hasSetupErrors(errors: SetupPasswordFieldErrors): boolean {
 /**
  * Converts setup-password API failures into user-facing copy.
  */
-function readSetupError(error: unknown): string {
+function readSetupError(error: unknown, t: (key: string) => string): string {
   if (error instanceof ApiError && error.status === 400) {
-    return readProblemDetailsMessage(error.details) ?? "Review the password requirements and try again.";
+    return readProblemDetailsMessage(error.details) ?? t("common.error");
   }
 
-  return invalidContextMessage;
+  return t("auth.setupPassword.invalidContext");
 }
 
 /**

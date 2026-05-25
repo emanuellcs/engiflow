@@ -1,4 +1,5 @@
 import Chip from "@mui/material/Chip";
+import { useTranslation } from "@/context/I18nContext";
 import type { EcoPriority } from "@/lib/types/eco";
 
 export type { EcoPriority } from "@/lib/types/eco";
@@ -40,9 +41,11 @@ const chipSxByPriority: Record<EcoPriority, object> = {
  * @returns A dense priority chip suitable for tables and summary views.
  */
 export default function PriorityChip({ priority }: PriorityChipProps) {
+  const { t } = useTranslation();
+
   return (
     <Chip
-      label={priority}
+      label={getPriorityLabel(priority, t)}
       size="small"
       variant="outlined"
       sx={{
@@ -53,4 +56,21 @@ export default function PriorityChip({ priority }: PriorityChipProps) {
       }}
     />
   );
+}
+
+/**
+ * Converts an ECO priority enum token into localized UI copy.
+ *
+ * @param value - Raw API enum string.
+ * @param t - Translation function.
+ * @returns A localized display label.
+ */
+function getPriorityLabel(value: EcoPriority, t: (key: string) => string): string {
+  const map: Record<EcoPriority, string> = {
+    Low: t("priority.low"),
+    Medium: t("priority.medium"),
+    High: t("priority.high"),
+    Critical: t("priority.critical"),
+  };
+  return map[value] || value;
 }
