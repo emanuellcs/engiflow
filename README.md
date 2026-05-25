@@ -1,8 +1,15 @@
 # EngiFlow
 
-EngiFlow is a production-oriented B2B SaaS platform for controlled Product Lifecycle Management workflows. It gives engineering, manufacturing, quality, and operations teams a governed Engineering Change Order (ECO) process with tenant isolation, role-based access control, real-time collaboration, approval quorum policy, S3-compatible file storage, and an immutable audit trail.
+EngiFlow is a multi-tenant B2B SaaS platform for managing Engineering Change Order (ECO) workflows. It provides a governed environment for engineering, manufacturing, and quality teams to track and approve product lifecycle changes while enforcing ISO 9001-compliant segregation of duties and tenant-specific workflow policies.
 
-This foundational MVP establishes a robust governance layer, featuring strict ISO 9001 segregation of duties, dynamic tenant workflow policies, comprehensive administrator team management with last-login visibility, and real-time security enforcement.
+### Core Features
+
+- **Global Search:** Tenant-isolated resource navigation for locating ECOs and system resources.
+- **Role-Based Dashboards:** Data-dense interfaces that adjust visibility and metrics based on user permissions.
+- **Workflow Governance:** Configurable approval quorums and material action compliance enforcement.
+- **Internationalization:** Multi-language support (English and Portuguese) implemented via Next.js 16 Edge proxying and cookie-based locale synchronization.
+
+The platform is built on a Clean Architecture foundation with real-time security enforcement, automated audit trails, and strict data isolation across the full stack.
 
 ## Business Value
 
@@ -37,6 +44,27 @@ flowchart LR
     Api --> Db
     Api --> ObjectStore
     Api --> Mail
+```
+
+### Tenant Isolation & Security Flow
+
+```mermaid
+sequenceDiagram
+    actor Client as User Client
+    participant Frontend as Next.js Proxy Layer
+    participant API as .NET 10 API Controller
+    participant Pipeline as MediatR Unit-of-Work
+    participant DB as PostgreSQL (EF Core)
+
+    Client->>Frontend: HTTP Request (Bearer JWT)
+    Frontend->>API: Proxy Request (Authorization: Bearer)
+    API->>API: Unpack JWT Claims (`sub`, `tenant`, `role`, `company_name`)
+    API->>Pipeline: Dispatch Command (Inject Tenant Context)
+    Pipeline->>DB: Query/Write with Global Tenant Row-Level Filter
+    DB-->>Pipeline: Tenant-Isolated Result
+    Pipeline-->>API: Application Response
+    API-->>Frontend: JSON Payload
+    Frontend-->>Client: Rendered UI
 ```
 
 Browser HTTP calls normally use the Next.js `/api/...` proxy unless a public API URL is configured. SignalR connections intentionally connect directly to the ASP.NET Core API at `/hubs/ecos` and `/hubs/security` so WebSocket traffic bypasses the Next.js proxy.
@@ -84,13 +112,23 @@ Browser HTTP calls normally use the Next.js `/api/...` proxy unless a public API
 ```mermaid
 stateDiagram-v2
     [*] --> Draft: Create ECO
-    Draft --> UnderReview: Submit for review
+    Draft --> UnderReview: Submit for Review
     Draft --> Canceled: Cancel
-    UnderReview --> Approved: Approval quorum met
-    UnderReview --> Draft: Request changes
-    UnderReview --> Canceled: Cancel
+    
+    state UnderReview {
+        [*] --> PendingQuorum
+        PendingQuorum --> Approved: Quorum Threshold Met
+        PendingQuorum --> RevisionRequired: Request Changes
+    }
+    
     Approved --> [*]
+    RevisionRequired --> Draft: Return for Revision
     Canceled --> [*]
+    
+    note right of UnderReview
+        Compliance Rule: AllowSelfApproval = false
+        Author participation in quorum is blocked.
+    end note
 ```
 
 Important workflow rules:
@@ -99,16 +137,14 @@ Important workflow rules:
 - Submitting an ECO starts a new review round.
 - Only decisions from the active review round count toward quorum.
 - `RequestChanges` returns the ECO to draft and requires a new review round.
-- Approved and canceled ECOs are terminal for the MVP workflow.
+- Approved and canceled ECOs are terminal for the active workflow.
 - The domain aggregate creates audit events as part of state transitions.
 
 ### ISO 9001 Segregation of Duties
 
 EngiFlow enforces a hard segregation-of-duties rule:
 
-```text
-Compliance Rule: The author of the ECO cannot participate in its approval quorum
-```
+> Compliance Rule: The author of the ECO cannot participate in its approval quorum
 
 The rule is enforced in the ECO decision path and in the aggregate itself, so compatibility routes and future callers cannot bypass it. This implements the core quality-system principle that the person requesting or authoring a controlled change cannot be the person approving that same change into effect.
 
@@ -125,11 +161,9 @@ Tenant owners and administrators manage workflow settings through:
 
 The frontend warns administrators when the configured quorum is higher than the count of active users whose exact role is `Approver`:
 
-```text
-Warning: You require X approvals, but only have Y Approvers active. ECOs may become stuck.
-```
+> Warning: You require X approvals, but only have Y Approvers active. ECOs may become stuck.
 
-Owner and Administrator users can approve by authorization policy, but the warning intentionally follows the MVP requirement and counts only active `Approver` role users.
+Owner and Administrator users can approve by authorization policy, but the warning intentionally focuses on active `Approver` role users to ensure a healthy quorum buffer.
 
 ## RBAC Matrix
 
@@ -173,6 +207,12 @@ The API also refreshes the role from the database during JWT validation and reje
 
 ## Local Development
 
+> [!IMPORTANT]
+> **Infrastructure Status & FinOps Strategy:** 
+> Terraform IaC templates and GitHub Actions CI/CD pipelines are currently in development and are NOT present in this branch. To ensure maximum cost efficiency and credit preservation, the application is designed for **ephemeral cloud execution**: it is spun up on AWS for verification cycles and torn down immediately via `terraform destroy`. 
+>
+> **Evaluation Standard:** Localhost via `Docker Compose` is the official, fully operational, zero-cost first-class citizen environment for testing and evaluating all application features.
+
 ### Prerequisites
 
 - Docker Desktop or Docker Engine with Compose.
@@ -215,27 +255,18 @@ Remove volumes too:
 docker compose down -v
 ```
 
-### Default Development Login
+### Accessing the Application
 
-When the API runs in `Development`, it applies migrations and seeds a tenant if no companies exist.
-
-| Field | Value |
-| --- | --- |
-| Company | `EngiFlow Demo Company` |
-| Email | `admin@engiflow.local` |
-| Password | `EngiFlow_Admin_123!` |
-| Role | `Owner` |
-
-Open:
-
-```text
-http://localhost:3000/login
-```
-
-New tenants can self-register at:
+Since the environment is empty by default, start by registering a new tenant:
 
 ```text
 http://localhost:3000/register
+```
+
+Once registered, you can log in at:
+
+```text
+http://localhost:3000/login
 ```
 
 ## Configuration
@@ -339,27 +370,15 @@ docker compose build
 docker compose ps
 ```
 
-## Current MVP Scope
+## Production Deployment Blueprint
 
-Implemented:
+The following table maps the current Local Evaluation tier components to their targeted AWS Production Cloud equivalents:
 
-- Tenant registration and seeded development tenant.
-- JWT authentication with dynamic role refresh.
-- Owner/Administrator user management.
-- Last-login tracking.
-- User role and deactivation enforcement over SignalR.
-- Tenant workflow policy management.
-- ISO 9001 ECO author/approver segregation of duties.
-- PR-like ECO detail workflow.
-- MUI X DataGrid dashboards and team management.
-- S3/MinIO ECO attachments with compensation.
-- PostgreSQL persistence with tenant query filters and `xmin` concurrency.
-- Root, API, application, domain, infrastructure, and frontend verification paths.
-
-Not included yet:
-
-- Refresh tokens.
-- Production invitation workflow.
-- Advanced notification preferences.
-- Deployment infrastructure as code.
-- Full PLM part/BOM/revision master data.
+| Component | Local Evaluation (Docker) | AWS Production Cloud (Target) |
+| --- | --- | --- |
+| **App Shell** | Next.js 16 (Node.js 24) | AWS App Runner + Amazon CloudFront |
+| **Web API** | ASP.NET Core (.NET 10) | AWS App Runner |
+| **Database** | PostgreSQL 18 | Amazon RDS PostgreSQL (Fully Managed) |
+| **File Storage** | MinIO (S3-Compatible) | Amazon S3 |
+| **Notifications** | Mailpit (SMTP) | Amazon SES |
+| **Provisioning** | Docker Compose | HashiCorp Terraform (Planned) |

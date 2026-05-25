@@ -17,6 +17,22 @@ The API project is the composition root. Domain and application layers do not de
 
 Application use cases are expressed as EngiFlow-owned CQRS contracts:
 
+```mermaid
+graph TD
+    A["HTTP Request (POST/PUT)"] --> B["API Controller Endpoints"]
+    B --> C["MediatR Pipeline Behaviors"]
+    
+    subgraph Pipeline ["Pipeline Behaviors"]
+        C1["Step 1: FluentValidation Execution"]
+        C1 --> C2["Step 2: Tenant Context Extraction"]
+        C2 --> C3["Step 3: Transaction Scoping"]
+    end
+    
+    C3 --> D["Application Command Handler"]
+    D --> E["EF Core DB Context"]
+    E --> F["PostgreSQL Tenant Partition (Global Query Filter)"]
+```
+
 - `ICommand<TResponse>` for mutating requests.
 - `IQuery<TResponse>` for read-only requests.
 - `ICommandHandler<TCommand, TResponse>` and `IQueryHandler<TQuery, TResponse>` adapt to Internal CQRS Dispatcher `IRequestHandler`.
@@ -73,6 +89,33 @@ Attachment uploads write to S3-compatible storage and then record database metad
 
 Local development uses MinIO. Production can use Amazon S3 or another compatible provider.
 
+## Media & Attachments
+
+To ensure high-fidelity API documentation, the backend implements a specific `UploadAttachmentRequest` DTO:
+
+```mermaid
+graph LR
+    A["Multipart Form Request"] --> B["Swashbuckle OpenAPI Reflection"]
+    B --> C["UploadAttachmentRequest DTO"]
+    C --> D["IFormFile Binary Stream"]
+    D --> E["EcosController.UploadAsync"]
+    E --> F["S3/MinIO Cloud Storage"]
+```
+
+```csharp
+public class UploadAttachmentRequest
+{
+    [Required]
+    public IFormFile File { get; set; } = null!;
+}
+```
+
+This structure explicitly resolves Swashbuckle OpenAPI reflection issues for `multipart/form-data` payloads, ensuring that the Swagger UI accurately renders the file upload control.
+
+## Internationalization (I18n)
+
+The EngiFlow API is intentionally localization-agnostic. All multi-language orchestration, including `Accept-Language` header negotiation and `engi-locale` cookie synchronization, is handled upstream by the Next.js 16 Edge Proxy. The backend focuses strictly on data integrity and workflow enforcement.
+
 ## Persistence and Tenant Isolation
 
 `EngiFlowDbContext` maps domain entities to PostgreSQL using EF Core 10 and Npgsql.
@@ -121,7 +164,7 @@ Domain invariants:
 - Review decisions can be submitted only while under review.
 - Approvals count only in the active review round.
 - `RequestChanges` returns the ECO to draft.
-- Approved and canceled ECOs are terminal in the MVP.
+- Approved and canceled ECOs are terminal in the current workflow engine.
 - The ECO author cannot participate in the approval quorum.
 - Every material business action appends an `EcoEvent`.
 
@@ -184,19 +227,21 @@ Canonical HTTP routes:
 
 ## Authentication and Authorization
 
-The API uses ASP.NET Core JWT bearer authentication.
+The API uses ASP.NET Core JWT bearer authentication with `MapInboundClaims = false` to preserve EngiFlow's enterprise-grade claim naming conventions.
 
-JWT claims:
+JWT claims used for multi-tenant isolation and security:
 
-| Claim | Purpose |
-| --- | --- |
-| `sub` | User ID |
-| `tenant` | Company tenant ID |
-| `role` | Role name |
-| `user_name` | Display name |
-| `company_name` | Tenant display name |
+| Claim | Key | Purpose |
+| --- | --- | --- |
+| `sub` | `sub` | Unique User Identifier (Subject) |
+| `tenant` | `tenant` | Company/Tenant Identifier for data isolation |
+| `role` | `role` | Primary RBAC role name |
+| `user_name` | `user_name` | User's display name |
+| `company_name` | `company_name` | Tenant's display name |
 
-The API sets `MapInboundClaims = false` and uses EngiFlow claim names directly. SignalR accepts access tokens from the `access_token` query parameter only for `/hubs/...` requests.
+The `tenant` claim is strictly enforced by the persistence layer's global query filters, ensuring that no user can access data outside their authorized scope.
+
+SignalR accepts access tokens from the `access_token` query parameter only for `/hubs/...` requests.
 
 On every token validation, the API reloads the user by `sub` through a query-filter-bypassing authentication repository method. It rejects inactive users and replaces the role claim with the current database role. This is the backend control that prevents stale tokens from retaining old permissions.
 
@@ -269,6 +314,9 @@ dotnet tool run dotnet-ef -- migrations add MigrationName \
 The current governance migration adds `users.last_login_at`.
 
 ## Local Run
+
+> [!NOTE]
+> **Production Execution Environment:** While the API runs locally via a Kestrel server inside Docker, the production architecture utilizes **AWS App Runner**. This provides a secure, scalable, and managed execution environment that communicates directly with an **Amazon RDS PostgreSQL** node.
 
 From the repository root:
 
