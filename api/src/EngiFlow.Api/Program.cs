@@ -18,8 +18,11 @@ using EngiFlow.Domain.Notifications;
 using EngiFlow.Domain.Users;
 using EngiFlow.Domain.ValueObjects;
 using EngiFlow.Infrastructure;
+using EngiFlow.Infrastructure.Persistence;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.AspNetCore.SignalR;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi;
 using EngiFlow.Application.Mediation;
@@ -68,6 +71,12 @@ builder.Services.AddOptions<JwtOptions>()
 builder.Services.AddOptions<DevelopmentSeedOptions>()
     .Bind(builder.Configuration.GetSection(DevelopmentSeedOptions.SectionName));
 builder.Services.AddHttpContextAccessor();
+builder.Services.Configure<ForwardedHeadersOptions>(options =>
+{
+    options.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;
+    options.KnownIPNetworks.Clear();
+    options.KnownProxies.Clear();
+});
 builder.Services.AddScoped<ITenantProvider, HttpContextTenantProvider>();
 builder.Services.AddScoped<IJwtTokenService, JwtTokenService>();
 builder.Services.AddScoped<IPreAuthTokenService, PreAuthTokenService>();
@@ -215,9 +224,16 @@ if (app.Environment.IsDevelopment())
 {
     await app.Services.GetRequiredService<EngiFlowDatabaseInitializer>().InitializeAsync().ConfigureAwait(false);
 }
+else if (builder.Configuration.GetValue<bool>("EngiFlow:Database:MigrateOnStartup"))
+{
+    await using var scope = app.Services.CreateAsyncScope();
+    var dbContext = scope.ServiceProvider.GetRequiredService<EngiFlowDbContext>();
+    await dbContext.Database.MigrateAsync().ConfigureAwait(false);
+}
 
 // Configure the HTTP request pipeline.
 app.UseExceptionHandler();
+app.UseForwardedHeaders();
 
 if (app.Environment.IsDevelopment())
 {
@@ -236,6 +252,8 @@ app.UseCors();
 app.UseAuthentication();
 app.UseAuthorization();
 
+app.MapGet("/healthz", () => Results.Ok(new { status = "ok" }))
+    .AllowAnonymous();
 app.MapControllers();
 app.MapHub<EcoHub>("/hubs/ecos");
 app.MapHub<SecurityHub>("/hubs/security");

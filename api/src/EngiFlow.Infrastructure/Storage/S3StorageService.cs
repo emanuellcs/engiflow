@@ -140,9 +140,14 @@ internal sealed class S3StorageService : IStorageService
             config.RegionEndpoint = RegionEndpoint.GetBySystemName(options.Region);
         }
 
-        return new AmazonS3Client(
-            new BasicAWSCredentials(options.AccessKey, options.SecretKey),
-            config);
+        if (!string.IsNullOrWhiteSpace(options.AccessKey) && !string.IsNullOrWhiteSpace(options.SecretKey))
+        {
+            return new AmazonS3Client(
+                new BasicAWSCredentials(options.AccessKey, options.SecretKey),
+                config);
+        }
+
+        return new AmazonS3Client(config);
     }
 
     private static void ValidateUpload(StorageUploadRequest request)

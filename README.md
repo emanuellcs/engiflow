@@ -77,10 +77,12 @@ Browser HTTP calls normally use the Next.js `/api/...` proxy unless a public API
 | Backend | .NET 10, ASP.NET Core Web API, SignalR, JWT bearer authentication |
 | Application | Internal CQRS Dispatcher-backed CQRS, FluentValidation, post-commit notifications |
 | Domain | Clean Architecture, DDD aggregate roots, strongly typed IDs |
-| Persistence | EF Core 10, Npgsql, PostgreSQL 18, `xmin` optimistic concurrency |
-| Storage | S3-compatible attachment storage, MinIO for local development |
-| Email | MailKit SMTP, Mailpit for local password reset mail |
-| Orchestration | Docker Compose |
+| Persistence | EF Core 10, Npgsql, PostgreSQL 18 locally, Amazon RDS PostgreSQL 17 in AWS, `xmin` optimistic concurrency |
+| Storage | S3-compatible attachment storage, MinIO locally, private Amazon S3 bucket in AWS |
+| Email | MailKit SMTP, Mailpit locally, Amazon SES SMTP in AWS |
+| Orchestration | Docker Compose locally, AWS ECS Express Mode in production |
+| Provisioning | HashiCorp Terraform modules under `infra/terraform/` |
+| CI/CD | GitHub Actions OIDC pipelines under `.github/workflows/` |
 | Tests | xUnit for API, application, domain, and infrastructure projects |
 
 ## Repository Layout
@@ -102,6 +104,12 @@ Browser HTTP calls normally use the Next.js `/api/...` proxy unless a public API
 |   +-- app/
 |   +-- components/
 |   +-- lib/
++-- infra/
+|   +-- terraform/
+|       +-- bootstrap/
+|       +-- modules/
++-- .github/
+|   +-- workflows/
 +-- docker-compose.yml
 ```
 
@@ -205,13 +213,52 @@ Security events:
 
 The API also refreshes the role from the database during JWT validation and rejects inactive users. This prevents stale JWT role claims from retaining old privileges after an administrative change.
 
+## AWS Production Deployment
+
+The production cloud stack is implemented as modular Terraform under `infra/terraform/`. It uses AWS ECS Express Mode for the API and web containers because AWS App Runner is no longer available to new AWS customers. Supporting managed services include Amazon ECR, Amazon RDS PostgreSQL, Amazon S3, Amazon SES SMTP, AWS Secrets Manager, CloudWatch Logs, and AWS Budgets.
+
+### Bootstrap Protocol
+
+Before the GitHub Actions runner can authenticate or store Terraform state, initialize the bootstrap stack once from an administrator workstation:
+
+```bash
+cd infra/terraform/bootstrap
+terraform init
+terraform apply \
+  -var='github_owner=YOUR_GITHUB_ORG_OR_USER' \
+  -var='github_repo=engiflow'
+```
+
+The bootstrap stack provisions:
+
+- S3 remote state bucket.
+- DynamoDB Terraform lock table.
+- GitHub OIDC identity provider, when one is not already supplied.
+- IAM deployment role trusted only by the configured GitHub repository and branch.
+
+> [!IMPORTANT]
+> Store the bootstrap outputs as GitHub repository variables: `AWS_REGION`, `AWS_ROLE_TO_ASSUME`, `TF_STATE_BUCKET`, and `TF_STATE_LOCK_TABLE`. Also configure `AWS_READONLY_ROLE_TO_ASSUME` for pull-request Terraform planning with least-privilege read-only access. Store SES SMTP credentials only as GitHub repository secrets: `SES_SMTP_USERNAME` and `SES_SMTP_PASSWORD`.
+
+### CI/CD Blueprint
+
+EngiFlow uses a split CI/CD model so validation and production release authority remain separate.
+
+`.github/workflows/pr-validation.yml` is the pull-request validation pipeline. It runs only for `pull_request` events targeting `main` and should be configured as a required branch-protection check. It executes the frontend CI gate (`npm ci`, `npm run lint`, `npx tsc --noEmit`), the backend Release test gate (`dotnet test api/EngiFlow.slnx --configuration Release`), and a Terraform read-only review gate. The Terraform job authenticates through GitHub OIDC with `AWS_READONLY_ROLE_TO_ASSUME`, initializes the remote backend, runs `terraform validate`, and emits a non-mutating `terraform plan -detailed-exitcode -lock=false` delta report for the ECS Express, RDS, S3, SES, and FinOps stack.
+
+`.github/workflows/deploy.yml` is the production deployment pipeline. It runs only after a direct `push` to `main` or a manual `workflow_dispatch`, which means normal production releases occur after a protected PR merge. Because validation already happened in `pr-validation.yml`, this workflow focuses on artifact shipping and infrastructure apply: it authenticates through GitHub OIDC with `AWS_ROLE_TO_ASSUME`, hydrates ECR if needed, builds and pushes the multi-stage API image, deploys the API service first, captures the public API Gateway URI, builds the web image with `NEXT_PUBLIC_API_BASE_URL` and `NEXT_PUBLIC_API_URL`, pushes the web image, and finishes with headless `terraform apply -auto-approve` against the ECS Express Mode stack.
+
+> [!NOTE]
+> Neither workflow requires long-lived AWS access keys. AWS trust is established by OIDC role assumption and workflow-level `id-token: write` permissions; deployment write authority is reserved for `deploy.yml`.
+
+`.github/workflows/teardown.yml` is the Emergency FinOps Kill Switch. It is manual-only (`workflow_dispatch`) and authenticates through the deployment OIDC role before running `terraform destroy -auto-approve` in `infra/terraform/`.
+
+> [!IMPORTANT]
+> Run `teardown.yml` immediately after validation windows to destroy the production application stack and stop active ECS, RDS, S3, ECR, Secrets Manager, CloudWatch, and budgeted runtime resources. The bootstrap state bucket, lock table, and OIDC role intentionally remain so future deployments and destroys can continue to use shared remote state.
+
 ## Local Development
 
 > [!IMPORTANT]
-> **Infrastructure Status & FinOps Strategy:** 
-> Terraform IaC templates and GitHub Actions CI/CD pipelines are currently in development and are NOT present in this branch. To ensure maximum cost efficiency and credit preservation, the application is designed for **ephemeral cloud execution**: it is spun up on AWS for verification cycles and torn down immediately via `terraform destroy`. 
->
-> **Evaluation Standard:** Localhost via `Docker Compose` is the official, fully operational, zero-cost first-class citizen environment for testing and evaluating all application features.
+> **Dual-Stack Execution Standard:** Localhost via `Docker Compose` remains the official, fully operational, zero-cost first-class citizen environment for feature evaluation. The AWS production stack now lives under `infra/terraform/` and is deployed by GitHub Actions through OIDC, with no static AWS IAM access keys in repository secrets.
 
 ### Prerequisites
 
@@ -372,13 +419,15 @@ docker compose ps
 
 ## Production Deployment Blueprint
 
-The following table maps the current Local Evaluation tier components to their targeted AWS Production Cloud equivalents:
+The following table maps the current Local Evaluation tier components to their implemented AWS Production Cloud equivalents:
 
-| Component | Local Evaluation (Docker) | AWS Production Cloud (Target) |
+| Component | Local Evaluation (Docker) | AWS Production Cloud |
 | --- | --- | --- |
-| **App Shell** | Next.js 16 (Node.js 24) | AWS App Runner + Amazon CloudFront |
-| **Web API** | ASP.NET Core (.NET 10) | AWS App Runner |
-| **Database** | PostgreSQL 18 | Amazon RDS PostgreSQL (Fully Managed) |
-| **File Storage** | MinIO (S3-Compatible) | Amazon S3 |
-| **Notifications** | Mailpit (SMTP) | Amazon SES |
-| **Provisioning** | Docker Compose | HashiCorp Terraform (Planned) |
+| **App Shell** | Next.js 16 (Node.js 24) | ECS Express Mode service sourced from ECR |
+| **Web API** | ASP.NET Core (.NET 10) | ECS Express Mode service sourced from ECR |
+| **Database** | PostgreSQL 18 | Amazon RDS PostgreSQL 17 on `db.t4g.micro`, Single-AZ |
+| **File Storage** | MinIO (S3-Compatible) | Private Amazon S3 bucket with 1-day validation lifecycle |
+| **Notifications** | Mailpit (SMTP) | Amazon SES SMTP credentials injected from Secrets Manager |
+| **Container Registry** | Local Docker image cache | Amazon ECR repos retaining one image each |
+| **Provisioning** | Docker Compose | HashiCorp Terraform modules under `infra/terraform/` |
+| **CI/CD** | Local commands | GitHub Actions OIDC deploy and teardown workflows |
