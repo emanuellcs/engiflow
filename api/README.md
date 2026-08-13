@@ -170,9 +170,7 @@ Domain invariants:
 
 The domain-level segregation-of-duties message is:
 
-```text
-Compliance Rule: The author of the ECO cannot participate in its approval quorum
-```
+> Compliance Rule: The author of the ECO cannot participate in its approval quorum
 
 ## Company Settings
 
@@ -313,10 +311,22 @@ dotnet tool run dotnet-ef -- migrations add MigrationName \
 
 The current governance migration adds `users.last_login_at`.
 
+## Production Cloud Readiness
+
+The API shell includes the AWS runtime hooks required by the Terraform deployment while preserving the Docker Compose development path.
+
+- **Forwarded headers middleware:** `Program.cs` processes `X-Forwarded-For` and `X-Forwarded-Proto`, allowing the ASP.NET Core app to understand proxied HTTPS traffic forwarded by the ECS Express managed Application Load Balancer.
+- **Health probes:** `GET /healthz` returns an anonymous `200 OK` health payload. The ECS Express target group uses this endpoint to decide whether an API task should receive traffic.
+- **Dynamic database migrations:** Setting `EngiFlow__Database__MigrateOnStartup=true` applies pending EF Core migrations during production startup. This initializes or advances the RDS schema without running the local development seed routine, which remains gated to `ASPNETCORE_ENVIRONMENT=Development`.
+- **Isomorphic S3 storage:** `S3StorageService.cs` uses static `EngiFlow__Storage__S3__AccessKey` and `EngiFlow__Storage__S3__SecretKey` only when both are configured, which keeps localhost MinIO working. In AWS, those keys are omitted and the client falls back to the AWS SDK default credential chain, resolving permissions from the ECS task role.
+
+> [!NOTE]
+> Production S3 configuration sets `EngiFlow__Storage__S3__BucketName`, `Region`, and `ForcePathStyle=false`; it does not set MinIO `ServiceUrl` or static S3 keys.
+
 ## Local Run
 
 > [!NOTE]
-> **Production Execution Environment:** While the API runs locally via a Kestrel server inside Docker, the production architecture utilizes **AWS App Runner**. This provides a secure, scalable, and managed execution environment that communicates directly with an **Amazon RDS PostgreSQL** node.
+> **Production Execution Environment:** The API still runs locally through Kestrel inside Docker. In AWS, Terraform deploys the same multi-stage Docker image to ECS Express Mode, connects it to Amazon RDS PostgreSQL, injects Secrets Manager values, and grants S3 access through the ECS task role.
 
 From the repository root:
 

@@ -1,0 +1,11 @@
+aws_region               = "us-east-1"
+project_name             = "engiflow"
+environment              = "prod"
+frontend_public_base_url = "https://app.example.com"
+budget_alert_email       = "cloud-admin@example.com"
+ses_from_email           = "no-reply@example.com"
+ses_email_identity       = "no-reply@example.com"
+
+# Pass these through environment variables or a secure var file, not committed plaintext:
+# TF_VAR_ses_smtp_username="..."
+# TF_VAR_ses_smtp_password="..."

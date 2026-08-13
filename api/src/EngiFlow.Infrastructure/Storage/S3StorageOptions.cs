@@ -55,14 +55,12 @@ public sealed class S3StorageOptions
             throw new InvalidOperationException("S3 region is required.");
         }
 
-        if (string.IsNullOrWhiteSpace(AccessKey))
-        {
-            throw new InvalidOperationException("S3 access key is required.");
-        }
+        var hasAccessKey = !string.IsNullOrWhiteSpace(AccessKey);
+        var hasSecretKey = !string.IsNullOrWhiteSpace(SecretKey);
 
-        if (string.IsNullOrWhiteSpace(SecretKey))
+        if (hasAccessKey != hasSecretKey)
         {
-            throw new InvalidOperationException("S3 secret key is required.");
+            throw new InvalidOperationException("S3 access key and secret key must be configured together.");
         }
     }
 }

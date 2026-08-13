@@ -1,0 +1,116 @@
+name: Pull Request Validation
+
+on:
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: read
+  id-token: write
+
+env:
+  AWS_REGION: ${{ vars.AWS_REGION || 'us-east-1' }}
+  TF_WORKING_DIR: infra/terraform
+  TF_STATE_KEY: ${{ vars.TF_STATE_KEY || 'engiflow/prod.tfstate' }}
+  TF_VAR_api_image_tag: pr-${{ github.event.pull_request.head.sha }}
+  TF_VAR_web_image_tag: pr-${{ github.event.pull_request.head.sha }}
+  TF_VAR_frontend_public_base_url: ${{ vars.FRONTEND_PUBLIC_BASE_URL || 'https://validation.engiflow.invalid' }}
+  TF_VAR_budget_alert_email: ${{ vars.BUDGET_ALERT_EMAIL || 'cloud-validation@example.invalid' }}
+  TF_VAR_ses_smtp_username: pr-validation-placeholder
+  TF_VAR_ses_smtp_password: pr-validation-placeholder
+
+jobs:
+  frontend-ci:
+    name: Frontend CI Gate
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - name: Checkout pull request source
+        uses: actions/checkout@v6
+
+      - name: Setup Node.js 24 runtime
+        uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      - name: Install deterministic frontend dependencies
+        run: npm ci
+
+      - name: Execute lint contract
+        run: npm run lint
+
+      - name: Execute TypeScript compilation contract
+        run: npx tsc --noEmit
+
+  backend-ci:
+    name: Backend CI Gate
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout pull request source
+        uses: actions/checkout@v6
+
+      - name: Setup .NET 10 SDK
+        uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Execute Release test matrix
+        run: dotnet test api/EngiFlow.slnx --configuration Release
+
+  terraform-ci:
+    name: Terraform Read-Only Plan Gate
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout pull request source
+        uses: actions/checkout@v6
+
+      - name: Configure AWS read-only credentials with OIDC
+        uses: aws-actions/configure-aws-credentials@v6.1.1
+        with:
+          role-to-assume: ${{ vars.AWS_READONLY_ROLE_TO_ASSUME }}
+          role-session-name: engiflow-pr-validation-${{ github.run_id }}
+          aws-region: ${{ env.AWS_REGION }}
+          mask-aws-account-id: true
+
+      - name: Setup Terraform CLI
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_wrapper: false
+
+      - name: Initialize remote state backend
+        working-directory: ${{ env.TF_WORKING_DIR }}
+        run: |
+          terraform init \
+            -backend-config="bucket=${{ vars.TF_STATE_BUCKET }}" \
+            -backend-config="key=${{ env.TF_STATE_KEY }}" \
+            -backend-config="region=${{ env.AWS_REGION }}" \
+            -backend-config="dynamodb_table=${{ vars.TF_STATE_LOCK_TABLE }}" \
+            -backend-config="encrypt=true"
+
+      - name: Validate Terraform application graph
+        working-directory: ${{ env.TF_WORKING_DIR }}
+        run: terraform validate
+
+      - name: Generate read-only ECS Express and RDS delta report
+        working-directory: ${{ env.TF_WORKING_DIR }}
+        run: |
+          set +e
+          terraform plan -input=false -lock=false -no-color -detailed-exitcode
+          plan_status=$?
+          set -e
+
+          if [ "$plan_status" -eq 1 ]; then
+            echo "Terraform plan failed."
+            exit 1
+          fi
+
+          if [ "$plan_status" -eq 2 ]; then
+            echo "Terraform reported an infrastructure delta for review."
+          else
+            echo "Terraform reported no infrastructure delta."
+          fi

@@ -20,6 +20,10 @@ RUN npm ci
 # The builder phase utilizes the full source tree to generate a production-optimized Next.js bundle.
 # Next.js 16 uses the 'standalone' output mode to trace the minimum required file graph for runtime.
 FROM base AS builder
+ARG NEXT_PUBLIC_API_BASE_URL=
+ARG NEXT_PUBLIC_API_URL=
+ENV NEXT_PUBLIC_API_BASE_URL=$NEXT_PUBLIC_API_BASE_URL \
+    NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 RUN npm run build
@@ -30,8 +34,12 @@ RUN npm run build
 FROM node:24-alpine AS runner
 WORKDIR /app
 
+ARG NEXT_PUBLIC_API_BASE_URL=
+ARG NEXT_PUBLIC_API_URL=
 ENV HOSTNAME=0.0.0.0 \
     NODE_ENV=production \
+    NEXT_PUBLIC_API_BASE_URL=$NEXT_PUBLIC_API_BASE_URL \
+    NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL \
     NEXT_TELEMETRY_DISABLED=1 \
     PORT=3000
 

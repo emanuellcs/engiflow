@@ -145,9 +145,7 @@ PUT /api/settings
 
 The form updates `minApprovalsRequired`. It also loads active users and warns when quorum exceeds active users whose exact role is `Approver`:
 
-```text
-Warning: You require X approvals, but only have Y Approvers active. ECOs may become stuck.
-```
+> Warning: You require X approvals, but only have Y Approvers active. ECOs may become stuck.
 
 Owner and Administrator users can approve ECOs by RBAC policy, but this warning intentionally focuses on active `Approver` role users to ensure a healthy quorum buffer.
 
@@ -222,7 +220,7 @@ graph LR
 ```mermaid
 graph TD
     A["Incoming Route Request"] --> B["Next.js Edge Proxy (proxy.ts)"]
-    B --> C{Check "engi-locale" Cookie}
+    B --> C{Check 'engi-locale' Cookie}
     C -- Absent --> D["Parse Accept-Language Header"]
     C -- Present --> E["Verified Language Token"]
     D --> E
@@ -279,8 +277,13 @@ and the browser reaches the API through mapped host port `8080` for direct Signa
 
 ## Production Notes
 
-> [!TIP]
-> **Edge Delivery & Localization:** In production, assets and localized cookies are handled via **Amazon CloudFront**. This ensures that the `engi-locale` preference is respected at the edge, while specific cache invalidation strategies maintain UI consistency across deployments.
+> [!IMPORTANT]
+> **Next.js 16 Production Baking:** `NEXT_PUBLIC_*` values are compile-time inputs for browser bundles. The deployment workflow deploys the API service first, captures its ECS Express Gateway Service URL, and passes that value into the web Docker build as `NEXT_PUBLIC_API_BASE_URL` and `NEXT_PUBLIC_API_URL` during `next build`. This ensures browser-side SignalR WebSocket connections resolve the secure backend domain in production.
+
+The web Dockerfile also keeps those public API values in the runtime environment for the standalone server-side proxy path. `API_INTERNAL_BASE_URL` is still supplied by Terraform so server-side `/api/...` proxy requests target the deployed API service.
+
+> [!NOTE]
+> **Standalone Runner Footprint:** The production image copies only `public`, `.next/standalone`, and `.next/static` from the build stage. It runs on `node:24-alpine` as the non-root `nextjs` user with `HOSTNAME=0.0.0.0`, `PORT=3000`, `NODE_ENV=production`, and `NEXT_TELEMETRY_DISABLED=1`.
 
 - Keep `NEXT_PUBLIC_API_URL` or `NEXT_PUBLIC_API_BASE_URL` aligned with the externally reachable API origin so SignalR can connect directly.
 - Use HTTPS in production so bearer tokens are not exposed over cleartext transport.
